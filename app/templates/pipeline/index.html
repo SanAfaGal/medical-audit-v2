@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+
+{% block title %}Pipeline — Auditoría Médica{% endblock %}
+{% block page_title %}Pipeline de Auditoría{% endblock %}
+
+{% block content %}
+<div x-data="pipeline()" class="max-w-5xl mx-auto space-y-6">
+
+  <!-- Hospital + period selector -->
+  <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
+      <i class="fa-solid fa-hospital-user text-brand-600 mr-2"></i>Selección de hospital y período
+    </h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Hospital</label>
+        <select x-model="hospitalKey" @change="loadPeriods()"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <option value="">— Seleccione un hospital —</option>
+          <template x-for="h in hospitals" :key="h.key">
+            <option :value="h.key" x-text="h.name"></option>
+          </template>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Período</label>
+        <select x-model="periodCode"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                :disabled="!hospitalKey">
+          <option value="">— Seleccione un período —</option>
+          <template x-for="p in periods" :key="p.code">
+            <option :value="p.code" x-text="p.code"></option>
+          </template>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stage checklist -->
+  <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+        <i class="fa-solid fa-list-check text-brand-600 mr-2"></i>Etapas del pipeline
+      </h2>
+      <div class="flex gap-2">
+        <button @click="selectAll(true)"
+                class="text-xs px-3 py-1.5 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-600 transition-colors">
+          Seleccionar todo
+        </button>
+        <button @click="selectAll(false)"
+                class="text-xs px-3 py-1.5 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-600 transition-colors">
+          Deseleccionar todo
+        </button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+      <template x-for="stage in stages" :key="stage.id">
+        <label class="flex items-start gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
+               :class="{'border-brand-400 bg-brand-50': selectedStages.includes(stage.id)}">
+          <input type="checkbox" class="mt-0.5 rounded text-brand-600"
+                 :value="stage.id" x-model="selectedStages" />
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5">
+              <i :class="stage.icon + ' text-brand-500 text-xs w-4 text-center'"></i>
+              <span class="text-sm font-medium text-gray-800" x-text="stage.label"></span>
+            </div>
+            <p class="text-xs text-gray-500 mt-0.5 truncate" x-text="stage.description"></p>
+          </div>
+        </label>
+      </template>
+    </div>
+  </section>
+
+  <!-- Excel upload (for LOAD_AND_PROCESS) -->
+  <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5"
+           x-show="selectedStages.includes('LOAD_AND_PROCESS')">
+    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
+      <i class="fa-solid fa-file-excel text-green-600 mr-2"></i>Archivo SIHOS (para carga de facturas)
+    </h2>
+    <input type="file" accept=".xlsx,.xls" @change="setFile($event)"
+           class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg
+                  file:border-0 file:text-sm file:font-medium file:bg-brand-50 file:text-brand-700
+                  hover:file:bg-brand-100 transition-colors" />
+    <p class="text-xs text-gray-400 mt-1.5">Archivo Excel exportado desde SIHOS con las facturas del período.</p>
+  </section>
+
+  <!-- Run button -->
+  <div class="flex items-center gap-4">
+    <button @click="runPipeline()"
+            :disabled="running || !hospitalKey || !periodCode || selectedStages.length === 0"
+            class="flex items-center gap-2 px-6 py-2.5 bg-brand-600 hover:bg-brand-700 disabled:bg-gray-300
+                   disabled:cursor-not-allowed text-white font-medium rounded-lg text-sm transition-colors">
+      <i class="fa-solid fa-play" x-show="!running"></i>
+      <i class="fa-solid fa-spinner fa-spin" x-show="running"></i>
+      <span x-text="running ? 'Ejecutando...' : 'Ejecutar pipeline'"></span>
+    </button>
+    <button @click="clearLog()" x-show="logLines.length > 0" :disabled="running"
+            class="text-sm text-gray-500 hover:text-gray-700 underline disabled:opacity-50">
+      Limpiar log
+    </button>
+    <span x-show="currentStageLabel" class="text-sm text-gray-600">
+      Etapa actual: <strong x-text="currentStageLabel"></strong>
+    </span>
+  </div>
+
+  <!-- Log output area -->
+  <section class="bg-gray-900 rounded-xl shadow-sm border border-gray-700 p-4 min-h-[200px] max-h-[500px] overflow-y-auto font-mono text-xs"
+           x-ref="logContainer"
+           x-show="logLines.length > 0">
+    <template x-for="(line, idx) in logLines" :key="idx">
+      <div class="leading-5"
+           :class="{
+             'text-red-400':    line.startsWith('[ERROR]'),
+             'text-yellow-400': line.startsWith('[WARN]'),
+             'text-green-400':  line.startsWith('[OK]'),
+             'text-blue-300':   line.startsWith('[INFO]'),
+             'text-gray-300':   !line.startsWith('[ERROR]') && !line.startsWith('[WARN]') && !line.startsWith('[OK]') && !line.startsWith('[INFO]'),
+           }"
+           x-text="line">
+      </div>
+    </template>
+  </section>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function pipeline() {
+  return {
+    // State
+    hospitals: [],
+    hospitalKey: '',
+    periods: [],
+    periodCode: '',
+    selectedStages: [],
+    running: false,
+    logLines: [],
+    currentStageLabel: '',
+    excelFile: null,
+
+    // Stage definitions (labels and icons from pipeline_stages)
+    stages: [
+      { id: 'LOAD_AND_PROCESS',              label: 'Carga y procesamiento',        description: 'Cargar Excel SIHOS, registrar mapeos, insertar facturas', icon: 'fa-solid fa-file-import' },
+      { id: 'RUN_STAGING',                   label: 'Mover a staging',              description: 'Mover carpetas de BASE a STAGE',                          icon: 'fa-solid fa-folder-open' },
+      { id: 'REMOVE_NON_PDF',                label: 'Eliminar no-PDF',              description: 'Borrar archivos que no sean PDF',                          icon: 'fa-solid fa-file-circle-xmark' },
+      { id: 'CHECK_INVALID_FILES',           label: 'Verificar PDFs corruptos',     description: 'Detectar archivos PDF corruptos',                          icon: 'fa-solid fa-triangle-exclamation' },
+      { id: 'NORMALIZE_FILES',               label: 'Normalizar archivos',          description: 'Renombrar archivos con nombres inválidos',                 icon: 'fa-solid fa-pen-to-square' },
+      { id: 'LIST_UNREADABLE_PDFS',          label: 'Listar PDFs ilegibles',        description: 'Identificar PDFs sin capa de texto',                      icon: 'fa-solid fa-eye-slash' },
+      { id: 'DELETE_UNREADABLE_PDFS',        label: 'Eliminar PDFs ilegibles',      description: 'Borrar PDFs sin capa de texto',                           icon: 'fa-solid fa-trash' },
+      { id: 'DOWNLOAD_INVOICES_FROM_SIHOS',  label: 'Descargar facturas SIHOS',     description: 'Descargar PDFs de facturas desde el portal SIHOS',         icon: 'fa-solid fa-cloud-arrow-down' },
+      { id: 'CHECK_INVOICES',                label: 'OCR de facturas',              description: 'Ejecutar OCR con ocrmypdf',                                icon: 'fa-solid fa-wand-magic-sparkles' },
+      { id: 'VERIFY_INVOICE_CODE',           label: 'Verificar código de factura',  description: 'Verificar número de factura en el texto del PDF',          icon: 'fa-solid fa-barcode' },
+      { id: 'CHECK_INVOICE_NUMBER_ON_FILES', label: 'Verificar nombres de archivo', description: 'Verificar que los nombres de archivo coincidan con la carpeta', icon: 'fa-solid fa-file-circle-check' },
+      { id: 'CHECK_FOLDERS_WITH_EXTRA_TEXT', label: 'Detectar texto extra',         description: 'Detectar carpetas con texto adicional en el nombre',       icon: 'fa-solid fa-folder-magnifying-glass' },
+      { id: 'NORMALIZE_DIR_NAMES',           label: 'Normalizar carpetas',          description: 'Renombrar carpetas con texto adicional',                   icon: 'fa-solid fa-folder-open' },
+      { id: 'CHECK_DIRS',                    label: 'Verificar carpetas',           description: 'Detectar carpetas faltantes y marcar como FALTANTE',       icon: 'fa-solid fa-folder-minus' },
+      { id: 'CATEGORIZE_INVOICES',           label: 'Categorizar facturas',         description: 'Leer PDFs, asignar tipos de servicio por palabras clave',  icon: 'fa-solid fa-tags' },
+      { id: 'CHECK_REQUIRED_DOCS',           label: 'Verificar documentos',         description: 'Registrar hallazgos por documentos requeridos faltantes',  icon: 'fa-solid fa-clipboard-list' },
+      { id: 'VERIFY_CUFE',                   label: 'Verificar CUFE',              description: 'Verificar código CUFE en los PDFs de factura',             icon: 'fa-solid fa-fingerprint' },
+      { id: 'TAG_MISSING_CUFE',              label: 'Etiquetar CUFE faltante',      description: 'Añadir sufijo CUFE a carpetas sin CUFE válido',            icon: 'fa-solid fa-tag' },
+      { id: 'ORGANIZE',                      label: 'Organizar en AUDIT',           description: 'Organizar carpetas auditadas en la estructura AUDIT',      icon: 'fa-solid fa-box-archive' },
+      { id: 'DOWNLOAD_DRIVE',               label: 'Descargar Drive',              description: 'Descargar carpetas faltantes desde Google Drive',          icon: 'fa-brands fa-google-drive' },
+      { id: 'DOWNLOAD_MISSING_DOCS',         label: 'Descargar docs faltantes',     description: 'Descargar documentos faltantes desde Drive',              icon: 'fa-solid fa-file-arrow-down' },
+    ],
+
+    async init() {
+      await this.loadHospitals();
+    },
+
+    async loadHospitals() {
+      try {
+        const res = await fetch('/api/hospitals/');
+        this.hospitals = await res.json();
+      } catch (e) {
+        console.error('Error cargando hospitales:', e);
+      }
+    },
+
+    async loadPeriods() {
+      this.periods = [];
+      this.periodCode = '';
+      if (!this.hospitalKey) return;
+      try {
+        const res = await fetch(`/api/hospitals/${this.hospitalKey}/periods`);
+        this.periods = await res.json();
+      } catch (e) {
+        console.error('Error cargando períodos:', e);
+      }
+    },
+
+    selectAll(checked) {
+      this.selectedStages = checked ? this.stages.map(s => s.id) : [];
+    },
+
+    setFile(event) {
+      this.excelFile = event.target.files[0] || null;
+    },
+
+    clearLog() {
+      this.logLines = [];
+      this.currentStageLabel = '';
+    },
+
+    getStageLabelById(id) {
+      return this.stages.find(s => s.id === id)?.label || id;
+    },
+
+    async runPipeline() {
+      if (this.running) return;
+      this.running = true;
+      this.logLines = [];
+
+      for (const stageId of this.selectedStages) {
+        this.currentStageLabel = this.getStageLabelById(stageId);
+        this.logLines.push(`─── Iniciando: ${this.currentStageLabel} ───`);
+        this.$nextTick(() => this.scrollLog());
+
+        try {
+          // Build extra params for LOAD_AND_PROCESS
+          let extraJson = null;
+          if (stageId === 'LOAD_AND_PROCESS' && this.excelFile) {
+            // For file stages, use the ingest endpoint separately
+            const formData = new FormData();
+            formData.append('hospital_key', this.hospitalKey);
+            formData.append('period_code', this.periodCode);
+            formData.append('file', this.excelFile);
+
+            this.logLines.push('[INFO] Enviando archivo Excel al servidor...');
+            const res = await fetch('/api/invoices/ingest', { method: 'POST', body: formData });
+            if (!res.ok) {
+              const err = await res.json();
+              this.logLines.push(`[ERROR] ${err.detail || 'Error desconocido'}`);
+            } else {
+              const data = await res.json();
+              this.logLines.push(`[OK] Facturas insertadas: ${data.inserted}`);
+              this.logLines.push(`[INFO] Filas omitidas: ${data.skipped}`);
+              if (data.unknown_admins.length > 0) {
+                this.logLines.push(`[WARN] Administradoras sin mapeo: ${data.unknown_admins.slice(0, 5).join(', ')}`);
+              }
+            }
+            this.scrollLog();
+            continue;
+          }
+
+          // SSE-based stage execution for all other stages
+          const url = `/api/pipeline/run/${stageId}?hospital_key=${encodeURIComponent(this.hospitalKey)}&period_code=${encodeURIComponent(this.periodCode)}`;
+          const evtSource = new EventSource(url);
+
+          await new Promise((resolve, reject) => {
+            evtSource.onmessage = (event) => {
+              const line = event.data;
+              if (line === '[DONE]') {
+                evtSource.close();
+                resolve();
+                return;
+              }
+              this.logLines.push(line);
+              this.$nextTick(() => this.scrollLog());
+            };
+            evtSource.onerror = (err) => {
+              evtSource.close();
+              this.logLines.push(`[ERROR] Conexión SSE interrumpida para etapa ${stageId}`);
+              resolve(); // continue with next stage
+            };
+          });
+
+        } catch (e) {
+          this.logLines.push(`[ERROR] ${e.message}`);
+        }
+
+        this.scrollLog();
+      }
+
+      this.running = false;
+      this.currentStageLabel = '';
+      this.logLines.push('─── Pipeline finalizado ───');
+      this.scrollLog();
+    },
+
+    scrollLog() {
+      const el = this.$refs.logContainer;
+      if (el) el.scrollTop = el.scrollHeight;
+    },
+  };
+}
+</script>
+{% endblock %}

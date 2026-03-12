@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-gray-50">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Auditoría Médica{% endblock %}</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome 6 Free CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <!-- HTMX CDN -->
+  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+  <!-- HTMX SSE extension -->
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/sse.js" defer></script>
+  <!-- Alpine.js CDN -->
+  <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 600: '#0369a1', 700: '#0c4a6e' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="h-full flex" x-data="{}">
+
+  <!-- ====== Sidebar ====== -->
+  <aside class="w-56 bg-white border-r border-gray-200 flex flex-col shrink-0">
+    <div class="px-6 py-5 border-b border-gray-200">
+      <span class="text-brand-700 font-bold text-lg tracking-tight">
+        <i class="fa-solid fa-hospital-user mr-2"></i>Auditoría
+      </span>
+    </div>
+
+    <nav class="flex-1 px-3 py-4 space-y-1">
+      <a href="/"
+         class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+                {% if request.url.path == '/' %}bg-sky-50 text-sky-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
+        <i class="fa-solid fa-gears w-5 text-center"></i>Pipeline
+      </a>
+      <a href="/audit"
+         class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+                {% if request.url.path == '/audit' %}bg-sky-50 text-sky-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
+        <i class="fa-solid fa-magnifying-glass-chart w-5 text-center"></i>Auditoría
+      </a>
+      <a href="/settings"
+         class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+                {% if request.url.path == '/settings' %}bg-sky-50 text-sky-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
+        <i class="fa-solid fa-sliders w-5 text-center"></i>Configuración
+      </a>
+    </nav>
+
+    <div class="px-4 py-3 border-t border-gray-200 text-xs text-gray-400">
+      Auditoría Médica v2
+    </div>
+  </aside>
+
+  <!-- ====== Main content ====== -->
+  <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
+    <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0">
+      <h1 class="text-lg font-semibold text-gray-800">{% block page_title %}{% endblock %}</h1>
+      <div class="text-sm text-gray-500">{% block header_extra %}{% endblock %}</div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-6">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración — Auditoría Médica{% endblock %}
+{% block page_title %}Configuración{% endblock %}
+
+{% block content %}
+<div x-data="settingsApp()" class="max-w-5xl mx-auto">
+
+  <!-- Tabs -->
+  <div class="flex gap-1 mb-6 border-b border-gray-200">
+    <button @click="tab = 'hospital'"
+            :class="tab === 'hospital' ? 'border-sky-600 text-sky-700 bg-sky-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'"
+            class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-md">
+      <i class="fa-solid fa-hospital mr-1.5"></i>Hospital
+    </button>
+    <button @click="tab = 'mappings'; loadMappings()"
+            :class="tab === 'mappings' ? 'border-sky-600 text-sky-700 bg-sky-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'"
+            class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-md">
+      <i class="fa-solid fa-arrows-left-right mr-1.5"></i>Mapeos
+    </button>
+    <button @click="tab = 'rules'; loadRules()"
+            :class="tab === 'rules' ? 'border-sky-600 text-sky-700 bg-sky-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'"
+            class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-md">
+      <i class="fa-solid fa-sliders mr-1.5"></i>Reglas
+    </button>
+  </div>
+
+  <!-- ==================== Hospital tab ==================== -->
+  <div x-show="tab === 'hospital'" class="space-y-6">
+    <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <h2 class="text-base font-semibold text-gray-800 mb-5">
+        <i class="fa-solid fa-hospital-user mr-2 text-sky-600"></i>Agregar / editar hospital
+      </h2>
+      <form @submit.prevent="saveHospital()" class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Clave interna (key) *</label>
+          <input type="text" x-model="form.key" required placeholder="SANTA_LUCIA"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
+          <p class="text-xs text-gray-400 mt-0.5">Sin espacios, en mayúsculas (se usa en la ruta de archivos)</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Nombre del hospital *</label>
+          <input type="text" x-model="form.name" required placeholder="Hospital Santa Lucia"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">NIT *</label>
+          <input type="text" x-model="form.nit" required placeholder="900123456-1"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Prefijo de factura *</label>
+          <input type="text" x-model="form.invoice_prefix" required placeholder="FE"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">URL portal SIHOS</label>
+          <input type="url" x-model="form.sihos_url" placeholder="https://sihos.example.com/..."
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Código SIHOS</label>
+          <input type="text" x-model="form.sihos_code"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Usuario SIHOS</label>
+          <input type="text" x-model="form.sihos_user" autocomplete="username"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Contraseña SIHOS</label>
+          <input type="password" x-model="form.sihos_password" autocomplete="new-password"
+                 placeholder="Dejar vacío para no cambiar"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
+          <p class="text-xs text-gray-400 mt-0.5">Se cifra con Fernet antes de guardarse en la BD</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Ruta base local</label>
+          <input type="text" x-model="form.base_path" placeholder="C:/Auditorias/SANTA_LUCIA"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
+          <p class="text-xs text-gray-400 mt-0.5">Carpeta raíz de los archivos del hospital en este servidor</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Credenciales Google Drive (JSON)</label>
+          <textarea x-model="form.drive_credentials_json" rows="4"
+                    placeholder="Pegar el contenido completo del archivo drive.json de cuenta de servicio"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-sky-500"></textarea>
+          <p class="text-xs text-gray-400 mt-0.5">Se cifra con Fernet. No se guarda ninguna ruta de archivo en la BD.</p>
+        </div>
+        <div class="col-span-2 flex items-center gap-4 pt-2 border-t border-gray-100">
+          <button type="submit"
+                  class="px-6 py-2 bg-sky-600 text-white text-sm font-semibold rounded-lg hover:bg-sky-700 shadow-sm transition-colors">
+            <i class="fa-solid fa-floppy-disk mr-1.5"></i>Guardar hospital
+          </button>
+          <button type="button" @click="resetForm()"
+                  class="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            Limpiar
+          </button>
+          <span x-show="saveMsg" x-text="saveMsg" class="text-sm text-green-600 font-medium"></span>
+          <span x-show="saveError" x-text="saveError" class="text-sm text-red-600 font-medium"></span>
+        </div>
+      </form>
+    </div>
+
+    <!-- Hospital list -->
+    <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">
+        <i class="fa-solid fa-list mr-2 text-gray-500"></i>Hospitales registrados
+      </h3>
+      <div class="space-y-2">
+        <template x-for="h in hospitals" :key="h.id">
+          <div class="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-lg border border-gray-100">
+            <div>
+              <div class="text-sm font-semibold text-gray-800" x-text="h.name"></div>
+              <div class="text-xs text-gray-500 mt-0.5">
+                NIT: <span x-text="h.nit"></span>
+                <span class="mx-1 text-gray-300">|</span>
+                Key: <span class="font-mono" x-text="h.key"></span>
+                <span class="mx-1 text-gray-300">|</span>
+                Prefijo: <span class="font-mono" x-text="h.invoice_prefix"></span>
+              </div>
+            </div>
+            <button @click="editHospital(h)"
+                    class="text-xs px-3 py-1.5 text-sky-600 border border-sky-200 rounded-lg hover:bg-sky-50 transition-colors">
+              <i class="fa-solid fa-pen-to-square mr-1"></i>Editar
+            </button>
+          </div>
+        </template>
+        <template x-if="hospitals.length === 0">
+          <div class="text-sm text-gray-400 text-center py-6">
+            <i class="fa-solid fa-hospital text-2xl mb-2 text-gray-300"></i><br/>
+            No hay hospitales registrados
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== Mappings tab ==================== -->
+  <div x-show="tab === 'mappings'" class="space-y-5">
+    <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+      <h2 class="text-sm font-semibold text-gray-700 mb-3">
+        <i class="fa-solid fa-arrows-left-right mr-2 text-sky-600"></i>Seleccionar hospital
+      </h2>
+      <select x-model="mapHospitalKey" @change="loadMappings()"
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 min-w-[280px]">
+        <option value="">— Seleccionar hospital —</option>
+        <template x-for="h in hospitals" :key="h.id">
+          <option :value="h.key" x-text="h.name"></option>
+        </template>
+      </select>
+    </div>
+
+    <!-- Pending admins -->
+    <div x-show="pendingAdmins.length > 0" class="bg-white rounded-xl border border-amber-200 p-5 shadow-sm">
+      <h3 class="text-sm font-semibold text-amber-700 mb-4">
+        <i class="fa-solid fa-triangle-exclamation mr-1.5"></i>
+        Administradoras sin mapear (<span x-text="pendingAdmins.length"></span>)
+      </h3>
+      <div class="space-y-2">
+        <template x-for="admin in pendingAdmins" :key="admin.id">
+          <div class="flex items-center gap-3">
+            <span class="text-sm text-gray-700 font-mono w-56 truncate bg-gray-50 px-2 py-1 rounded" x-text="admin.raw_value"></span>
+            <i class="fa-solid fa-arrow-right text-gray-400 shrink-0"></i>
+            <input type="text" :id="'admin-' + admin.id" placeholder="Valor canónico"
+                   class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
+            <button @click="saveAdmin(admin.id)"
+                    class="shrink-0 px-3 py-1.5 text-xs bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors">
+              Guardar
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Pending contracts -->
+    <div x-show="pendingContracts.length > 0" class="bg-white rounded-xl border border-amber-200 p-5 shadow-sm">
+      <h3 class="text-sm font-semibold text-amber-700 mb-4">
+        <i class="fa-solid fa-triangle-exclamation mr-1.5"></i>
+        Contratos sin mapear (<span x-text="pendingContracts.length"></span>)
+      </h3>
+      <div class="space-y-2">
+        <template x-for="contract in pendingContracts" :key="contract.id">
+          <div class="flex items-center gap-3">
+            <span class="text-sm text-gray-700 font-mono w-56 truncate bg-gray-50 px-2 py-1 rounded" x-text="contract.raw_value"></span>
+            <i class="fa-solid fa-arrow-right text-gray-400 shrink-0"></i>
+            <input type="text" :id="'contract-' + contract.id" placeholder="Valor canónico"
+                   class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
+            <button @click="saveContract(contract.id)"
+                    class="shrink-0 px-3 py-1.5 text-xs bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors">
+              Guardar
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div x-show="mapHospitalKey && pendingAdmins.length === 0 && pendingContracts.length === 0"
+         class="bg-green-50 rounded-xl border border-green-200 p-5 text-center text-sm text-green-700">
+      <i class="fa-solid fa-circle-check text-xl mb-1.5"></i><br/>
+      Todos los mapeos están completos para este hospital.
+    </div>
+  </div>
+
+  <!-- ==================== Rules tab ==================== -->
+  <div x-show="tab === 'rules'" class="space-y-6">
+    <!-- Service types -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 bg-gray-50">
+        <h2 class="text-sm font-semibold text-gray-700">
+          <i class="fa-solid fa-tags mr-2 text-sky-600"></i>Tipos de servicio
+        </h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50/50 border-b border-gray-100">
+            <tr>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Código</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Nombre</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Palabras clave</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Docs requeridos</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Activo</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50">
+            <template x-for="st in serviceTypes" :key="st.id">
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="st.code"></td>
+                <td class="px-4 py-2.5 font-medium text-gray-800" x-text="st.display_name"></td>
+                <td class="px-4 py-2.5 text-xs text-gray-500 max-w-xs truncate" x-text="st.keywords"></td>
+                <td class="px-4 py-2.5 text-xs text-gray-500 max-w-xs truncate" x-text="st.required_docs"></td>
+                <td class="px-4 py-2.5">
+                  <span :class="st.is_active ? 'text-green-600' : 'text-gray-300'" class="text-base">
+                    <i :class="st.is_active ? 'fa-solid fa-toggle-on' : 'fa-solid fa-toggle-off'"></i>
+                  </span>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Doc types -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 bg-gray-50">
+        <h2 class="text-sm font-semibold text-gray-700">
+          <i class="fa-solid fa-file-lines mr-2 text-sky-600"></i>Tipos de documento
+        </h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50/50 border-b border-gray-100">
+            <tr>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Código</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Etiqueta</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Prefijos de archivo</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Activo</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50">
+            <template x-for="dt in docTypes" :key="dt.id">
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="dt.code"></td>
+                <td class="px-4 py-2.5 font-medium text-gray-800" x-text="dt.label"></td>
+                <td class="px-4 py-2.5 text-xs text-gray-500 font-mono" x-text="dt.prefixes"></td>
+                <td class="px-4 py-2.5">
+                  <span :class="dt.is_active ? 'text-green-600' : 'text-gray-300'" class="text-base">
+                    <i :class="dt.is_active ? 'fa-solid fa-toggle-on' : 'fa-solid fa-toggle-off'"></i>
+                  </span>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Folder statuses -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 bg-gray-50">
+        <h2 class="text-sm font-semibold text-gray-700">
+          <i class="fa-solid fa-folder mr-2 text-sky-600"></i>Estados de carpeta
+        </h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50/50 border-b border-gray-100">
+            <tr>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Código</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Etiqueta</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Orden</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50">
+            <template x-for="fs in folderStatuses" :key="fs.id">
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="fs.code"></td>
+                <td class="px-4 py-2.5 font-medium text-gray-800" x-text="fs.label"></td>
+                <td class="px-4 py-2.5 text-gray-500" x-text="fs.sort_order"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function settingsApp() {
+  return {
+    tab: 'hospital',
+    hospitals: [],
+    mapHospitalKey: '',
+    pendingAdmins: [],
+    pendingContracts: [],
+    serviceTypes: [],
+    docTypes: [],
+    folderStatuses: [],
+    saveMsg: '',
+    saveError: '',
+    form: {
+      key: '', name: '', nit: '', invoice_prefix: '',
+      sihos_url: '', sihos_code: '', sihos_user: '', sihos_password: '',
+      base_path: '', drive_credentials_json: '',
+    },
+
+    async init() {
+      const res = await fetch('/api/hospitals/');
+      this.hospitals = await res.json();
+    },
+
+    resetForm() {
+      this.form = { key: '', name: '', nit: '', invoice_prefix: '', sihos_url: '', sihos_code: '', sihos_user: '', sihos_password: '', base_path: '', drive_credentials_json: '' };
+      this.saveMsg = '';
+      this.saveError = '';
+    },
+
+    editHospital(h) {
+      this.form = {
+        key: h.key, name: h.name, nit: h.nit, invoice_prefix: h.invoice_prefix,
+        sihos_url: h.sihos_url || '', sihos_code: h.sihos_code || '',
+        sihos_user: h.sihos_user || '', sihos_password: '',
+        base_path: h.base_path || '', drive_credentials_json: '',
+      };
+      this.tab = 'hospital';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+
+    async saveHospital() {
+      this.saveMsg = '';
+      this.saveError = '';
+      const existing = this.hospitals.find(h => h.key === this.form.key);
+      const method = existing ? 'PUT' : 'POST';
+      const url = existing ? `/api/hospitals/${this.form.key}` : '/api/hospitals';
+      const body = Object.fromEntries(Object.entries(this.form).filter(([, v]) => v !== ''));
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        this.saveMsg = 'Hospital guardado correctamente.';
+        const res2 = await fetch('/api/hospitals/');
+        this.hospitals = await res2.json();
+        setTimeout(() => { this.saveMsg = ''; }, 4000);
+      } else {
+        const err = await res.json();
+        this.saveError = err.detail || 'Error al guardar el hospital.';
+      }
+    },
+
+    async loadMappings() {
+      if (!this.mapHospitalKey) return;
+      const [ra, rc] = await Promise.all([
+        fetch(`/api/hospitals/${this.mapHospitalKey}/admins?pending_only=true`).then(r => r.json()),
+        fetch(`/api/hospitals/${this.mapHospitalKey}/contracts?pending_only=true`).then(r => r.json()),
+      ]);
+      this.pendingAdmins = ra;
+      this.pendingContracts = rc;
+    },
+
+    async saveAdmin(adminId) {
+      const input = document.getElementById(`admin-${adminId}`);
+      if (!input || !input.value.trim()) return;
+      await fetch(`/api/hospitals/admins/${adminId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ canonical_value: input.value.trim() }),
+      });
+      await this.loadMappings();
+    },
+
+    async saveContract(contractId) {
+      const input = document.getElementById(`contract-${contractId}`);
+      if (!input || !input.value.trim()) return;
+      await fetch(`/api/hospitals/contracts/${contractId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ canonical_value: input.value.trim() }),
+      });
+      await this.loadMappings();
+    },
+
+    async loadRules() {
+      const [st, dt, fs] = await Promise.all([
+        fetch('/api/settings/service-types').then(r => r.json()),
+        fetch('/api/settings/doc-types').then(r => r.json()),
+        fetch('/api/settings/folder-statuses').then(r => r.json()),
+      ]);
+      this.serviceTypes = st;
+      this.docTypes = dt;
+      this.folderStatuses = fs;
+    },
+  };
+}
+</script>
+{% endblock %}
