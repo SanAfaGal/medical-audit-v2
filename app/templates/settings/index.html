@@ -491,7 +491,7 @@
                       <input type="checkbox"
                              :checked="stdHas(st.id, dt.id)"
                              @change="toggleSTD(st.id, dt.id, $event.target.checked)"
-                             :disabled="stdPending[st.id + '-' + dt.id]"
+                             :disabled="stdPending[st.id + '-' + dt.id] === true"
                              class="w-4 h-4 rounded border-gray-300 text-sky-600 cursor-pointer focus:ring-sky-500 disabled:opacity-40 disabled:cursor-wait" />
                     </td>
                   </template>
@@ -1010,7 +1010,7 @@ function settingsApp() {
     },
     async toggleSTD(stId, dtId, checked) {
       const key = `${stId}-${dtId}`;
-      this.stdPending[key] = true;
+      this.stdPending = { ...this.stdPending, [key]: true };
       if (checked) {
         const res = await fetch(`/api/institutions/${this.mapInstId}/service-type-documents`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ institution_id: parseInt(this.mapInstId), service_type_id: stId, doc_type_id: dtId }) });
         if (res.ok) {
@@ -1023,7 +1023,7 @@ function settingsApp() {
           this.serviceTypeDocs = this.serviceTypeDocs.filter(d => !(d.service_type_id === stId && d.doc_type_id === dtId));
         } else this.showToast('No se pudo eliminar.', 'error');
       }
-      delete this.stdPending[key];
+      this.stdPending = { ...this.stdPending, [key]: false };
     },
 
     // ---- PERÍODOS ----
