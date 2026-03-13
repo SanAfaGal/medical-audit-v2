@@ -235,10 +235,15 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
 
     from app.repositories.rules_repo import RulesRepo
 
+    from sqlalchemy import select as _select
+    from sqlalchemy.orm import selectinload as _selectinload
+    from app.models.invoice import Invoice as _Invoice
+
     executor = _get_executor()
     stage_path: Path = ctx["stage_path"]
     institution = ctx["institution"]
     db = ctx["db"]
+    period = ctx.get("period")
 
     if not stage_path.is_dir():
         yield f"[WARN] Directorio STAGE no existe: {stage_path}"
@@ -276,6 +281,28 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
         )
         results = await executor(standardizer.run, invalid)
 
+        # Build invoice_number → admin_type map for the period (one query)
+        _inv_admin_type: dict[str, str] = {}
+        if period:
+            _q = (
+                _select(_Invoice)
+                .where(_Invoice.audit_period_id == period.id)
+                .options(_selectinload(_Invoice.admin))
+            )
+            _rows = (await db.execute(_q)).scalars().all()
+            for inv in _rows:
+                if inv.admin and inv.admin.type:
+                    _inv_admin_type[inv.invoice_number] = inv.admin.type
+
+        def _admin_type_for_folder(folder: str) -> str:
+            """Exact match first, then substring (folder may have extra prefix)."""
+            if folder in _inv_admin_type:
+                return _inv_admin_type[folder]
+            for num, atype in _inv_admin_type.items():
+                if num in folder:
+                    return atype
+            return ""
+
         import re as _re
         _re_pref = _re.compile(r"Prefix '(\w+)'")
         success = 0
@@ -283,14 +310,16 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
             original_path = Path(r.original_path)
             folder = original_path.parent.name
             old_name = original_path.name
+            admin_type = _admin_type_for_folder(folder)
+            admin_suffix = f" [{admin_type}]" if admin_type else ""
             if r.status == "SUCCESS":
                 success += 1
                 yield f"[INFO] Renombrado: [{folder}] {old_name} → {r.new_name}"
             elif r.status == "REJECTED":
                 if _re_pref.search(r.reason):
-                    yield f"[WARN] Prefijo no reconocido: [{folder}] {old_name}"
+                    yield f"[WARN] Prefijo no reconocido: [{folder}]{admin_suffix} {old_name}"
                 elif "Could not find" in r.reason:
-                    yield f"[WARN] Sin ID de factura extraíble: [{folder}] {old_name}"
+                    yield f"[WARN] Sin ID de factura extraíble: [{folder}]{admin_suffix} {old_name}"
         yield f"[INFO] Archivos renombrados: {success}/{len(invalid)}"
 
 
