@@ -62,7 +62,7 @@ class Service(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     institution_id: Mapped[int] = mapped_column(ForeignKey("institutions.id", ondelete="CASCADE"))
     raw_service: Mapped[str] = mapped_column(String(300), nullable=False)
-    service_type_id: Mapped[int] = mapped_column(ForeignKey("service_types.id"), nullable=False)
+    service_type_id: Mapped[int | None] = mapped_column(ForeignKey("service_types.id"), nullable=True)
 
     institution: Mapped[Institution] = relationship(back_populates="services")
 

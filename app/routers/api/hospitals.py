@@ -311,7 +311,7 @@ async def create_service(
     inst = await repo.get_by_id(institution_id)
     if not inst:
         raise HTTPException(404, "Institución no encontrada")
-    svc = await repo.create_service(institution_id, data.raw_service, data.service_type_id)
+    svc = await repo.create_service(institution_id, data.raw_service, data.service_type_id or None)
     await db.commit()
     return svc
 

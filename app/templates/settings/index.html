@@ -389,7 +389,8 @@
                 <td class="px-2 py-2 font-mono text-xs text-gray-600 max-w-[220px] truncate" x-text="s.raw_service"></td>
                 <td class="px-2 py-2">
                   <template x-if="editingServiceId !== s.id">
-                    <span class="text-gray-800 text-xs" x-text="stName(s.service_type_id)"></span>
+                    <span :class="s.service_type_id ? 'text-gray-800' : 'text-amber-500 italic'"
+                          class="text-xs" x-text="stName(s.service_type_id)"></span>
                   </template>
                   <template x-if="editingServiceId === s.id">
                     <select x-model="editingServiceTypeId"
@@ -1204,6 +1205,7 @@ function settingsApp() {
 
     // ---- HELPERS ----
     stName(id) {
+      if (id === null || id === undefined || id === '') return 'Sin mapear';
       const st = this.serviceTypes.find(s => s.id === id || s.id === parseInt(id));
       return st ? st.display_name : `#${id}`;
     },

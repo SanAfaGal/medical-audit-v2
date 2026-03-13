@@ -153,16 +153,20 @@ class InstitutionRepo:
         )
         return list(result.scalars().all())
 
-    async def upsert_service(
-        self, institution_id: int, raw_service: str, service_type_id: int
-    ) -> Service:
+    async def get_pending_services(self, institution_id: int) -> list[Service]:
+        """Return services whose service_type_id is NULL (not yet mapped by user)."""
+        result = await self.db.execute(
+            select(Service)
+            .where(Service.institution_id == institution_id, Service.service_type_id.is_(None))
+            .order_by(Service.raw_service)
+        )
+        return list(result.scalars().all())
+
+    async def upsert_service(self, institution_id: int, raw_service: str) -> Service:
+        """Insert service with NULL service_type_id if not exists; return existing row."""
         stmt = (
             pg_insert(Service)
-            .values(
-                institution_id=institution_id,
-                raw_service=raw_service,
-                service_type_id=service_type_id,
-            )
+            .values(institution_id=institution_id, raw_service=raw_service, service_type_id=None)
             .on_conflict_do_nothing(index_elements=["institution_id", "raw_service"])
             .returning(Service)
         )
@@ -284,7 +288,7 @@ class InstitutionRepo:
         return True
 
     async def create_service(
-        self, institution_id: int, raw_service: str, service_type_id: int
+        self, institution_id: int, raw_service: str, service_type_id: int | None = None
     ) -> Service:
         service = Service(
             institution_id=institution_id,

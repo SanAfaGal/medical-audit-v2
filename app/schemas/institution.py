@@ -78,11 +78,11 @@ class ServiceOut(BaseModel):
     id: int
     institution_id: int
     raw_service: str
-    service_type_id: int
+    service_type_id: int | None
 
 
 class ServiceUpdate(BaseModel):
-    service_type_id: int
+    service_type_id: int | None = None
 
 
 class AdminCreate(BaseModel):
@@ -98,4 +98,4 @@ class ContractCreate(BaseModel):
 
 class ServiceCreate(BaseModel):
     raw_service: str
-    service_type_id: int
+    service_type_id: int | None = None

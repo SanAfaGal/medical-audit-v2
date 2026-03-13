@@ -20,7 +20,6 @@ _SIHOS_COLUMNS = [
     "ADMINISTRADORA", "CONTRATO", "SERVICIO", "OPERARIO",
 ]
 
-_DEFAULT_SERVICE_TYPE = "GENERAL"
 _DEFAULT_FOLDER_STATUS = "PRESENTE"
 
 
@@ -61,11 +60,8 @@ async def ingest(
     inv_repo = InvoiceRepo(db)
     rules_repo = RulesRepo(db)
 
-    # Look up default IDs
-    default_st = await rules_repo.get_service_type_by_code(_DEFAULT_SERVICE_TYPE)
+    # Look up default folder status
     default_fs = await rules_repo.get_folder_status_by_status(_DEFAULT_FOLDER_STATUS)
-    if not default_st:
-        raise RuntimeError(f"Service type '{_DEFAULT_SERVICE_TYPE}' not found — run seeds first.")
     if not default_fs:
         raise RuntimeError(f"Folder status '{_DEFAULT_FOLDER_STATUS}' not found — run seeds first.")
 
@@ -105,10 +101,10 @@ async def ingest(
             skipped += 1
             continue
 
-        # Upsert service — skip if still at default (not yet mapped)
-        service = await inst_repo.upsert_service(institution.id, raw_service, default_st.id)
-        service_type_id = service.service_type_id
-        if raw_service and service_type_id == default_st.id:
+        # Upsert service — skip if not yet mapped (service_type_id is NULL)
+        service = await inst_repo.upsert_service(institution.id, raw_service) if raw_service else None
+        service_type_id = service.service_type_id if service else None
+        if service and service_type_id is None:
             if raw_service not in unknown_services:
                 unknown_services.append(raw_service)
             skipped += 1
