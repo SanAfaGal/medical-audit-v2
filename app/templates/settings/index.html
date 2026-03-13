@@ -461,65 +461,44 @@
         </div>
       </div>
 
-      <!-- Docs por Servicio -->
-      <div x-show="mapSubTab === 'stdocs'" class="p-4 space-y-3">
-        <p class="text-xs text-gray-500">Define qué tipos de documento se requieren por tipo de servicio para esta institución.</p>
-        <table class="w-full text-sm">
-          <thead class="text-xs text-gray-500 border-b border-gray-100">
-            <tr>
-              <th class="text-left py-2 px-2 font-semibold">Tipo de servicio</th>
-              <th class="text-left py-2 px-2 font-semibold">Tipo de documento</th>
-              <th class="py-2 px-2"></th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-50">
-            <template x-for="d in serviceTypeDocs" :key="d.id">
-              <tr class="hover:bg-gray-50">
-                <td class="px-2 py-2 text-xs text-gray-700" x-text="stName(d.service_type_id)"></td>
-                <td class="px-2 py-2 text-xs text-gray-700" x-text="dtCode(d.doc_type_id)"></td>
-                <td class="px-2 py-2 text-right">
-                  <template x-if="confirmDeleteSTDId !== d.id">
-                    <button @click="confirmDeleteSTDId = d.id"
-                            class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
-                      <i class="fa-solid fa-trash text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="confirmDeleteSTDId === d.id">
-                    <div class="flex justify-end gap-1">
-                      <button @click="deleteSTD(d.service_type_id, d.doc_type_id)"
-                              class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
-                        Eliminar
-                      </button>
-                      <button @click="confirmDeleteSTDId = null"
-                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                        Cancelar
-                      </button>
-                    </div>
-                  </template>
-                </td>
+      <!-- Docs por Servicio — matriz de checkboxes -->
+      <div x-show="mapSubTab === 'stdocs'" class="p-4">
+        <p class="text-xs text-gray-500 mb-3">Marque los documentos requeridos por tipo de servicio. Los cambios se aplican de inmediato.</p>
+        <div class="overflow-x-auto">
+          <table class="text-xs border-collapse">
+            <thead>
+              <tr>
+                <!-- Corner cell -->
+                <th class="sticky left-0 z-10 bg-white min-w-[160px] pr-3 pb-2 text-left text-gray-500 font-semibold border-b border-gray-200"></th>
+                <!-- Doc type headers -->
+                <template x-for="dt in docTypes" :key="dt.id">
+                  <th class="pb-2 px-2 border-b border-gray-200 font-mono font-semibold text-gray-600 whitespace-nowrap">
+                    <span x-text="dt.code"></span>
+                  </th>
+                </template>
               </tr>
-            </template>
-          </tbody>
-        </table>
-        <div class="flex gap-2 pt-2 border-t border-gray-100">
-          <select x-model="newSTD.service_type_id"
-                  class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
-            <option value="">Tipo de servicio</option>
-            <template x-for="st in serviceTypes" :key="st.id">
-              <option :value="st.id" x-text="st.display_name"></option>
-            </template>
-          </select>
-          <select x-model="newSTD.doc_type_id"
-                  class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
-            <option value="">Tipo de documento</option>
-            <template x-for="dt in docTypes" :key="dt.id">
-              <option :value="dt.id" x-text="dt.code"></option>
-            </template>
-          </select>
-          <button @click="addSTD()" :disabled="!newSTD.service_type_id || !newSTD.doc_type_id"
-                  class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
-            <i class="fa-solid fa-plus mr-1"></i>Agregar
-          </button>
+            </thead>
+            <tbody>
+              <template x-for="st in serviceTypes" :key="st.id">
+                <tr class="hover:bg-sky-50/40 group">
+                  <!-- Service type label -->
+                  <td class="sticky left-0 bg-white group-hover:bg-sky-50/40 pr-4 py-2 font-medium text-gray-700 border-b border-gray-100 whitespace-nowrap">
+                    <span x-text="st.display_name"></span>
+                  </td>
+                  <!-- Checkbox per doc type -->
+                  <template x-for="dt in docTypes" :key="dt.id">
+                    <td class="px-2 py-2 text-center border-b border-gray-100">
+                      <input type="checkbox"
+                             :checked="stdHas(st.id, dt.id)"
+                             @change="toggleSTD(st.id, dt.id, $event.target.checked)"
+                             :disabled="stdPending[st.id + '-' + dt.id]"
+                             class="w-4 h-4 rounded border-gray-300 text-sky-600 cursor-pointer focus:ring-sky-500 disabled:opacity-40 disabled:cursor-wait" />
+                    </td>
+                  </template>
+                </tr>
+              </template>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -849,11 +828,11 @@ function settingsApp() {
     editingAdminId: null, editingAdminVal: '', editingAdminType: '',
     editingContractId: null, editingContractVal: '',
     editingServiceId: null, editingServiceTypeId: '',
-    confirmDeleteAdminId: null, confirmDeleteContractId: null, confirmDeleteServiceId: null, confirmDeleteSTDId: null,
+    confirmDeleteAdminId: null, confirmDeleteContractId: null, confirmDeleteServiceId: null,
     newAdmin: { raw_admin:'', canonical_admin:'', type:'' },
     newContract: { raw_contract:'', canonical_contract:'' },
     newService: { raw_service:'', service_type_id:'' },
-    newSTD: { service_type_id:'', doc_type_id:'' },
+    stdPending: {},
 
     // Períodos
     periodInstId: '',
@@ -1025,17 +1004,26 @@ function settingsApp() {
       else this.showToast('No se pudo eliminar.', 'error');
     },
 
-    // ServiceTypeDocs
-    async addSTD() {
-      if (!this.mapInstId || !this.newSTD.service_type_id || !this.newSTD.doc_type_id) return;
-      const res = await fetch(`/api/institutions/${this.mapInstId}/service-type-documents`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ institution_id: parseInt(this.mapInstId), service_type_id: parseInt(this.newSTD.service_type_id), doc_type_id: parseInt(this.newSTD.doc_type_id) }) });
-      if (res.ok) { this.newSTD = {service_type_id:'',doc_type_id:''}; await this.loadMappings(); this.showToast('Regla de documento agregada.'); }
-      else this.showToast('Error al agregar.', 'error');
+    // ServiceTypeDocs — matrix helpers
+    stdHas(stId, dtId) {
+      return this.serviceTypeDocs.some(d => d.service_type_id === stId && d.doc_type_id === dtId);
     },
-    async deleteSTD(stId, dtId) {
-      const res = await fetch(`/api/institutions/${this.mapInstId}/service-type-documents/${stId}/${dtId}`, { method:'DELETE' });
-      if (res.ok || res.status === 204) { this.confirmDeleteSTDId = null; await this.loadMappings(); this.showToast('Eliminado.'); }
-      else this.showToast('No se pudo eliminar.', 'error');
+    async toggleSTD(stId, dtId, checked) {
+      const key = `${stId}-${dtId}`;
+      this.stdPending[key] = true;
+      if (checked) {
+        const res = await fetch(`/api/institutions/${this.mapInstId}/service-type-documents`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ institution_id: parseInt(this.mapInstId), service_type_id: stId, doc_type_id: dtId }) });
+        if (res.ok) {
+          const obj = await res.json();
+          this.serviceTypeDocs.push(obj);
+        } else this.showToast('Error al agregar.', 'error');
+      } else {
+        const res = await fetch(`/api/institutions/${this.mapInstId}/service-type-documents/${stId}/${dtId}`, { method:'DELETE' });
+        if (res.ok || res.status === 204) {
+          this.serviceTypeDocs = this.serviceTypeDocs.filter(d => !(d.service_type_id === stId && d.doc_type_id === dtId));
+        } else this.showToast('No se pudo eliminar.', 'error');
+      }
+      delete this.stdPending[key];
     },
 
     // ---- PERÍODOS ----
