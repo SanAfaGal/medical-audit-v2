@@ -9,27 +9,27 @@
   <!-- Hospital + period selector -->
   <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
     <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
-      <i class="fa-solid fa-hospital-user text-brand-600 mr-2"></i>Selección de hospital y período
+      <i class="fa-solid fa-hospital-user text-sky-600 mr-2"></i>Selección de hospital y período
     </h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Hospital</label>
-        <select x-model="hospitalKey" @change="loadPeriods()"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        <select x-model="institutionId" @change="loadPeriods()"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500">
           <option value="">— Seleccione un hospital —</option>
-          <template x-for="h in hospitals" :key="h.key">
-            <option :value="h.key" x-text="h.name"></option>
+          <template x-for="h in institutions" :key="h.id">
+            <option :value="h.id" x-text="h.display_name"></option>
           </template>
         </select>
       </div>
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Período</label>
-        <select x-model="periodCode"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-                :disabled="!hospitalKey">
+        <select x-model="periodId"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                :disabled="!institutionId">
           <option value="">— Seleccione un período —</option>
-          <template x-for="p in periods" :key="p.code">
-            <option :value="p.code" x-text="p.code"></option>
+          <template x-for="p in periods" :key="p.id">
+            <option :value="p.id" x-text="p.period_label"></option>
           </template>
         </select>
       </div>
@@ -40,7 +40,7 @@
   <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-        <i class="fa-solid fa-list-check text-brand-600 mr-2"></i>Etapas del pipeline
+        <i class="fa-solid fa-list-check text-sky-600 mr-2"></i>Etapas del pipeline
       </h2>
       <div class="flex gap-2">
         <button @click="selectAll(true)"
@@ -57,12 +57,12 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
       <template x-for="stage in stages" :key="stage.id">
         <label class="flex items-start gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
-               :class="{'border-brand-400 bg-brand-50': selectedStages.includes(stage.id)}">
-          <input type="checkbox" class="mt-0.5 rounded text-brand-600"
+               :class="{'border-sky-400 bg-sky-50': selectedStages.includes(stage.id)}">
+          <input type="checkbox" class="mt-0.5 rounded text-sky-600"
                  :value="stage.id" x-model="selectedStages" />
           <div class="min-w-0">
             <div class="flex items-center gap-1.5">
-              <i :class="stage.icon + ' text-brand-500 text-xs w-4 text-center'"></i>
+              <i :class="stage.icon + ' text-sky-500 text-xs w-4 text-center'"></i>
               <span class="text-sm font-medium text-gray-800" x-text="stage.label"></span>
             </div>
             <p class="text-xs text-gray-500 mt-0.5 truncate" x-text="stage.description"></p>
@@ -80,16 +80,16 @@
     </h2>
     <input type="file" accept=".xlsx,.xls" @change="setFile($event)"
            class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg
-                  file:border-0 file:text-sm file:font-medium file:bg-brand-50 file:text-brand-700
-                  hover:file:bg-brand-100 transition-colors" />
+                  file:border-0 file:text-sm file:font-medium file:bg-sky-50 file:text-sky-700
+                  hover:file:bg-sky-100 transition-colors" />
     <p class="text-xs text-gray-400 mt-1.5">Archivo Excel exportado desde SIHOS con las facturas del período.</p>
   </section>
 
   <!-- Run button -->
   <div class="flex items-center gap-4">
     <button @click="runPipeline()"
-            :disabled="running || !hospitalKey || !periodCode || selectedStages.length === 0"
-            class="flex items-center gap-2 px-6 py-2.5 bg-brand-600 hover:bg-brand-700 disabled:bg-gray-300
+            :disabled="running || !institutionId || !periodId || selectedStages.length === 0"
+            class="flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:bg-gray-300
                    disabled:cursor-not-allowed text-white font-medium rounded-lg text-sm transition-colors">
       <i class="fa-solid fa-play" x-show="!running"></i>
       <i class="fa-solid fa-spinner fa-spin" x-show="running"></i>
@@ -129,18 +129,16 @@
 <script>
 function pipeline() {
   return {
-    // State
-    hospitals: [],
-    hospitalKey: '',
+    institutions: [],
+    institutionId: '',
     periods: [],
-    periodCode: '',
+    periodId: '',
     selectedStages: [],
     running: false,
     logLines: [],
     currentStageLabel: '',
     excelFile: null,
 
-    // Stage definitions (labels and icons from pipeline_stages)
     stages: [
       { id: 'LOAD_AND_PROCESS',              label: 'Carga y procesamiento',        description: 'Cargar Excel SIHOS, registrar mapeos, insertar facturas', icon: 'fa-solid fa-file-import' },
       { id: 'RUN_STAGING',                   label: 'Mover a staging',              description: 'Mover carpetas de BASE a STAGE',                          icon: 'fa-solid fa-folder-open' },
@@ -158,36 +156,24 @@ function pipeline() {
       { id: 'CHECK_DIRS',                    label: 'Verificar carpetas',           description: 'Detectar carpetas faltantes y marcar como FALTANTE',       icon: 'fa-solid fa-folder-minus' },
       { id: 'CATEGORIZE_INVOICES',           label: 'Categorizar facturas',         description: 'Leer PDFs, asignar tipos de servicio por palabras clave',  icon: 'fa-solid fa-tags' },
       { id: 'CHECK_REQUIRED_DOCS',           label: 'Verificar documentos',         description: 'Registrar hallazgos por documentos requeridos faltantes',  icon: 'fa-solid fa-clipboard-list' },
-      { id: 'VERIFY_CUFE',                   label: 'Verificar CUFE',              description: 'Verificar código CUFE en los PDFs de factura',             icon: 'fa-solid fa-fingerprint' },
+      { id: 'VERIFY_CUFE',                   label: 'Verificar CUFE',               description: 'Verificar código CUFE en los PDFs de factura',             icon: 'fa-solid fa-fingerprint' },
       { id: 'TAG_MISSING_CUFE',              label: 'Etiquetar CUFE faltante',      description: 'Añadir sufijo CUFE a carpetas sin CUFE válido',            icon: 'fa-solid fa-tag' },
       { id: 'ORGANIZE',                      label: 'Organizar en AUDIT',           description: 'Organizar carpetas auditadas en la estructura AUDIT',      icon: 'fa-solid fa-box-archive' },
-      { id: 'DOWNLOAD_DRIVE',               label: 'Descargar Drive',              description: 'Descargar carpetas faltantes desde Google Drive',          icon: 'fa-brands fa-google-drive' },
-      { id: 'DOWNLOAD_MISSING_DOCS',         label: 'Descargar docs faltantes',     description: 'Descargar documentos faltantes desde Drive',              icon: 'fa-solid fa-file-arrow-down' },
+      { id: 'DOWNLOAD_DRIVE',                label: 'Descargar Drive',              description: 'Descargar carpetas faltantes desde Google Drive',          icon: 'fa-brands fa-google-drive' },
+      { id: 'DOWNLOAD_MISSING_DOCS',         label: 'Descargar docs faltantes',     description: 'Descargar documentos faltantes desde Drive',               icon: 'fa-solid fa-file-arrow-down' },
     ],
 
     async init() {
-      await this.loadHospitals();
-    },
-
-    async loadHospitals() {
-      try {
-        const res = await fetch('/api/hospitals/');
-        this.hospitals = await res.json();
-      } catch (e) {
-        console.error('Error cargando hospitales:', e);
-      }
+      const res = await fetch('/api/institutions');
+      this.institutions = await res.json();
     },
 
     async loadPeriods() {
       this.periods = [];
-      this.periodCode = '';
-      if (!this.hospitalKey) return;
-      try {
-        const res = await fetch(`/api/hospitals/${this.hospitalKey}/periods`);
-        this.periods = await res.json();
-      } catch (e) {
-        console.error('Error cargando períodos:', e);
-      }
+      this.periodId = '';
+      if (!this.institutionId) return;
+      const res = await fetch(`/api/institutions/${this.institutionId}/periods`);
+      this.periods = await res.json();
     },
 
     selectAll(checked) {
@@ -218,13 +204,10 @@ function pipeline() {
         this.$nextTick(() => this.scrollLog());
 
         try {
-          // Build extra params for LOAD_AND_PROCESS
-          let extraJson = null;
           if (stageId === 'LOAD_AND_PROCESS' && this.excelFile) {
-            // For file stages, use the ingest endpoint separately
             const formData = new FormData();
-            formData.append('hospital_key', this.hospitalKey);
-            formData.append('period_code', this.periodCode);
+            formData.append('institution_id', this.institutionId);
+            formData.append('period_id', this.periodId);
             formData.append('file', this.excelFile);
 
             this.logLines.push('[INFO] Enviando archivo Excel al servidor...');
@@ -235,8 +218,8 @@ function pipeline() {
             } else {
               const data = await res.json();
               this.logLines.push(`[OK] Facturas insertadas: ${data.inserted}`);
-              this.logLines.push(`[INFO] Filas omitidas: ${data.skipped}`);
-              if (data.unknown_admins.length > 0) {
+              if (data.skipped) this.logLines.push(`[INFO] Filas omitidas: ${data.skipped}`);
+              if (data.unknown_admins && data.unknown_admins.length > 0) {
                 this.logLines.push(`[WARN] Administradoras sin mapeo: ${data.unknown_admins.slice(0, 5).join(', ')}`);
               }
             }
@@ -244,13 +227,17 @@ function pipeline() {
             continue;
           }
 
-          // SSE-based stage execution for all other stages
-          const url = `/api/pipeline/run/${stageId}?hospital_key=${encodeURIComponent(this.hospitalKey)}&period_code=${encodeURIComponent(this.periodCode)}`;
+          // SSE-based stage execution
+          const url = `/api/pipeline/run/${stageId}?institution_id=${encodeURIComponent(this.institutionId)}&period_id=${encodeURIComponent(this.periodId)}`;
           const evtSource = new EventSource(url);
 
-          await new Promise((resolve, reject) => {
+          await new Promise((resolve) => {
             evtSource.onmessage = (event) => {
-              const line = event.data;
+              let line = event.data;
+              try {
+                const parsed = JSON.parse(event.data);
+                line = parsed.msg || event.data;
+              } catch {}
               if (line === '[DONE]') {
                 evtSource.close();
                 resolve();
@@ -259,10 +246,10 @@ function pipeline() {
               this.logLines.push(line);
               this.$nextTick(() => this.scrollLog());
             };
-            evtSource.onerror = (err) => {
+            evtSource.onerror = () => {
               evtSource.close();
               this.logLines.push(`[ERROR] Conexión SSE interrumpida para etapa ${stageId}`);
-              resolve(); // continue with next stage
+              resolve();
             };
           });
 

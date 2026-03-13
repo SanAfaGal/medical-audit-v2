@@ -11,39 +11,38 @@
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Hospital</label>
-        <select x-model="hospitalKey" @change="loadPeriods()"
+        <select x-model="institutionId" @change="loadPeriods()"
                 class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
           <option value="">— Seleccionar —</option>
-          <template x-for="h in hospitals" :key="h.key">
-            <option :value="h.key" x-text="h.name"></option>
+          <template x-for="h in institutions" :key="h.id">
+            <option :value="h.id" x-text="h.display_name"></option>
           </template>
         </select>
       </div>
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Período</label>
-        <select x-model="periodCode" @change="loadInvoices()" :disabled="!hospitalKey"
+        <select x-model="periodId" @change="loadInvoices()" :disabled="!institutionId"
                 class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
           <option value="">— Seleccionar —</option>
-          <template x-for="p in periods" :key="p.code">
-            <option :value="p.code" x-text="p.code"></option>
+          <template x-for="p in periods" :key="p.id">
+            <option :value="p.id" x-text="p.period_label"></option>
           </template>
         </select>
       </div>
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Estado</label>
-        <select x-model="filterStatus" @change="page=1; loadInvoices()"
+        <select x-model="filterStatusId" @change="page=1; loadInvoices()"
                 class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
           <option value="">Todos</option>
-          <option value="PRESENTE">Presente</option>
-          <option value="PENDIENTE">Pendiente</option>
-          <option value="FALTANTE">Faltante</option>
-          <option value="AUDITADA">Auditada</option>
+          <template x-for="fs in folderStatuses" :key="fs.id">
+            <option :value="fs.id" x-text="fs.status"></option>
+          </template>
         </select>
       </div>
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Buscar</label>
         <input type="text" x-model="searchQuery" @input.debounce.400ms="page=1; loadInvoices()"
-               placeholder="Factura, paciente, admin..."
+               placeholder="Factura, paciente..."
                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
       </div>
       <div class="flex items-end">
@@ -62,10 +61,10 @@
         <template x-if="total > 0">
           <span><strong x-text="total"></strong> facturas</span>
         </template>
-        <template x-if="total === 0 && periodCode">
+        <template x-if="total === 0 && periodId">
           <span class="text-gray-400">No se encontraron facturas</span>
         </template>
-        <template x-if="!periodCode">
+        <template x-if="!periodId">
           <span class="text-gray-400">Seleccione un hospital y período</span>
         </template>
       </span>
@@ -97,22 +96,22 @@
             <tr class="hover:bg-sky-50 cursor-pointer transition-colors"
                 :class="{'bg-sky-50 ring-1 ring-inset ring-sky-200': selectedInvoice && selectedInvoice.id === inv.id}"
                 @click="selectInvoice(inv)">
-              <td class="px-4 py-2.5 font-mono font-semibold text-sky-700 text-xs" x-text="inv.factura"></td>
-              <td class="px-4 py-2.5 text-gray-700 max-w-[200px] truncate" x-text="inv.paciente || '—'"></td>
-              <td class="px-4 py-2.5 text-gray-500 text-xs max-w-[160px] truncate" x-text="inv.administradora || '—'"></td>
+              <td class="px-4 py-2.5 font-mono font-semibold text-sky-700 text-xs" x-text="inv.invoice_number"></td>
+              <td class="px-4 py-2.5 text-gray-700 max-w-[200px] truncate" x-text="inv.patient_name || '—'"></td>
+              <td class="px-4 py-2.5 text-gray-500 text-xs max-w-[160px] truncate" x-text="inv.admin_canonical || '—'"></td>
               <td class="px-4 py-2.5">
                 <span :class="statusBadge(inv.folder_status)"
                       class="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
                       x-text="inv.folder_status"></span>
               </td>
               <td class="px-4 py-2.5">
-                <template x-if="inv.finding_codes && inv.finding_codes.length > 0">
+                <template x-if="inv.missing_file_count > 0">
                   <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-medium">
                     <i class="fa-solid fa-triangle-exclamation text-xs"></i>
-                    <span x-text="inv.finding_codes.length"></span>
+                    <span x-text="inv.missing_file_count"></span>
                   </span>
                 </template>
-                <template x-if="!inv.finding_codes || inv.finding_codes.length === 0">
+                <template x-if="inv.missing_file_count === 0">
                   <span class="text-green-500 text-xs"><i class="fa-solid fa-check-circle"></i></span>
                 </template>
               </td>
@@ -130,7 +129,7 @@
     <div class="flex items-center justify-between mb-5">
       <h3 class="font-semibold text-gray-800 text-base">
         <i class="fa-solid fa-file-invoice mr-2 text-sky-600"></i>
-        Factura <span class="font-mono" x-text="selectedInvoice && selectedInvoice.factura"></span>
+        Factura <span class="font-mono" x-text="selectedInvoice && selectedInvoice.invoice_number"></span>
       </h3>
       <button @click="selectedInvoice = null" class="text-gray-400 hover:text-gray-600">
         <i class="fa-solid fa-xmark text-lg"></i>
@@ -140,21 +139,20 @@
     <div class="grid grid-cols-3 gap-4 mb-5 text-sm">
       <div>
         <div class="text-xs text-gray-500 mb-0.5">Paciente</div>
-        <div class="font-medium text-gray-800" x-text="selectedInvoice && selectedInvoice.paciente || 'N/A'"></div>
+        <div class="font-medium text-gray-800" x-text="selectedInvoice && selectedInvoice.patient_name || 'N/A'"></div>
       </div>
       <div>
         <div class="text-xs text-gray-500 mb-0.5">Administradora</div>
-        <div class="font-medium text-gray-700" x-text="selectedInvoice && selectedInvoice.administradora || 'N/A'"></div>
+        <div class="font-medium text-gray-700" x-text="selectedInvoice && selectedInvoice.admin_canonical || '—'"></div>
       </div>
       <div>
         <div class="text-xs text-gray-500 mb-1">Estado de la carpeta</div>
-        <select x-model="selectedInvoice && selectedInvoice.folder_status"
+        <select x-model="detailStatusId"
                 @change="updateStatus()"
                 class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
-          <option>PRESENTE</option>
-          <option>PENDIENTE</option>
-          <option>FALTANTE</option>
-          <option>AUDITADA</option>
+          <template x-for="fs in folderStatuses" :key="fs.id">
+            <option :value="fs.id" x-text="fs.status"></option>
+          </template>
         </select>
       </div>
     </div>
@@ -162,19 +160,19 @@
     <div class="mb-5">
       <div class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Hallazgos registrados</div>
       <div class="space-y-1.5">
-        <template x-for="code in findings" :key="code">
+        <template x-for="mf in missingFiles" :key="mf.id">
           <div class="flex items-center justify-between px-3 py-2 bg-red-50 border border-red-100 rounded-lg">
             <div class="flex items-center gap-2">
               <i class="fa-solid fa-triangle-exclamation text-red-500 text-xs"></i>
-              <span class="text-sm font-medium text-red-800" x-text="code"></span>
+              <span class="text-sm font-medium text-red-800" x-text="docTypeLabel(mf.doc_type_id)"></span>
             </div>
-            <button @click="deleteFinding(code)"
+            <button @click="deleteFile(mf.doc_type_id)"
                     class="p-1 text-red-400 hover:text-red-600 hover:bg-red-100 rounded transition-colors">
               <i class="fa-solid fa-trash text-xs"></i>
             </button>
           </div>
         </template>
-        <template x-if="findings.length === 0">
+        <template x-if="missingFiles.length === 0">
           <div class="text-sm text-green-600 px-3 py-2">
             <i class="fa-solid fa-circle-check mr-1.5"></i>Sin hallazgos registrados
           </div>
@@ -183,11 +181,14 @@
     </div>
 
     <div class="flex gap-2">
-      <input type="text" x-model="newFindingCode"
-             placeholder="Código de hallazgo (ej. FIRMA, HISTORIA)"
-             @keyup.enter="addFinding()"
-             class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 focus:border-red-400" />
-      <button @click="addFinding()" :disabled="!newFindingCode.trim()"
+      <select x-model="newDocTypeId"
+              class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 focus:border-red-400">
+        <option value="">— Seleccionar tipo de documento —</option>
+        <template x-for="dt in docTypes" :key="dt.id">
+          <option :value="dt.id" x-text="dt.code + ' — ' + dt.description"></option>
+        </template>
+      </select>
+      <button @click="addFile()" :disabled="!newDocTypeId"
               class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
         <i class="fa-solid fa-plus mr-1"></i>Agregar
       </button>
@@ -200,53 +201,62 @@
 <script>
 function auditApp() {
   return {
-    hospitals: [],
-    hospitalKey: '',
+    institutions: [],
+    institutionId: '',
     periods: [],
-    periodCode: '',
-    filterStatus: '',
+    periodId: '',
+    folderStatuses: [],
+    docTypes: [],
+    filterStatusId: '',
     searchQuery: '',
     invoices: [],
     total: 0,
     page: 1,
     pageSize: 50,
     selectedInvoice: null,
-    findings: [],
-    newFindingCode: '',
+    detailStatusId: '',
+    missingFiles: [],
+    newDocTypeId: '',
 
     async init() {
-      const res = await fetch('/api/hospitals/');
-      this.hospitals = await res.json();
+      const [instRes, fsRes, dtRes] = await Promise.all([
+        fetch('/api/institutions'),
+        fetch('/api/settings/folder-statuses'),
+        fetch('/api/settings/doc-types'),
+      ]);
+      this.institutions = await instRes.json();
+      this.folderStatuses = await fsRes.json();
+      this.docTypes = await dtRes.json();
     },
 
     async loadPeriods() {
-      this.periods = []; this.periodCode = ''; this.invoices = []; this.total = 0;
-      if (!this.hospitalKey) return;
-      const res = await fetch(`/api/hospitals/${this.hospitalKey}/periods`);
+      this.periods = []; this.periodId = ''; this.invoices = []; this.total = 0;
+      if (!this.institutionId) return;
+      const res = await fetch(`/api/institutions/${this.institutionId}/periods`);
       this.periods = await res.json();
     },
 
     async loadInvoices() {
-      if (!this.hospitalKey || !this.periodCode) return;
-      let url = `/api/invoices?hospital_key=${encodeURIComponent(this.hospitalKey)}&period_code=${encodeURIComponent(this.periodCode)}&page=${this.page}&page_size=${this.pageSize}`;
-      if (this.filterStatus) url += `&folder_status=${encodeURIComponent(this.filterStatus)}`;
-      if (this.searchQuery)  url += `&search=${encodeURIComponent(this.searchQuery)}`;
+      if (!this.institutionId || !this.periodId) return;
+      let url = `/api/invoices?period_id=${encodeURIComponent(this.periodId)}&page=${this.page}&page_size=${this.pageSize}`;
+      if (this.filterStatusId) url += `&folder_status_id=${encodeURIComponent(this.filterStatusId)}`;
+      if (this.searchQuery)   url += `&search=${encodeURIComponent(this.searchQuery)}`;
       const res = await fetch(url);
       const data = await res.json();
       this.invoices = data.items;
       this.total = data.total;
     },
 
-    clearFilters() { this.filterStatus = ''; this.searchQuery = ''; this.page = 1; this.loadInvoices(); },
+    clearFilters() { this.filterStatusId = ''; this.searchQuery = ''; this.page = 1; this.loadInvoices(); },
     prevPage() { if (this.page > 1) { this.page--; this.loadInvoices(); } },
     nextPage() { if (this.page * this.pageSize < this.total) { this.page++; this.loadInvoices(); } },
 
     async selectInvoice(inv) {
       this.selectedInvoice = { ...inv };
-      this.newFindingCode = '';
-      const res = await fetch(`/api/findings/${inv.id}`);
-      const data = await res.json();
-      this.findings = data.map(f => f.doc_code);
+      this.detailStatusId = inv.folder_status_id;
+      this.newDocTypeId = '';
+      const res = await fetch(`/api/missing-files/${inv.id}`);
+      this.missingFiles = await res.json();
       this.$nextTick(() => {
         const panel = document.getElementById('detail-panel');
         if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -254,36 +264,50 @@ function auditApp() {
     },
 
     async updateStatus() {
-      if (!this.selectedInvoice) return;
+      if (!this.selectedInvoice || !this.detailStatusId) return;
       await fetch(`/api/invoices/${this.selectedInvoice.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder_status: this.selectedInvoice.folder_status }),
+        body: JSON.stringify({ folder_status_id: parseInt(this.detailStatusId) }),
       });
       await this.loadInvoices();
     },
 
-    async addFinding() {
-      if (!this.newFindingCode.trim() || !this.selectedInvoice) return;
-      await fetch('/api/findings', {
+    async addFile() {
+      if (!this.newDocTypeId || !this.selectedInvoice) return;
+      await fetch('/api/missing-files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ invoice_id: this.selectedInvoice.id, doc_code: this.newFindingCode.trim().toUpperCase() }),
+        body: JSON.stringify({
+          invoice_id: this.selectedInvoice.id,
+          doc_type_id: parseInt(this.newDocTypeId),
+          expected_path: '',
+        }),
       });
-      this.newFindingCode = '';
+      this.newDocTypeId = '';
       await this.selectInvoice(this.selectedInvoice);
       await this.loadInvoices();
     },
 
-    async deleteFinding(code) {
+    async deleteFile(docTypeId) {
       if (!this.selectedInvoice) return;
-      await fetch(`/api/findings/${this.selectedInvoice.id}/${code}`, { method: 'DELETE' });
+      await fetch(`/api/missing-files/${this.selectedInvoice.id}/${docTypeId}`, { method: 'DELETE' });
       await this.selectInvoice(this.selectedInvoice);
       await this.loadInvoices();
+    },
+
+    docTypeLabel(docTypeId) {
+      const dt = this.docTypes.find(d => d.id === docTypeId);
+      return dt ? `${dt.code} — ${dt.description}` : `Doc #${docTypeId}`;
     },
 
     statusBadge(status) {
-      const map = { PRESENTE: 'bg-green-100 text-green-700', PENDIENTE: 'bg-yellow-100 text-yellow-700', FALTANTE: 'bg-red-100 text-red-700', AUDITADA: 'bg-blue-100 text-blue-700' };
+      const map = {
+        PRESENTE:  'bg-green-100 text-green-700',
+        PENDIENTE: 'bg-yellow-100 text-yellow-700',
+        FALTANTE:  'bg-red-100 text-red-700',
+        AUDITADA:  'bg-blue-100 text-blue-700',
+      };
       return map[status] || 'bg-gray-100 text-gray-600';
     },
   };

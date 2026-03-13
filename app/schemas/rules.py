@@ -8,18 +8,19 @@ class ServiceTypeOut(BaseModel):
     id: int
     code: str
     display_name: str
-    keywords: str      # JSON string
-    required_docs: str # JSON string
-    sort_order: int
-    is_active: bool
+    priority: int
+
+
+class ServiceTypeCreate(BaseModel):
+    code: str
+    display_name: str
+    priority: int = 10
 
 
 class ServiceTypeUpdate(BaseModel):
+    code: str | None = None
     display_name: str | None = None
-    keywords: str | None = None       # JSON string
-    required_docs: str | None = None  # JSON string
-    sort_order: int | None = None
-    is_active: bool | None = None
+    priority: int | None = None
 
 
 class DocTypeOut(BaseModel):
@@ -27,21 +28,42 @@ class DocTypeOut(BaseModel):
 
     id: int
     code: str
-    label: str
-    prefixes: str  # JSON string
-    is_active: bool
+    description: str
+    prefix: str | None
+    notes: str | None
+
+
+class DocTypeCreate(BaseModel):
+    code: str
+    description: str
+    prefix: str | None = None
+    notes: str | None = None
 
 
 class DocTypeUpdate(BaseModel):
-    label: str | None = None
-    prefixes: str | None = None  # JSON string
-    is_active: bool | None = None
+    code: str | None = None
+    description: str | None = None
+    prefix: str | None = None
+    notes: str | None = None
 
 
-class FolderStatusDefOut(BaseModel):
+class FolderStatusOut(BaseModel):
     model_config = {"from_attributes": True}
 
     id: int
-    code: str
-    label: str
-    sort_order: int
+    status: str
+
+
+class ServiceTypeDocumentOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    institution_id: int
+    service_type_id: int
+    doc_type_id: int
+
+
+class ServiceTypeDocumentCreate(BaseModel):
+    institution_id: int
+    service_type_id: int
+    doc_type_id: int

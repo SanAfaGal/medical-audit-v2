@@ -2,15 +2,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.repositories.hospital_repo import HospitalRepo
 from app.repositories.invoice_repo import InvoiceRepo
 from app.schemas.invoice import (
     BatchStatusUpdate,
-    InvoiceNotaUpdate,
+    InvoiceListItem,
     InvoiceOut,
     InvoiceStatusUpdate,
 )
@@ -20,36 +18,44 @@ router = APIRouter(prefix="/invoices", tags=["invoices"])
 
 @router.get("", response_model=dict)
 async def list_invoices(
-    hospital_key: str,
-    period_code: str,
-    folder_status: str | None = None,
+    period_id: int,
+    folder_status_id: int | None = None,
     service_type_id: int | None = None,
     search: str | None = None,
     page: int = 1,
     page_size: int = 50,
     db: AsyncSession = Depends(get_db),
 ):
-    hosp_repo = HospitalRepo(db)
-    hospital = await hosp_repo.get_by_key(hospital_key)
-    if not hospital:
-        raise HTTPException(404, "Hospital no encontrado")
-
     inv_repo = InvoiceRepo(db)
-    period = await inv_repo.get_or_create_period(hospital.id, period_code)
     invoices, total = await inv_repo.filter_invoices(
-        period_id=period.id,
-        folder_status=folder_status,
+        audit_period_id=period_id,
+        folder_status_id=folder_status_id,
         service_type_id=service_type_id,
         search=search,
         page=page,
         page_size=page_size,
     )
 
+    items = []
+    for inv in invoices:
+        items.append(InvoiceListItem(
+            id=inv.id,
+            invoice_number=inv.invoice_number,
+            patient_name=inv.patient_name,
+            admin_canonical=inv.admin.canonical_admin if inv.admin else None,
+            folder_status=inv.folder_status.status,
+            folder_status_id=inv.folder_status_id,
+            service_type_code=inv.service_type.code,
+            service_type_id=inv.service_type_id,
+            missing_file_count=len([mf for mf in inv.missing_files if mf.resolved_at is None]),
+            date=inv.date,
+        ))
+
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": [InvoiceOut.model_validate(inv) for inv in invoices],
+        "items": [item.model_dump() for item in items],
     }
 
 
@@ -63,22 +69,7 @@ async def update_status(
     invoice = await repo.get_by_id(invoice_id)
     if not invoice:
         raise HTTPException(404, "Factura no encontrada")
-    await repo.update_folder_status(invoice_id, data.folder_status)
-    await db.commit()
-    return await repo.get_by_id(invoice_id)
-
-
-@router.patch("/{invoice_id}/nota", response_model=InvoiceOut)
-async def update_nota(
-    invoice_id: int,
-    data: InvoiceNotaUpdate,
-    db: AsyncSession = Depends(get_db),
-):
-    repo = InvoiceRepo(db)
-    invoice = await repo.get_by_id(invoice_id)
-    if not invoice:
-        raise HTTPException(404, "Factura no encontrada")
-    await repo.update_nota(invoice_id, data.nota)
+    await repo.update_folder_status(invoice_id, data.folder_status_id)
     await db.commit()
     return await repo.get_by_id(invoice_id)
 
@@ -86,27 +77,27 @@ async def update_nota(
 @router.post("/batch-status", status_code=200)
 async def batch_update_status(data: BatchStatusUpdate, db: AsyncSession = Depends(get_db)):
     repo = InvoiceRepo(db)
-    await repo.batch_update_status(data.invoice_ids, data.folder_status)
+    await repo.batch_update_status(data.invoice_ids, data.folder_status_id)
     await db.commit()
     return {"updated": len(data.invoice_ids)}
 
 
 @router.post("/ingest", status_code=200)
 async def ingest_excel(
-    hospital_key: str = Form(...),
-    period_code: str = Form(...),
+    institution_id: int = Form(...),
+    period_id: int = Form(...),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload and ingest a SIHOS Excel export."""
     from app.services.billing import ingest
-    from app.repositories.hospital_repo import HospitalRepo
+    from app.repositories.institution_repo import InstitutionRepo
 
-    hosp_repo = HospitalRepo(db)
-    hospital = await hosp_repo.get_by_key(hospital_key)
-    if not hospital:
-        raise HTTPException(404, "Hospital no encontrado")
+    inst_repo = InstitutionRepo(db)
+    institution = await inst_repo.get_by_id(institution_id)
+    if not institution:
+        raise HTTPException(404, "Institución no encontrada")
 
     file_bytes = await file.read()
-    result = await ingest(file_bytes, hospital, period_code, db)
+    result = await ingest(file_bytes, institution, period_id, db)
     return result

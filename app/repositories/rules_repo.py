@@ -1,13 +1,11 @@
 """Async repository for business rules: service types, doc types, folder statuses."""
 from __future__ import annotations
 
-import json
-
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.rules import DocType, FolderStatusDef, ServiceType
+from app.models.rules import DocType, FolderStatus, ServiceType
 
 
 class RulesRepo:
@@ -18,11 +16,11 @@ class RulesRepo:
     # Service types
     # ------------------------------------------------------------------
 
-    async def get_service_types(self, active_only: bool = False) -> list[ServiceType]:
-        q = select(ServiceType).order_by(ServiceType.sort_order, ServiceType.code)
-        if active_only:
-            q = q.where(ServiceType.is_active.is_(True))
-        result = await self.db.execute(q)
+    async def get_service_types(self) -> list[ServiceType]:
+        """Return all service types ordered by priority descending."""
+        result = await self.db.execute(
+            select(ServiceType).order_by(ServiceType.priority.desc(), ServiceType.code)
+        )
         return list(result.scalars().all())
 
     async def get_service_type_by_code(self, code: str) -> ServiceType | None:
@@ -52,17 +50,9 @@ class RulesRepo:
     # Doc types
     # ------------------------------------------------------------------
 
-    async def get_doc_types(self, active_only: bool = False) -> list[DocType]:
-        q = select(DocType).order_by(DocType.code)
-        if active_only:
-            q = q.where(DocType.is_active.is_(True))
-        result = await self.db.execute(q)
+    async def get_doc_types(self) -> list[DocType]:
+        result = await self.db.execute(select(DocType).order_by(DocType.code))
         return list(result.scalars().all())
-
-    async def get_doc_type_prefixes(self) -> dict[str, list[str]]:
-        """Return {code: [prefixes]} for all active doc types."""
-        doc_types = await self.get_doc_types(active_only=True)
-        return {dt.code: json.loads(dt.prefixes) for dt in doc_types}
 
     async def upsert_doc_type(self, data: dict) -> DocType:
         stmt = (
@@ -87,8 +77,12 @@ class RulesRepo:
     # Folder statuses
     # ------------------------------------------------------------------
 
-    async def get_folder_statuses(self) -> list[FolderStatusDef]:
-        result = await self.db.execute(
-            select(FolderStatusDef).order_by(FolderStatusDef.sort_order)
-        )
+    async def get_folder_statuses(self) -> list[FolderStatus]:
+        result = await self.db.execute(select(FolderStatus).order_by(FolderStatus.id))
         return list(result.scalars().all())
+
+    async def get_folder_status_by_status(self, status: str) -> FolderStatus | None:
+        result = await self.db.execute(
+            select(FolderStatus).where(FolderStatus.status == status)
+        )
+        return result.scalar_one_or_none()

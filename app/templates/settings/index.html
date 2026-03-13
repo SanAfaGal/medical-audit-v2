@@ -33,14 +33,16 @@
       </h2>
       <form @submit.prevent="saveHospital()" class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Clave interna (key) *</label>
-          <input type="text" x-model="form.key" required placeholder="SANTA_LUCIA"
-                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
-          <p class="text-xs text-gray-400 mt-0.5">Sin espacios, en mayúsculas (se usa en la ruta de archivos)</p>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Nombre interno (clave única) *</label>
+          <input type="text" x-model="form.name" required placeholder="SANTA_LUCIA"
+                 :readonly="!!editingId"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500"
+                 :class="editingId ? 'bg-gray-50 text-gray-500' : ''" />
+          <p class="text-xs text-gray-400 mt-0.5">Sin espacios, en mayúsculas (identifica al hospital internamente)</p>
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Nombre del hospital *</label>
-          <input type="text" x-model="form.name" required placeholder="Hospital Santa Lucia"
+          <label class="block text-xs font-medium text-gray-600 mb-1">Nombre para mostrar *</label>
+          <input type="text" x-model="form.display_name" required placeholder="Hospital Santa Lucia"
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
         </div>
         <div>
@@ -50,17 +52,17 @@
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Prefijo de factura *</label>
-          <input type="text" x-model="form.invoice_prefix" required placeholder="FE"
+          <input type="text" x-model="form.invoice_id_prefix" required placeholder="FE"
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">URL portal SIHOS</label>
-          <input type="url" x-model="form.sihos_url" placeholder="https://sihos.example.com/..."
+          <input type="url" x-model="form.sihos_base_url" placeholder="https://sihos.example.com/..."
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Código SIHOS</label>
-          <input type="text" x-model="form.sihos_code"
+          <input type="text" x-model="form.sihos_doc_code"
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
         </div>
         <div>
@@ -109,16 +111,16 @@
         <i class="fa-solid fa-list mr-2 text-gray-500"></i>Hospitales registrados
       </h3>
       <div class="space-y-2">
-        <template x-for="h in hospitals" :key="h.id">
+        <template x-for="h in institutions" :key="h.id">
           <div class="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-lg border border-gray-100">
             <div>
-              <div class="text-sm font-semibold text-gray-800" x-text="h.name"></div>
+              <div class="text-sm font-semibold text-gray-800" x-text="h.display_name"></div>
               <div class="text-xs text-gray-500 mt-0.5">
                 NIT: <span x-text="h.nit"></span>
                 <span class="mx-1 text-gray-300">|</span>
-                Key: <span class="font-mono" x-text="h.key"></span>
+                Clave: <span class="font-mono" x-text="h.name"></span>
                 <span class="mx-1 text-gray-300">|</span>
-                Prefijo: <span class="font-mono" x-text="h.invoice_prefix"></span>
+                Prefijo: <span class="font-mono" x-text="h.invoice_id_prefix"></span>
               </div>
             </div>
             <button @click="editHospital(h)"
@@ -127,7 +129,7 @@
             </button>
           </div>
         </template>
-        <template x-if="hospitals.length === 0">
+        <template x-if="institutions.length === 0">
           <div class="text-sm text-gray-400 text-center py-6">
             <i class="fa-solid fa-hospital text-2xl mb-2 text-gray-300"></i><br/>
             No hay hospitales registrados
@@ -143,11 +145,11 @@
       <h2 class="text-sm font-semibold text-gray-700 mb-3">
         <i class="fa-solid fa-arrows-left-right mr-2 text-sky-600"></i>Seleccionar hospital
       </h2>
-      <select x-model="mapHospitalKey" @change="loadMappings()"
+      <select x-model="mapInstitutionId" @change="loadMappings()"
               class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 min-w-[280px]">
         <option value="">— Seleccionar hospital —</option>
-        <template x-for="h in hospitals" :key="h.id">
-          <option :value="h.key" x-text="h.name"></option>
+        <template x-for="h in institutions" :key="h.id">
+          <option :value="h.id" x-text="h.display_name"></option>
         </template>
       </select>
     </div>
@@ -161,7 +163,7 @@
       <div class="space-y-2">
         <template x-for="admin in pendingAdmins" :key="admin.id">
           <div class="flex items-center gap-3">
-            <span class="text-sm text-gray-700 font-mono w-56 truncate bg-gray-50 px-2 py-1 rounded" x-text="admin.raw_value"></span>
+            <span class="text-sm text-gray-700 font-mono w-56 truncate bg-gray-50 px-2 py-1 rounded" x-text="admin.raw_admin"></span>
             <i class="fa-solid fa-arrow-right text-gray-400 shrink-0"></i>
             <input type="text" :id="'admin-' + admin.id" placeholder="Valor canónico"
                    class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
@@ -183,7 +185,7 @@
       <div class="space-y-2">
         <template x-for="contract in pendingContracts" :key="contract.id">
           <div class="flex items-center gap-3">
-            <span class="text-sm text-gray-700 font-mono w-56 truncate bg-gray-50 px-2 py-1 rounded" x-text="contract.raw_value"></span>
+            <span class="text-sm text-gray-700 font-mono w-56 truncate bg-gray-50 px-2 py-1 rounded" x-text="contract.raw_contract"></span>
             <i class="fa-solid fa-arrow-right text-gray-400 shrink-0"></i>
             <input type="text" :id="'contract-' + contract.id" placeholder="Valor canónico"
                    class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
@@ -196,7 +198,7 @@
       </div>
     </div>
 
-    <div x-show="mapHospitalKey && pendingAdmins.length === 0 && pendingContracts.length === 0"
+    <div x-show="mapInstitutionId && pendingAdmins.length === 0 && pendingContracts.length === 0"
          class="bg-green-50 rounded-xl border border-green-200 p-5 text-center text-sm text-green-700">
       <i class="fa-solid fa-circle-check text-xl mb-1.5"></i><br/>
       Todos los mapeos están completos para este hospital.
@@ -218,9 +220,7 @@
             <tr>
               <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Código</th>
               <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Nombre</th>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Palabras clave</th>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Docs requeridos</th>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Activo</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Prioridad</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-50">
@@ -228,13 +228,7 @@
               <tr class="hover:bg-gray-50">
                 <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="st.code"></td>
                 <td class="px-4 py-2.5 font-medium text-gray-800" x-text="st.display_name"></td>
-                <td class="px-4 py-2.5 text-xs text-gray-500 max-w-xs truncate" x-text="st.keywords"></td>
-                <td class="px-4 py-2.5 text-xs text-gray-500 max-w-xs truncate" x-text="st.required_docs"></td>
-                <td class="px-4 py-2.5">
-                  <span :class="st.is_active ? 'text-green-600' : 'text-gray-300'" class="text-base">
-                    <i :class="st.is_active ? 'fa-solid fa-toggle-on' : 'fa-solid fa-toggle-off'"></i>
-                  </span>
-                </td>
+                <td class="px-4 py-2.5 text-gray-500" x-text="st.priority"></td>
               </tr>
             </template>
           </tbody>
@@ -254,22 +248,16 @@
           <thead class="bg-gray-50/50 border-b border-gray-100">
             <tr>
               <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Código</th>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Etiqueta</th>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Prefijos de archivo</th>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Activo</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Descripción</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Prefijo</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-50">
             <template x-for="dt in docTypes" :key="dt.id">
               <tr class="hover:bg-gray-50">
                 <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="dt.code"></td>
-                <td class="px-4 py-2.5 font-medium text-gray-800" x-text="dt.label"></td>
-                <td class="px-4 py-2.5 text-xs text-gray-500 font-mono" x-text="dt.prefixes"></td>
-                <td class="px-4 py-2.5">
-                  <span :class="dt.is_active ? 'text-green-600' : 'text-gray-300'" class="text-base">
-                    <i :class="dt.is_active ? 'fa-solid fa-toggle-on' : 'fa-solid fa-toggle-off'"></i>
-                  </span>
-                </td>
+                <td class="px-4 py-2.5 font-medium text-gray-800" x-text="dt.description"></td>
+                <td class="px-4 py-2.5 text-xs text-gray-500 font-mono" x-text="dt.prefix || '—'"></td>
               </tr>
             </template>
           </tbody>
@@ -288,17 +276,15 @@
         <table class="w-full text-sm">
           <thead class="bg-gray-50/50 border-b border-gray-100">
             <tr>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Código</th>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Etiqueta</th>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Orden</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">ID</th>
+              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Estado</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-50">
             <template x-for="fs in folderStatuses" :key="fs.id">
               <tr class="hover:bg-gray-50">
-                <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="fs.code"></td>
-                <td class="px-4 py-2.5 font-medium text-gray-800" x-text="fs.label"></td>
-                <td class="px-4 py-2.5 text-gray-500" x-text="fs.sort_order"></td>
+                <td class="px-4 py-2.5 text-gray-500" x-text="fs.id"></td>
+                <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="fs.status"></td>
               </tr>
             </template>
           </tbody>
@@ -314,8 +300,8 @@
 function settingsApp() {
   return {
     tab: 'hospital',
-    hospitals: [],
-    mapHospitalKey: '',
+    institutions: [],
+    mapInstitutionId: '',
     pendingAdmins: [],
     pendingContracts: [],
     serviceTypes: [],
@@ -323,29 +309,42 @@ function settingsApp() {
     folderStatuses: [],
     saveMsg: '',
     saveError: '',
+    editingId: null,
     form: {
-      key: '', name: '', nit: '', invoice_prefix: '',
-      sihos_url: '', sihos_code: '', sihos_user: '', sihos_password: '',
+      name: '', display_name: '', nit: '', invoice_id_prefix: '',
+      sihos_base_url: '', sihos_doc_code: '', sihos_user: '', sihos_password: '',
       base_path: '', drive_credentials_json: '',
     },
 
     async init() {
-      const res = await fetch('/api/hospitals/');
-      this.hospitals = await res.json();
+      const res = await fetch('/api/institutions');
+      this.institutions = await res.json();
     },
 
     resetForm() {
-      this.form = { key: '', name: '', nit: '', invoice_prefix: '', sihos_url: '', sihos_code: '', sihos_user: '', sihos_password: '', base_path: '', drive_credentials_json: '' };
+      this.form = {
+        name: '', display_name: '', nit: '', invoice_id_prefix: '',
+        sihos_base_url: '', sihos_doc_code: '', sihos_user: '', sihos_password: '',
+        base_path: '', drive_credentials_json: '',
+      };
+      this.editingId = null;
       this.saveMsg = '';
       this.saveError = '';
     },
 
     editHospital(h) {
+      this.editingId = h.id;
       this.form = {
-        key: h.key, name: h.name, nit: h.nit, invoice_prefix: h.invoice_prefix,
-        sihos_url: h.sihos_url || '', sihos_code: h.sihos_code || '',
-        sihos_user: h.sihos_user || '', sihos_password: '',
-        base_path: h.base_path || '', drive_credentials_json: '',
+        name: h.name,
+        display_name: h.display_name,
+        nit: h.nit,
+        invoice_id_prefix: h.invoice_id_prefix,
+        sihos_base_url: h.sihos_base_url || '',
+        sihos_doc_code: h.sihos_doc_code || '',
+        sihos_user: h.sihos_user || '',
+        sihos_password: '',
+        base_path: h.base_path || '',
+        drive_credentials_json: '',
       };
       this.tab = 'hospital';
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -354,9 +353,8 @@ function settingsApp() {
     async saveHospital() {
       this.saveMsg = '';
       this.saveError = '';
-      const existing = this.hospitals.find(h => h.key === this.form.key);
-      const method = existing ? 'PUT' : 'POST';
-      const url = existing ? `/api/hospitals/${this.form.key}` : '/api/hospitals';
+      const method = this.editingId ? 'PUT' : 'POST';
+      const url = this.editingId ? `/api/institutions/${this.editingId}` : '/api/institutions';
       const body = Object.fromEntries(Object.entries(this.form).filter(([, v]) => v !== ''));
       const res = await fetch(url, {
         method,
@@ -365,8 +363,8 @@ function settingsApp() {
       });
       if (res.ok) {
         this.saveMsg = 'Hospital guardado correctamente.';
-        const res2 = await fetch('/api/hospitals/');
-        this.hospitals = await res2.json();
+        const res2 = await fetch('/api/institutions');
+        this.institutions = await res2.json();
         setTimeout(() => { this.saveMsg = ''; }, 4000);
       } else {
         const err = await res.json();
@@ -375,10 +373,10 @@ function settingsApp() {
     },
 
     async loadMappings() {
-      if (!this.mapHospitalKey) return;
+      if (!this.mapInstitutionId) return;
       const [ra, rc] = await Promise.all([
-        fetch(`/api/hospitals/${this.mapHospitalKey}/admins?pending_only=true`).then(r => r.json()),
-        fetch(`/api/hospitals/${this.mapHospitalKey}/contracts?pending_only=true`).then(r => r.json()),
+        fetch(`/api/institutions/${this.mapInstitutionId}/admins?pending_only=true`).then(r => r.json()),
+        fetch(`/api/institutions/${this.mapInstitutionId}/contracts?pending_only=true`).then(r => r.json()),
       ]);
       this.pendingAdmins = ra;
       this.pendingContracts = rc;
@@ -387,10 +385,10 @@ function settingsApp() {
     async saveAdmin(adminId) {
       const input = document.getElementById(`admin-${adminId}`);
       if (!input || !input.value.trim()) return;
-      await fetch(`/api/hospitals/admins/${adminId}`, {
+      await fetch(`/api/institutions/admins/${adminId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canonical_value: input.value.trim() }),
+        body: JSON.stringify({ canonical_admin: input.value.trim() }),
       });
       await this.loadMappings();
     },
@@ -398,10 +396,10 @@ function settingsApp() {
     async saveContract(contractId) {
       const input = document.getElementById(`contract-${contractId}`);
       if (!input || !input.value.trim()) return;
-      await fetch(`/api/hospitals/contracts/${contractId}`, {
+      await fetch(`/api/institutions/contracts/${contractId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canonical_value: input.value.trim() }),
+        body: JSON.stringify({ canonical_contract: input.value.trim() }),
       });
       await this.loadMappings();
     },

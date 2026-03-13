@@ -1,27 +1,49 @@
-"""Pydantic schemas for invoices."""
+"""Pydantic schemas for invoices and audit periods."""
+from __future__ import annotations
+
+import datetime
+
 from pydantic import BaseModel
+
+
+class InvoiceListItem(BaseModel):
+    """Enriched invoice row for the audit list view — all FK values pre-resolved."""
+    model_config = {"from_attributes": True}
+
+    id: int
+    invoice_number: str
+    patient_name: str
+    admin_canonical: str | None       # resolved from admin.canonical_admin
+    folder_status: str                # resolved from folder_status.status
+    folder_status_id: int
+    service_type_code: str            # resolved from service_type.code
+    service_type_id: int
+    missing_file_count: int           # count of unresolved missing_files
+    date: datetime.date
 
 
 class InvoiceOut(BaseModel):
     model_config = {"from_attributes": True}
 
     id: int
-    factura: str
-    fecha: str | None
-    paciente: str | None
-    administradora: str | None
-    contrato: str | None
-    ruta: str | None
-    folder_status: str
-    nota: str
-    service_type_id: int | None
-    finding_codes: list[str] = []  # populated by repo join
+    invoice_number: str
+    date: datetime.date
+    id_type: str
+    id_number: str
+    patient_name: str
+    admin_id: int | None
+    contract_id: int | None
+    service_type_id: int
+    employee: str | None
+    folder_status_id: int
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
 
 
 class InvoiceFilter(BaseModel):
-    hospital_key: str
-    period_code: str
-    folder_status: str | None = None
+    institution_id: int | None = None
+    period_id: int | None = None
+    folder_status_id: int | None = None
     service_type_id: int | None = None
     search: str | None = None
     page: int = 1
@@ -29,13 +51,26 @@ class InvoiceFilter(BaseModel):
 
 
 class InvoiceStatusUpdate(BaseModel):
-    folder_status: str
-
-
-class InvoiceNotaUpdate(BaseModel):
-    nota: str
+    folder_status_id: int
 
 
 class BatchStatusUpdate(BaseModel):
     invoice_ids: list[int]
-    folder_status: str
+    folder_status_id: int
+
+
+class PeriodOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    institution_id: int
+    date_from: datetime.date
+    date_to: datetime.date
+    period_label: str
+
+
+class PeriodCreate(BaseModel):
+    institution_id: int
+    date_from: datetime.date
+    date_to: datetime.date
+    period_label: str

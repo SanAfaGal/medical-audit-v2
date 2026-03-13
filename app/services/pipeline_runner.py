@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.hospital import Hospital
+from app.models.institution import Institution
 from app.models.period import AuditPeriod
 
 logger = logging.getLogger(__name__)
@@ -58,10 +58,10 @@ class _QueueHandler(logging.Handler):
 # Context builder
 # ---------------------------------------------------------------------------
 
-def _build_context(hospital: Hospital, period: AuditPeriod, db: AsyncSession, extra: dict) -> dict:
-    base = Path(hospital.base_path or "") / period.code
+def _build_context(institution: Institution, period: AuditPeriod, db: AsyncSession, extra: dict) -> dict:
+    base = Path(institution.base_path or "") / period.period_label
     return {
-        "hospital":    hospital,
+        "institution": institution,
         "period":      period,
         "db":          db,
         "base_path":   base,
@@ -78,7 +78,7 @@ def _build_context(hospital: Hospital, period: AuditPeriod, db: AsyncSession, ex
 
 async def execute(
     stage: str,
-    hospital: Hospital,
+    institution: Institution,
     period: AuditPeriod,
     db: AsyncSession,
     extra: dict | None = None,
@@ -87,10 +87,10 @@ async def execute(
 
     Usage (SSE endpoint)::
 
-        async for line in pipeline_runner.execute(stage, hospital, period, db):
+        async for line in pipeline_runner.execute(stage, institution, period, db):
             yield f"data: {json.dumps({'msg': line})}\n\n"
     """
-    ctx = _build_context(hospital, period, db, extra or {})
+    ctx = _build_context(institution, period, db, extra or {})
     handler_fn = _STAGE_HANDLERS.get(stage)
 
     if handler_fn is None:
