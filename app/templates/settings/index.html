@@ -618,28 +618,73 @@
         <tbody class="divide-y divide-gray-50">
           <template x-for="st in serviceTypes" :key="st.id">
             <tr class="hover:bg-gray-50">
-              <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="st.code"></td>
-              <td class="px-4 py-2.5 text-gray-800" x-text="st.display_name"></td>
-              <td class="px-4 py-2.5 text-gray-500" x-text="st.priority"></td>
-              <td class="px-4 py-2.5 text-right">
-                <template x-if="confirmDeleteSTId !== st.id">
-                  <button @click="confirmDeleteSTId = st.id"
-                          class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
-                    <i class="fa-solid fa-trash text-xs"></i>
-                  </button>
+              <td class="px-4 py-2.5 font-mono text-xs">
+                <template x-if="editingSTId !== st.id">
+                  <span class="text-gray-700" x-text="st.code"></span>
                 </template>
-                <template x-if="confirmDeleteSTId === st.id">
-                  <div class="flex justify-end gap-1">
+                <template x-if="editingSTId === st.id">
+                  <input type="text" x-model="editingST.code"
+                         class="border border-sky-400 rounded px-2 py-1 text-xs font-mono w-28 focus:outline-none focus:ring-1 focus:ring-sky-500 uppercase"
+                         @input="editingST.code = editingST.code.toUpperCase()" />
+                </template>
+              </td>
+              <td class="px-4 py-2.5">
+                <template x-if="editingSTId !== st.id">
+                  <span class="text-gray-800" x-text="st.display_name"></span>
+                </template>
+                <template x-if="editingSTId === st.id">
+                  <input type="text" x-model="editingST.display_name"
+                         class="border border-sky-400 rounded px-2 py-1 text-sm w-full focus:outline-none focus:ring-1 focus:ring-sky-500" />
+                </template>
+              </td>
+              <td class="px-4 py-2.5 w-24">
+                <template x-if="editingSTId !== st.id">
+                  <span class="text-gray-500" x-text="st.priority"></span>
+                </template>
+                <template x-if="editingSTId === st.id">
+                  <input type="number" x-model="editingST.priority"
+                         class="border border-sky-400 rounded px-2 py-1 text-xs w-20 focus:outline-none focus:ring-1 focus:ring-sky-500" />
+                </template>
+              </td>
+              <td class="px-4 py-2.5">
+                <div class="flex items-center justify-end gap-1">
+                  <template x-if="editingSTId !== st.id">
+                    <button @click="startEditST(st)"
+                            class="text-xs px-2 py-1 text-sky-600 border border-sky-200 rounded hover:bg-sky-50">
+                      <i class="fa-solid fa-pen text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="editingSTId === st.id">
+                    <button @click="saveSTEdit(st.id)"
+                            class="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700">
+                      <i class="fa-solid fa-check text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="editingSTId === st.id">
+                    <button @click="editingSTId = null"
+                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                      <i class="fa-solid fa-xmark text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="confirmDeleteSTId !== st.id && editingSTId !== st.id">
+                    <button @click="confirmDeleteSTId = st.id"
+                            class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
+                      <i class="fa-solid fa-trash text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="confirmDeleteSTId === st.id">
                     <button @click="deleteServiceType(st.id)"
                             class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
                       Eliminar
                     </button>
+                  </template>
+                  <template x-if="confirmDeleteSTId === st.id">
                     <button @click="confirmDeleteSTId = null"
                             class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
                       Cancelar
                     </button>
-                  </div>
-                </template>
+                  </template>
+                </div>
               </td>
             </tr>
           </template>
@@ -679,28 +724,73 @@
         <tbody class="divide-y divide-gray-50">
           <template x-for="dt in docTypes" :key="dt.id">
             <tr class="hover:bg-gray-50">
-              <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="dt.code"></td>
-              <td class="px-4 py-2.5 text-gray-800" x-text="dt.description"></td>
-              <td class="px-4 py-2.5 font-mono text-xs text-gray-500" x-text="dt.prefix || '—'"></td>
-              <td class="px-4 py-2.5 text-right">
-                <template x-if="confirmDeleteDTId !== dt.id">
-                  <button @click="confirmDeleteDTId = dt.id"
-                          class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
-                    <i class="fa-solid fa-trash text-xs"></i>
-                  </button>
+              <td class="px-4 py-2.5 font-mono text-xs">
+                <template x-if="editingDTId !== dt.id">
+                  <span class="text-gray-700" x-text="dt.code"></span>
                 </template>
-                <template x-if="confirmDeleteDTId === dt.id">
-                  <div class="flex justify-end gap-1">
+                <template x-if="editingDTId === dt.id">
+                  <input type="text" x-model="editingDT.code"
+                         class="border border-sky-400 rounded px-2 py-1 text-xs font-mono w-28 focus:outline-none focus:ring-1 focus:ring-sky-500 uppercase"
+                         @input="editingDT.code = editingDT.code.toUpperCase()" />
+                </template>
+              </td>
+              <td class="px-4 py-2.5">
+                <template x-if="editingDTId !== dt.id">
+                  <span class="text-gray-800" x-text="dt.description"></span>
+                </template>
+                <template x-if="editingDTId === dt.id">
+                  <input type="text" x-model="editingDT.description"
+                         class="border border-sky-400 rounded px-2 py-1 text-sm w-full focus:outline-none focus:ring-1 focus:ring-sky-500" />
+                </template>
+              </td>
+              <td class="px-4 py-2.5 font-mono text-xs w-24">
+                <template x-if="editingDTId !== dt.id">
+                  <span class="text-gray-500" x-text="dt.prefix || '—'"></span>
+                </template>
+                <template x-if="editingDTId === dt.id">
+                  <input type="text" x-model="editingDT.prefix"
+                         class="border border-sky-400 rounded px-2 py-1 text-xs font-mono w-20 focus:outline-none focus:ring-1 focus:ring-sky-500" />
+                </template>
+              </td>
+              <td class="px-4 py-2.5">
+                <div class="flex items-center justify-end gap-1">
+                  <template x-if="editingDTId !== dt.id">
+                    <button @click="startEditDT(dt)"
+                            class="text-xs px-2 py-1 text-sky-600 border border-sky-200 rounded hover:bg-sky-50">
+                      <i class="fa-solid fa-pen text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="editingDTId === dt.id">
+                    <button @click="saveDTEdit(dt.id)"
+                            class="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700">
+                      <i class="fa-solid fa-check text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="editingDTId === dt.id">
+                    <button @click="editingDTId = null"
+                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                      <i class="fa-solid fa-xmark text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="confirmDeleteDTId !== dt.id && editingDTId !== dt.id">
+                    <button @click="confirmDeleteDTId = dt.id"
+                            class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
+                      <i class="fa-solid fa-trash text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="confirmDeleteDTId === dt.id">
                     <button @click="deleteDocType(dt.id)"
                             class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
                       Eliminar
                     </button>
+                  </template>
+                  <template x-if="confirmDeleteDTId === dt.id">
                     <button @click="confirmDeleteDTId = null"
                             class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
                       Cancelar
                     </button>
-                  </div>
-                </template>
+                  </template>
+                </div>
               </td>
             </tr>
           </template>
@@ -843,6 +933,8 @@ function settingsApp() {
     // Reglas
     serviceTypes: [], docTypes: [], folderStatuses: [],
     confirmDeleteSTId: null, confirmDeleteDTId: null, confirmDeleteFSId: null,
+    editingSTId: null, editingST: { code:'', display_name:'', priority:10 },
+    editingDTId: null, editingDT: { code:'', description:'', prefix:'' },
     editingFSId: null, editingFSVal: '',
     newST: { code:'', display_name:'', priority:10 },
     newDT: { code:'', description:'', prefix:'' },
@@ -1044,6 +1136,28 @@ function settingsApp() {
     },
 
     // ---- REGLAS ----
+    startEditST(st) { this.editingSTId = st.id; this.editingST = { code: st.code, display_name: st.display_name, priority: st.priority }; },
+    async saveSTEdit(id) {
+      const res = await fetch(`/api/settings/service-types/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: this.editingST.code, display_name: this.editingST.display_name, priority: parseInt(this.editingST.priority) }) });
+      if (res.ok) {
+        const updated = await res.json();
+        this.serviceTypes = this.serviceTypes.map(s => s.id === id ? updated : s);
+        this.editingSTId = null;
+        this.showToast('Tipo de servicio actualizado.');
+      } else this.showToast('Error al actualizar.', 'error');
+    },
+    startEditDT(dt) { this.editingDTId = dt.id; this.editingDT = { code: dt.code, description: dt.description, prefix: dt.prefix || '' }; },
+    async saveDTEdit(id) {
+      const body = { code: this.editingDT.code, description: this.editingDT.description };
+      if (this.editingDT.prefix.trim()) body.prefix = this.editingDT.prefix.trim();
+      const res = await fetch(`/api/settings/doc-types/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if (res.ok) {
+        const updated = await res.json();
+        this.docTypes = this.docTypes.map(d => d.id === id ? updated : d);
+        this.editingDTId = null;
+        this.showToast('Tipo de documento actualizado.');
+      } else this.showToast('Error al actualizar.', 'error');
+    },
     async addServiceType() {
       if (!this.newST.code.trim() || !this.newST.display_name.trim()) return;
       const res = await fetch('/api/settings/service-types', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: this.newST.code, display_name: this.newST.display_name, priority: parseInt(this.newST.priority) || 10 }) });
