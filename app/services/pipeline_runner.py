@@ -198,14 +198,19 @@ async def _check_invalid_files(ctx: dict) -> AsyncGenerator[str, None]:
     yield f"[INFO] PDFs corruptos encontrados: {len(invalid)}"
 
 
-def _apply_prefix_corrections(stage_path: Path, corrections: dict[str, str]) -> int:
+def _apply_prefix_corrections(
+    stage_path: Path, corrections: dict[str, str]
+) -> tuple[int, dict[str, int]]:
     """Rename PDFs whose prefix matches a known wrong prefix to the correct one.
 
-    Iterates recursively through all .pdf files in stage_path and renames any
-    whose filename starts with a wrong prefix (case-insensitive).
-    Returns the number of files renamed.
+    Returns ``(renamed_count, {wrong_prefix: files_renamed})``.
     """
+    import re as _re
+
+    _re_prefix = _re.compile(r"^([a-zA-Z]+)")
     renamed = 0
+    applied: dict[str, int] = {}
+
     for pdf in stage_path.rglob("*.pdf"):
         stem = pdf.stem
         for wrong, correct in corrections.items():
@@ -214,8 +219,10 @@ def _apply_prefix_corrections(stage_path: Path, corrections: dict[str, str]) -> 
                 new_name = correct + remainder + pdf.suffix
                 pdf.rename(pdf.parent / new_name)
                 renamed += 1
+                applied[wrong] = applied.get(wrong, 0) + 1
                 break
-    return renamed
+
+    return renamed, applied
 
 
 @_stage("NORMALIZE_FILES")
@@ -245,14 +252,19 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
     # -- Step 1: prefix corrections --
     corrections = await rules_repo.get_prefix_corrections_map()
     if corrections:
-        renamed = await executor(_apply_prefix_corrections, stage_path, corrections)
-        yield f"[INFO] Correcciones de prefijo aplicadas: {renamed} archivo(s)"
+        renamed, applied = await executor(_apply_prefix_corrections, stage_path, corrections)
+        if renamed:
+            for wrong, count in sorted(applied.items()):
+                correct = corrections[wrong]
+                yield f"[INFO] Corrección aplicada {wrong}→{correct}: {count} archivo(s)"
+            yield f"[INFO] Correcciones de prefijo aplicadas: {renamed} archivo(s)"
+        else:
+            yield "[INFO] Correcciones de prefijo aplicadas: 0 archivo(s)"
     else:
         yield "[INFO] Sin correcciones de prefijo configuradas"
 
     # -- Step 2: generic standardization --
     prefixes = await rules_repo.get_all_active_doc_type_prefixes()
-    yield f"[INFO] Prefijos de documentos activos: {prefixes}"
 
     scanner = DocumentScanner(stage_path)
     invalid = await executor(
@@ -269,6 +281,25 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
         results = await executor(standardizer.run, invalid)
         success = sum(1 for r in results if r.status == "SUCCESS")
         yield f"[INFO] Archivos renombrados: {success}/{len(invalid)}"
+
+        # Report unrecognised prefixes so the user knows what to add to corrections
+        import re as _re
+        _re_pref = _re.compile(r"Prefix '(\w+)'")
+        unknown: dict[str, int] = {}
+        no_id = 0
+        for r in results:
+            if r.status == "REJECTED":
+                m = _re_pref.search(r.reason)
+                if m:
+                    p = m.group(1)
+                    unknown[p] = unknown.get(p, 0) + 1
+                elif "Could not find" in r.reason:
+                    no_id += 1
+        if unknown:
+            summary = ", ".join(f"{p}({n})" for p, n in sorted(unknown.items()))
+            yield f"[WARN] Prefijos no reconocidos (agregar corrección o tipo de doc): {summary}"
+        if no_id:
+            yield f"[WARN] Sin ID de factura extraíble: {no_id} archivo(s)"
 
 
 @_stage("LIST_UNREADABLE_PDFS")
