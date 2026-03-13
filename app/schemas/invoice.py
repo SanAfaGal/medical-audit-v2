@@ -13,7 +13,10 @@ class InvoiceListItem(BaseModel):
     id: int
     invoice_number: str
     patient_name: str
+    admin_id: int | None
     admin_canonical: str | None       # resolved from admin.canonical_admin
+    contract_id: int | None
+    contract_canonical: str | None    # resolved from contract.canonical_contract
     folder_status: str                # resolved from folder_status.status
     folder_status_id: int
     service_type_code: str            # resolved from service_type.code

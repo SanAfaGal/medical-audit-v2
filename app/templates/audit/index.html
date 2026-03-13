@@ -15,7 +15,7 @@
 
   <!-- Filters -->
   <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-4" x-show="$store.ctx.periodId">
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Estado</label>
         <select x-model="filterStatusId" @change="page=1; loadInvoices()"
@@ -23,6 +23,36 @@
           <option value="">Todos</option>
           <template x-for="fs in folderStatuses" :key="fs.id">
             <option :value="fs.id" x-text="fs.status"></option>
+          </template>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Administradora</label>
+        <select x-model="filterAdminCanonical" @change="page=1; loadInvoices()"
+                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
+          <option value="">Todas</option>
+          <template x-for="name in uniqueAdmins" :key="name">
+            <option :value="name" x-text="name"></option>
+          </template>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Contrato</label>
+        <select x-model="filterContractCanonical" @change="page=1; loadInvoices()"
+                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
+          <option value="">Todos</option>
+          <template x-for="name in uniqueContracts" :key="name">
+            <option :value="name" x-text="name"></option>
+          </template>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Servicio</label>
+        <select x-model="filterServiceTypeId" @change="page=1; loadInvoices()"
+                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
+          <option value="">Todos</option>
+          <template x-for="st in serviceTypes" :key="st.id">
+            <option :value="st.id" x-text="st.code + (st.description ? ' — ' + st.description : '')"></option>
           </template>
         </select>
       </div>
@@ -68,11 +98,13 @@
       <table class="w-full text-sm">
         <thead class="bg-gray-50 border-b border-gray-200">
           <tr>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600">Factura</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600">Paciente</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600">Administradora</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600">Estado</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600">Hallazgos</th>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Factura</th>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Paciente</th>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Administradora</th>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Contrato</th>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Servicio</th>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Estado</th>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Hallazgos</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
@@ -80,12 +112,14 @@
             <tr class="hover:bg-sky-50 cursor-pointer transition-colors"
                 :class="{'bg-sky-50 ring-1 ring-inset ring-sky-200': selectedInvoice && selectedInvoice.id === inv.id}"
                 @click="selectInvoice(inv)">
-              <td class="px-4 py-2.5 font-mono font-semibold text-sky-700 text-xs" x-text="inv.invoice_number"></td>
+              <td class="px-4 py-2.5 font-mono font-semibold text-sky-700 text-xs whitespace-nowrap" x-text="inv.invoice_number"></td>
               <td class="px-4 py-2.5 text-gray-700 max-w-[200px] truncate" x-text="inv.patient_name || '—'"></td>
               <td class="px-4 py-2.5 text-gray-500 text-xs max-w-[160px] truncate" x-text="inv.admin_canonical || '—'"></td>
+              <td class="px-4 py-2.5 text-gray-500 text-xs max-w-[160px] truncate" x-text="inv.contract_canonical || '—'"></td>
+              <td class="px-4 py-2.5 text-gray-500 text-xs whitespace-nowrap" x-text="inv.service_type_code || '—'"></td>
               <td class="px-4 py-2.5">
                 <span :class="statusBadge(inv.folder_status)"
-                      class="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+                      class="inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
                       x-text="inv.folder_status"></span>
               </td>
               <td class="px-4 py-2.5">
@@ -120,7 +154,7 @@
       </button>
     </div>
 
-    <div class="grid grid-cols-3 gap-4 mb-5 text-sm">
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-5 text-sm">
       <div>
         <div class="text-xs text-gray-500 mb-0.5">Paciente</div>
         <div class="font-medium text-gray-800" x-text="selectedInvoice && selectedInvoice.patient_name || 'N/A'"></div>
@@ -130,6 +164,14 @@
         <div class="font-medium text-gray-700" x-text="selectedInvoice && selectedInvoice.admin_canonical || '—'"></div>
       </div>
       <div>
+        <div class="text-xs text-gray-500 mb-0.5">Contrato</div>
+        <div class="font-medium text-gray-700" x-text="selectedInvoice && selectedInvoice.contract_canonical || '—'"></div>
+      </div>
+      <div>
+        <div class="text-xs text-gray-500 mb-0.5">Servicio</div>
+        <div class="font-medium text-gray-700" x-text="selectedInvoice && selectedInvoice.service_type_code || '—'"></div>
+      </div>
+      <div class="col-span-2 sm:col-span-2">
         <div class="text-xs text-gray-500 mb-1">Estado de la carpeta</div>
         <select x-model="detailStatusId"
                 @change="updateStatus()"
@@ -210,7 +252,13 @@ function auditApp() {
   return {
     folderStatuses: [],
     docTypes: [],
+    admins: [],
+    contracts: [],
+    serviceTypes: [],
     filterStatusId: '',
+    filterAdminCanonical: '',
+    filterContractCanonical: '',
+    filterServiceTypeId: '',
     searchQuery: '',
     invoices: [],
     total: 0,
@@ -223,36 +271,77 @@ function auditApp() {
     confirmDeleteInvoice: false,
 
     async init() {
-      const [fsRes, dtRes] = await Promise.all([
+      const [fsRes, dtRes, stRes] = await Promise.all([
         fetch('/api/settings/folder-statuses'),
         fetch('/api/settings/doc-types'),
+        fetch('/api/settings/service-types'),
       ]);
       this.folderStatuses = await fsRes.json();
       this.docTypes       = await dtRes.json();
+      this.serviceTypes   = await stRes.json();
 
-      // Load invoices if a period is already selected in the global store
+      if (this.$store.ctx.institutionId) await this.loadFilterOptions();
       if (this.$store.ctx.periodId) this.loadInvoices();
 
-      // React to period changes made from the sidebar
       this.$watch('$store.ctx.periodId', (val) => {
         this.invoices = []; this.total = 0; this.selectedInvoice = null; this.page = 1;
         if (val) this.loadInvoices();
       });
+
+      this.$watch('$store.ctx.institutionId', async (val) => {
+        this.admins = []; this.contracts = [];
+        this.filterAdminCanonical = ''; this.filterContractCanonical = '';
+        if (val) await this.loadFilterOptions();
+      });
+    },
+
+    get uniqueAdmins() {
+      const seen = new Set();
+      return this.admins
+        .map(a => a.canonical_admin)
+        .filter(name => name && !seen.has(name) && seen.add(name))
+        .sort();
+    },
+
+    get uniqueContracts() {
+      const seen = new Set();
+      return this.contracts
+        .map(c => c.canonical_contract)
+        .filter(name => name && !seen.has(name) && seen.add(name))
+        .sort();
+    },
+
+    async loadFilterOptions() {
+      const instId = this.$store.ctx.institutionId;
+      if (!instId) return;
+      const [admRes, ctrRes] = await Promise.all([
+        fetch(`/api/institutions/${instId}/admins`),
+        fetch(`/api/institutions/${instId}/contracts`),
+      ]);
+      this.admins    = await admRes.json();
+      this.contracts = await ctrRes.json();
     },
 
     async loadInvoices() {
       const periodId = this.$store.ctx.periodId;
       if (!periodId) return;
       let url = `/api/invoices?period_id=${encodeURIComponent(periodId)}&page=${this.page}&page_size=${this.pageSize}`;
-      if (this.filterStatusId) url += `&folder_status_id=${encodeURIComponent(this.filterStatusId)}`;
-      if (this.searchQuery)    url += `&search=${encodeURIComponent(this.searchQuery)}`;
+      if (this.filterStatusId)          url += `&folder_status_id=${encodeURIComponent(this.filterStatusId)}`;
+      if (this.filterAdminCanonical)    url += `&admin_canonical=${encodeURIComponent(this.filterAdminCanonical)}`;
+      if (this.filterContractCanonical) url += `&contract_canonical=${encodeURIComponent(this.filterContractCanonical)}`;
+      if (this.filterServiceTypeId)     url += `&service_type_id=${encodeURIComponent(this.filterServiceTypeId)}`;
+      if (this.searchQuery)         url += `&search=${encodeURIComponent(this.searchQuery)}`;
       const res  = await fetch(url);
       const data = await res.json();
       this.invoices = data.items;
       this.total    = data.total;
     },
 
-    clearFilters() { this.filterStatusId = ''; this.searchQuery = ''; this.page = 1; this.loadInvoices(); },
+    clearFilters() {
+      this.filterStatusId = ''; this.filterAdminCanonical = ''; this.filterContractCanonical = '';
+      this.filterServiceTypeId = ''; this.searchQuery = ''; this.page = 1;
+      this.loadInvoices();
+    },
     prevPage() { if (this.page > 1) { this.page--; this.loadInvoices(); } },
     nextPage() { if (this.page * this.pageSize < this.total) { this.page++; this.loadInvoices(); } },
 
