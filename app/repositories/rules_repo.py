@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.institution import ServiceTypeDocument
 from app.models.rules import DocType, FolderStatus, ServiceType
 
 
@@ -125,3 +126,42 @@ class RulesRepo:
         await self.db.delete(obj)
         await self.db.flush()
         return True
+
+    async def get_doc_type_by_code(self, code: str) -> DocType | None:
+        result = await self.db.execute(select(DocType).where(DocType.code == code))
+        return result.scalar_one_or_none()
+
+    # ------------------------------------------------------------------
+    # Pipeline helpers
+    # ------------------------------------------------------------------
+
+    async def get_service_type_docs_map(
+        self, institution_id: int
+    ) -> dict[int, list[int]]:
+        """Return ``{service_type_id: [doc_type_id, ...]}`` for an institution."""
+        result = await self.db.execute(
+            select(ServiceTypeDocument.service_type_id, ServiceTypeDocument.doc_type_id)
+            .where(ServiceTypeDocument.institution_id == institution_id)
+        )
+        mapping: dict[int, list[int]] = {}
+        for st_id, dt_id in result.all():
+            mapping.setdefault(st_id, []).append(dt_id)
+        return mapping
+
+    async def get_active_doc_types_map(self) -> dict[int, list[str]]:
+        """Return ``{doc_type_id: [prefix, ...]}`` for all doc types.
+
+        Each DocType has a single optional prefix field.
+        """
+        result = await self.db.execute(select(DocType.id, DocType.prefix))
+        return {
+            dt_id: [prefix] if prefix else []
+            for dt_id, prefix in result.all()
+        }
+
+    async def get_all_active_doc_type_prefixes(self) -> list[str]:
+        """Return a flat list of all non-null doc type prefixes."""
+        result = await self.db.execute(
+            select(DocType.prefix).where(DocType.prefix.isnot(None))
+        )
+        return list(result.scalars().all())

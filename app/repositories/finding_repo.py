@@ -8,6 +8,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.finding import MissingFile
+from app.models.invoice import Invoice
+from app.models.rules import DocType
 
 
 class MissingFileRepo:
@@ -74,3 +76,38 @@ class MissingFileRepo:
             delete(MissingFile).where(MissingFile.invoice_id == invoice_id)
         )
         await self.db.flush()
+
+    # ------------------------------------------------------------------
+    # Pipeline helpers
+    # ------------------------------------------------------------------
+
+    async def upsert_finding(self, invoice_id: int, doc_type_id: int) -> None:
+        """Insert a missing-file record; no-op if already exists."""
+        await self.record_missing_file(invoice_id, doc_type_id, expected_path="")
+
+    async def get_findings_grouped_by_invoice(
+        self, period_id: int
+    ) -> dict[str, list[str]]:
+        """Return unresolved findings grouped by invoice number.
+
+        Returns:
+            ``{invoice_number: [doc_type_code, ...]}``
+        """
+        q = (
+            select(Invoice.invoice_number, DocType.code)
+            .join(MissingFile, MissingFile.invoice_id == Invoice.id)
+            .join(DocType, DocType.id == MissingFile.doc_type_id)
+            .where(
+                Invoice.audit_period_id == period_id,
+                MissingFile.resolved_at.is_(None),
+            )
+        )
+        result = await self.db.execute(q)
+        grouped: dict[str, list[str]] = {}
+        for invoice_number, doc_code in result.all():
+            grouped.setdefault(invoice_number, []).append(doc_code)
+        return grouped
+
+    async def delete_all_findings_for_invoice(self, invoice_id: int) -> None:
+        """Alias for delete_all_for_invoice."""
+        await self.delete_all_for_invoice(invoice_id)

@@ -8,8 +8,10 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.finding import MissingFile
 from app.models.invoice import Invoice
 from app.models.period import AuditPeriod
+from app.models.rules import FolderStatus, ServiceType
 
 
 class InvoiceRepo:
@@ -163,3 +165,106 @@ class InvoiceRepo:
         await self.db.delete(invoice)
         await self.db.flush()
         return True
+
+    # ------------------------------------------------------------------
+    # Pipeline helpers
+    # ------------------------------------------------------------------
+
+    async def get_invoice_numbers_by_status(
+        self, period_id: int, status_code: str
+    ) -> list[str]:
+        """Return invoice numbers for a period filtered by folder status code."""
+        q = (
+            select(Invoice.invoice_number)
+            .join(FolderStatus, Invoice.folder_status_id == FolderStatus.id)
+            .where(
+                Invoice.audit_period_id == period_id,
+                FolderStatus.status == status_code,
+            )
+        )
+        result = await self.db.execute(q)
+        return list(result.scalars().all())
+
+    async def get_invoices_by_status_code(
+        self, period_id: int, status_code: str
+    ) -> list[Invoice]:
+        """Return Invoice objects for a period filtered by folder status code."""
+        q = (
+            select(Invoice)
+            .join(FolderStatus, Invoice.folder_status_id == FolderStatus.id)
+            .where(
+                Invoice.audit_period_id == period_id,
+                FolderStatus.status == status_code,
+            )
+        )
+        result = await self.db.execute(q)
+        return list(result.scalars().all())
+
+    async def batch_update_folder_status(
+        self, period_id: int, invoice_numbers: list[str], status_code: str
+    ) -> int:
+        """Update folder_status for invoices matching the given numbers.
+
+        Returns:
+            Number of rows updated.
+        """
+        if not invoice_numbers:
+            return 0
+        fs_result = await self.db.execute(
+            select(FolderStatus).where(FolderStatus.status == status_code)
+        )
+        fs = fs_result.scalar_one_or_none()
+        if not fs:
+            raise ValueError(f"FolderStatus '{status_code}' not found")
+        result = await self.db.execute(
+            update(Invoice)
+            .where(
+                Invoice.audit_period_id == period_id,
+                Invoice.invoice_number.in_(invoice_numbers),
+            )
+            .values(folder_status_id=fs.id)
+        )
+        await self.db.flush()
+        return result.rowcount
+
+    async def get_organizable_invoices(self, period_id: int) -> list[Invoice]:
+        """Return PRESENTE invoices with no unresolved missing files."""
+        q = (
+            select(Invoice)
+            .join(FolderStatus, Invoice.folder_status_id == FolderStatus.id)
+            .outerjoin(
+                MissingFile,
+                (MissingFile.invoice_id == Invoice.id)
+                & (MissingFile.resolved_at.is_(None)),
+            )
+            .where(
+                Invoice.audit_period_id == period_id,
+                FolderStatus.status == "PRESENTE",
+                MissingFile.id.is_(None),
+            )
+        )
+        result = await self.db.execute(q)
+        return list(result.scalars().all())
+
+    async def batch_update_to_auditada(
+        self, period_id: int, invoice_numbers: list[str]
+    ) -> int:
+        """Update invoices to AUDITADA status by invoice number.
+
+        Returns:
+            Number of rows updated.
+        """
+        return await self.batch_update_folder_status(period_id, invoice_numbers, "AUDITADA")
+
+    async def get_service_type_distribution(
+        self, period_id: int
+    ) -> dict[str, int]:
+        """Return count of invoices per service type code for a period."""
+        q = (
+            select(ServiceType.code, func.count(Invoice.id))
+            .join(ServiceType, Invoice.service_type_id == ServiceType.id)
+            .where(Invoice.audit_period_id == period_id)
+            .group_by(ServiceType.code)
+        )
+        result = await self.db.execute(q)
+        return {row[0]: row[1] for row in result.all()}
