@@ -426,24 +426,77 @@ function pipeline() {
     ],
 
     stages: [
-      { id: 'LOAD_AND_PROCESS',              label: 'Carga y procesamiento',            description: 'Cargar Excel SIHOS, registrar mapeos e insertar facturas en la base de datos' },
-      { id: 'RUN_STAGING',                   label: 'Mover a staging',                  description: 'Mover las carpetas de facturas desde BASE hasta STAGE para su procesamiento' },
-      { id: 'REMOVE_NON_PDF',                label: 'Limpiar archivos inválidos',         description: 'Eliminar archivos no-PDF y PDFs corruptos dentro de las carpetas de facturas' },
-      { id: 'NORMALIZE_FILES',               label: 'Normalizar nombres de archivo',     description: 'Renombrar archivos con prefijos incorrectos aplicando las correcciones configuradas' },
-      { id: 'LIST_UNREADABLE_PDFS',          label: 'Listar PDFs ilegibles',             description: 'Identificar PDFs sin capa de texto extraíble (escaneados sin OCR)' },
-      { id: 'DELETE_UNREADABLE_PDFS',        label: 'Eliminar PDFs ilegibles',           description: 'Borrar definitivamente los PDFs sin capa de texto identificados anteriormente' },
-      { id: 'DOWNLOAD_INVOICES_FROM_SIHOS',  label: 'Descargar facturas SIHOS',          description: 'Descargar los PDFs de facturas electrónicas desde el portal web de SIHOS' },
-      { id: 'CHECK_INVOICES',                label: 'OCR de facturas',                   description: 'Ejecutar reconocimiento óptico de caracteres (ocrmypdf) sobre las facturas' },
-      { id: 'VERIFY_INVOICE_CODE',           label: 'Verificar código de factura',       description: 'Confirmar que el número extraído por OCR coincide con el nombre de la carpeta' },
-      { id: 'CHECK_INVOICE_NUMBER_ON_FILES', label: 'Verificar nombres de archivo',      description: 'Comprobar que los archivos dentro de cada carpeta contienen el número de factura correcto' },
-      { id: 'CHECK_FOLDERS_WITH_EXTRA_TEXT', label: 'Detectar texto extra en carpetas',  description: 'Encontrar carpetas con sufijos adicionales más allá del número de factura' },
-      { id: 'NORMALIZE_DIR_NAMES',           label: 'Normalizar nombres de carpeta',     description: 'Renombrar las carpetas que tienen texto adicional para dejar solo el número de factura' },
-      { id: 'CHECK_DIRS',                    label: 'Verificar carpetas faltantes',       description: 'Detectar facturas sin carpeta física y marcarlas como FALTANTE en la base de datos' },
-      { id: 'CHECK_REQUIRED_DOCS',           label: 'Verificar documentos requeridos',   description: 'Registrar hallazgos de auditoría por documentos obligatorios ausentes en cada carpeta' },
-      { id: 'VERIFY_CUFE',                   label: 'Verificar y etiquetar CUFE',        description: 'Validar el código CUFE en cada factura y marcar con _SINCUFE las carpetas sin CUFE válido' },
-      { id: 'ORGANIZE',                      label: 'Organizar en AUDIT',                description: 'Mover las carpetas procesadas a la estructura AUDIT según su estado' },
-      { id: 'DOWNLOAD_DRIVE',                label: 'Descargar desde Drive',             description: 'Descargar carpetas faltantes desde la copia de respaldo en Google Drive' },
-      { id: 'DOWNLOAD_MISSING_DOCS',         label: 'Descargar documentos faltantes',    description: 'Descargar documentos individuales faltantes desde las carpetas de Drive correspondientes' },
+      { id: 'LOAD_AND_PROCESS',
+        label: 'Carga y procesamiento SIHOS',
+        description: 'Lee el Excel exportado desde SIHOS e inserta las facturas del período en la BD. Registra administradoras, contratos y servicios nuevos (en crudo, sin mapeo). Los campos sin mapeo canónico quedan en null para que el usuario los corrija en Configuración. Filas sin fecha válida son omitidas.' },
+
+      { id: 'RUN_STAGING',
+        label: 'Mover carpetas a STAGE',
+        description: 'Busca las carpetas hoja (aquellas sin subcarpetas) dentro del directorio DRIVE del período y las mueve a STAGE. Las carpetas en DRIVE provienen de Google Drive; STAGE es el directorio de trabajo donde se realizan todas las operaciones de auditoría.' },
+
+      { id: 'REMOVE_NON_PDF',
+        label: 'Limpiar archivos inválidos',
+        description: 'Recorre todas las carpetas en STAGE y elimina en dos pasos: (1) borra cualquier archivo que no sea PDF (imágenes, Word, Excel, etc.); (2) verifica la estructura interna de cada PDF restante y elimina los que están corruptos o dañados.' },
+
+      { id: 'NORMALIZE_FILES',
+        label: 'Normalizar nombres de archivo',
+        description: 'Renombra archivos en dos pasos. Paso 1: aplica las correcciones de prefijo configuradas en Configuración → Correcciones (ej. FVE→FEV, OPD→OPF). Paso 2: detecta archivos cuyo nombre no coincide con ningún tipo de documento activo y los renombra extrayendo el NIT y número de factura. Reporta con [WARN] los que tienen prefijo desconocido o de los que no se pudo extraer el número, indicando el tipo de administradora si está disponible.' },
+
+      { id: 'LIST_UNREADABLE_PDFS',
+        label: 'Listar facturas sin texto (OCR)',
+        description: 'Busca únicamente los PDFs de factura electrónica (prefijo FACTURA configurado, ej. FEV) en STAGE y verifica cuáles no tienen capa de texto extraíble (PDFs escaneados sin OCR). Lista cada archivo afectado con [WARN] pero NO los elimina. Úsala para revisar antes de decidir si aplicar OCR o eliminarlos.' },
+
+      { id: 'DELETE_UNREADABLE_PDFS',
+        label: 'Eliminar facturas sin texto (OCR)',
+        description: 'Igual que "Listar facturas sin texto" pero elimina permanentemente los PDFs de factura (prefijo FACTURA, ej. FEV) que no tienen capa de texto. Úsala cuando los archivos son irrecuperables (completamente en blanco, escaneados de baja calidad) y se deben volver a descargar desde SIHOS.' },
+
+      { id: 'DOWNLOAD_INVOICES_FROM_SIHOS',
+        label: 'Descargar facturas desde SIHOS',
+        description: 'Usa Playwright para iniciar sesión en el portal web SIHOS con las credenciales configuradas en la institución y descarga los PDFs de las facturas indicadas. Los números de factura deben ingresarse uno por línea o separados por coma en el campo de texto antes de ejecutar. Los archivos se guardan en STAGE.' },
+
+      { id: 'CHECK_INVOICES',
+        label: 'Aplicar OCR a facturas',
+        description: 'Busca los PDFs de factura (prefijo FACTURA, ej. FEV) en STAGE que no tienen capa de texto y les aplica OCR con ocrmypdf usando 8 hilos en paralelo. Solo procesa los que realmente lo necesitan; si todos ya tienen texto, no hace nada. El resultado es un PDF/A con texto extraíble.' },
+
+      { id: 'VERIFY_INVOICE_CODE',
+        label: 'Verificar número de factura en PDF',
+        description: 'Lee el texto de cada PDF de factura (prefijo FACTURA, ej. FEV) y verifica que el número de factura de la carpeta aparezca dentro del documento. Reporta con [WARN] las facturas cuyo PDF no contiene su propio número — puede indicar que el PDF descargado corresponde a otra factura.' },
+
+      { id: 'CHECK_INVOICE_NUMBER_ON_FILES',
+        label: 'Verificar nombres de archivos en carpetas',
+        description: 'Recorre cada carpeta de factura en STAGE y verifica que todos los archivos contengan el número de factura de la carpeta en su nombre (usando el prefijo de factura de la institución). Reporta con [WARN] los archivos desajustados, ej. un archivo con número 360052 dentro de la carpeta 360099.' },
+
+      { id: 'CHECK_FOLDERS_WITH_EXTRA_TEXT',
+        label: 'Detectar carpetas con texto extra',
+        description: 'Detecta carpetas en STAGE cuyo nombre tiene texto adicional más allá del número de factura (ej. "360052_SINCUFE", "360099 copia", "360100-duplicado"). Solo lista y reporta; no renombra. Úsala para revisar qué carpetas necesitan limpieza antes de ejecutar la normalización.' },
+
+      { id: 'NORMALIZE_DIR_NAMES',
+        label: 'Normalizar nombres de carpetas',
+        description: 'Renombra las carpetas malformadas en STAGE eliminando el texto adicional y dejando solo el número de factura (ej. "360052_SINCUFE" → "360052"). Aplica el mismo criterio que "Detectar carpetas con texto extra" para identificarlas.' },
+
+      { id: 'CHECK_DIRS',
+        label: 'Cruzar facturas BD vs. carpetas en disco',
+        description: 'Consulta todas las facturas del período con estado PRESENTE en la BD y verifica que cada una tenga su carpeta en STAGE. Las que no tienen carpeta en disco se marcan automáticamente como FALTANTE en la BD para que puedan ser recuperadas desde Google Drive.' },
+
+      { id: 'CHECK_REQUIRED_DOCS',
+        label: 'Verificar documentos requeridos por servicio',
+        description: 'Para cada factura PRESENTE, verifica que su carpeta en STAGE contenga todos los documentos exigidos según el tipo de servicio (configurados en Configuración → Tipos de documento por servicio). Registra un hallazgo en la BD por cada documento faltante y cambia el estado de la factura a PENDIENTE si le falta al menos uno.' },
+
+      { id: 'VERIFY_CUFE',
+        label: 'Verificar y etiquetar CUFE',
+        description: 'Lee el texto de cada PDF de factura (prefijo FACTURA, ej. FEV) en STAGE y valida que contenga un código CUFE válido según el formato de la DIAN. Las carpetas cuya factura no tiene CUFE son renombradas añadiendo el sufijo _SINCUFE (ej. "360052" → "360052_SINCUFE") para identificarlas visualmente en el explorador de archivos.' },
+
+      { id: 'ORGANIZE',
+        label: 'Organizar carpetas auditadas en AUDIT',
+        description: 'Mueve de STAGE a AUDIT las carpetas de facturas que están en estado PRESENTE y no tienen hallazgos pendientes. Tras moverlas, actualiza su estado a AUDITADA en la BD. Las facturas FALTANTE, PENDIENTE o con hallazgos sin resolver permanecen en STAGE.' },
+
+      { id: 'DOWNLOAD_DRIVE',
+        label: 'Descargar carpetas FALTANTE desde Drive',
+        description: 'Consulta las facturas del período en estado FALTANTE en la BD y las busca en Google Drive usando las credenciales configuradas en la institución. Las carpetas encontradas se descargan a STAGE y las facturas se actualizan a estado PRESENTE en la BD.' },
+
+      { id: 'DOWNLOAD_MISSING_DOCS',
+        label: 'Descargar documentos faltantes desde Drive',
+        description: 'Para cada hallazgo pendiente registrado en la BD (documentos específicos faltantes en carpetas de facturas), construye el nombre esperado del archivo ({prefijo}_{NIT}_{número de factura}.pdf) y lo busca en Google Drive. Los archivos encontrados se descargan a la carpeta correspondiente en STAGE.' },
     ],
 
     // ── Computed ──────────────────────────────────────────────────
