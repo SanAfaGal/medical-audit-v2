@@ -31,10 +31,12 @@ class InvoiceValidator:
         id_prefix: Invoice identifier prefix used to match invoice codes in PDFs.
     """
 
-    def __init__(self, base_dir: Path, id_prefix: str = "") -> None:
+    def __init__(self, base_dir: Path, id_prefix: str = "", *, _reader=None) -> None:
         self.base_dir = Path(base_dir)
         _esc = re.escape(id_prefix)
         self._re_invoice_code = re.compile(rf"({_esc}\d+)$", re.IGNORECASE)
+        # Allow injecting a custom reader for testing without real PDF files.
+        self._read_text = _reader if _reader is not None else DocumentReader.read_text
 
     def extract_cufe_code(self, text: str) -> str | None:
         """Extract and normalise a CUFE code from invoice text."""
@@ -45,7 +47,7 @@ class InvoiceValidator:
 
     def is_cufe_valid(self, file_path: Path) -> bool:
         """Return True if the PDF contains a valid CUFE code of at least 64 chars."""
-        content = DocumentReader.read_text(file_path)
+        content = self._read_text(file_path)
         cufe = self.extract_cufe_code(content)
         return bool(cufe and len(cufe) >= _MIN_CUFE_LENGTH)
 
@@ -64,7 +66,7 @@ class InvoiceValidator:
         term = remove_accents(search_text).upper()
 
         for f in files:
-            content = DocumentReader.read_text(f)
+            content = self._read_text(f)
             if not content:
                 continue
             if term in remove_accents(content).upper():
@@ -98,7 +100,7 @@ class InvoiceValidator:
             match = self._re_invoice_code.search(f.stem.upper())
             if match:
                 code = match.group(1)
-                content = DocumentReader.read_text(f)
+                content = self._read_text(f)
                 if content and code not in content.upper():
                     missing.append(f)
         return missing
@@ -115,7 +117,7 @@ class InvoiceValidator:
         missing_cufe: list[Path] = []
 
         for f in file_paths:
-            content = DocumentReader.read_text(f)
+            content = self._read_text(f)
             if not content:
                 continue
 

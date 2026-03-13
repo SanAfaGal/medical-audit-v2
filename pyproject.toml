@@ -29,11 +29,36 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["ruff", "mypy", "pytest", "pytest-asyncio", "httpx"]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "httpx",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["app*", "core*", "seeds*"]
+include = ["app*", "core*", "seeds*", "tests*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = ["-ra", "--tb=short", "--strict-markers"]
+markers = [
+    "db: tests that require a live PostgreSQL instance",
+    "slow: tests that are slow (OCR, large file I/O)",
+    "pdf: tests that require real PDF fixture files",
+]
+
+[tool.coverage.run]
+source = ["core", "app"]
+omit = ["app/models/*", "*/__pycache__/*", "seeds/*", "alembic/*"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 60
 
 [tool.ruff]
 line-length = 120
