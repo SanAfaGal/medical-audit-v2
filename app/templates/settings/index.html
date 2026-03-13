@@ -183,7 +183,7 @@
     </div>
 
     <!-- Sub-tabs -->
-    <div x-show="mapInstId" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div x-show="mapInstId" class="bg-white rounded-xl border border-gray-200 shadow-sm">
       <div class="flex border-b border-gray-200 bg-gray-50/60">
         <template x-for="st in [{id:'admins',icon:'fa-user-shield',label:'Administradoras'},{id:'contracts',icon:'fa-file-contract',label:'Contratos'},{id:'services',icon:'fa-briefcase-medical',label:'Servicios'},{id:'stdocs',icon:'fa-file-circle-check',label:'Docs por Servicio'}]" :key="st.id">
           <button @click="mapSubTab = st.id"
@@ -476,7 +476,7 @@
             <template x-for="d in serviceTypeDocs" :key="d.id">
               <tr class="hover:bg-gray-50">
                 <td class="px-2 py-2 text-xs text-gray-700" x-text="stName(d.service_type_id)"></td>
-                <td class="px-2 py-2 text-xs text-gray-700" x-text="dtName(d.doc_type_id)"></td>
+                <td class="px-2 py-2 text-xs text-gray-700" x-text="dtCode(d.doc_type_id)"></td>
                 <td class="px-2 py-2 text-right">
                   <template x-if="confirmDeleteSTDId !== d.id">
                     <button @click="confirmDeleteSTDId = d.id"
@@ -513,7 +513,7 @@
                   class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
             <option value="">Tipo de documento</option>
             <template x-for="dt in docTypes" :key="dt.id">
-              <option :value="dt.id" x-text="dt.code + ' — ' + dt.description"></option>
+              <option :value="dt.id" x-text="dt.code"></option>
             </template>
           </select>
           <button @click="addSTD()" :disabled="!newSTD.service_type_id || !newSTD.doc_type_id"
@@ -902,6 +902,10 @@ function settingsApp() {
     dtName(id) {
       const dt = this.docTypes.find(d => d.id === id || d.id === parseInt(id));
       return dt ? `${dt.code} — ${dt.description}` : `#${id}`;
+    },
+    dtCode(id) {
+      const dt = this.docTypes.find(d => d.id === id || d.id === parseInt(id));
+      return dt ? dt.code : `#${id}`;
     },
 
     // ---- INSTITUCIONES ----
