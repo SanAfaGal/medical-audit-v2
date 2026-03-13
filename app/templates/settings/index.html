@@ -4,45 +4,51 @@
 {% block page_title %}Configuración{% endblock %}
 
 {% block content %}
-<div x-data="settingsApp()" class="max-w-5xl mx-auto">
+<div x-data="settingsApp()" class="max-w-5xl mx-auto space-y-1">
 
-  <!-- Tabs -->
-  <div class="flex gap-1 mb-6 border-b border-gray-200">
-    <button @click="tab = 'hospital'"
-            :class="tab === 'hospital' ? 'border-sky-600 text-sky-700 bg-sky-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'"
-            class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-md">
-      <i class="fa-solid fa-hospital mr-1.5"></i>Hospital
-    </button>
-    <button @click="tab = 'mappings'; loadMappings()"
-            :class="tab === 'mappings' ? 'border-sky-600 text-sky-700 bg-sky-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'"
-            class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-md">
-      <i class="fa-solid fa-arrows-left-right mr-1.5"></i>Mapeos
-    </button>
-    <button @click="tab = 'rules'; loadRules()"
-            :class="tab === 'rules' ? 'border-sky-600 text-sky-700 bg-sky-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'"
-            class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-md">
-      <i class="fa-solid fa-sliders mr-1.5"></i>Reglas
-    </button>
+  <!-- Toast -->
+  <div x-show="toast.msg" x-transition.opacity
+       :class="toast.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'"
+       class="fixed top-4 right-4 z-50 px-5 py-3 rounded-xl text-white text-sm font-medium shadow-lg flex items-center gap-2"
+       @click="toast.msg = ''" style="display:none">
+    <i :class="toast.type === 'error' ? 'fa-solid fa-circle-xmark' : 'fa-solid fa-circle-check'"></i>
+    <span x-text="toast.msg"></span>
   </div>
 
-  <!-- ==================== Hospital tab ==================== -->
-  <div x-show="tab === 'hospital'" class="space-y-6">
+  <!-- Tabs -->
+  <div class="flex gap-0.5 border-b border-gray-200 mb-5">
+    <template x-for="t in [{id:'instituciones',icon:'fa-hospital',label:'Instituciones'},{id:'mapeos',icon:'fa-arrows-left-right',label:'Mapeos'},{id:'periodos',icon:'fa-calendar-days',label:'Períodos'},{id:'reglas',icon:'fa-sliders',label:'Reglas'}]" :key="t.id">
+      <button @click="switchTab(t.id)"
+              :class="tab === t.id ? 'border-sky-600 text-sky-700 bg-sky-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'"
+              class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-md">
+        <i :class="'fa-solid ' + t.icon + ' mr-1.5'"></i>
+        <span x-text="t.label"></span>
+      </button>
+    </template>
+  </div>
+
+  <!-- ============================================================ -->
+  <!--  TAB: INSTITUCIONES                                          -->
+  <!-- ============================================================ -->
+  <div x-show="tab === 'instituciones'" class="space-y-5">
+
+    <!-- Form -->
     <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-      <h2 class="text-base font-semibold text-gray-800 mb-5">
-        <i class="fa-solid fa-hospital-user mr-2 text-sky-600"></i>Agregar / editar hospital
+      <h2 class="text-sm font-semibold text-gray-700 mb-5">
+        <i class="fa-solid fa-hospital-user mr-2 text-sky-600"></i>
+        <span x-text="editingId ? 'Editando: ' + editingName : 'Agregar institución'"></span>
       </h2>
-      <form @submit.prevent="saveHospital()" class="grid grid-cols-2 gap-4">
+      <form @submit.prevent="saveInstitution()" class="grid grid-cols-2 gap-4">
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Nombre interno (clave única) *</label>
           <input type="text" x-model="form.name" required placeholder="SANTA_LUCIA"
                  :readonly="!!editingId"
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500"
                  :class="editingId ? 'bg-gray-50 text-gray-500' : ''" />
-          <p class="text-xs text-gray-400 mt-0.5">Sin espacios, en mayúsculas (identifica al hospital internamente)</p>
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Nombre para mostrar *</label>
-          <input type="text" x-model="form.display_name" required placeholder="Hospital Santa Lucia"
+          <input type="text" x-model="form.display_name" required placeholder="Hospital Santa Lucía"
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
         </div>
         <div>
@@ -57,7 +63,7 @@
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">URL portal SIHOS</label>
-          <input type="url" x-model="form.sihos_base_url" placeholder="https://sihos.example.com/..."
+          <input type="text" x-model="form.sihos_base_url"
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
         </div>
         <div>
@@ -81,217 +87,745 @@
           <label class="block text-xs font-medium text-gray-600 mb-1">Ruta base local</label>
           <input type="text" x-model="form.base_path" placeholder="C:/Auditorias/SANTA_LUCIA"
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
-          <p class="text-xs text-gray-400 mt-0.5">Carpeta raíz de los archivos del hospital en este servidor</p>
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Credenciales Google Drive (JSON)</label>
-          <textarea x-model="form.drive_credentials_json" rows="4"
-                    placeholder="Pegar el contenido completo del archivo drive.json de cuenta de servicio"
+          <textarea x-model="form.drive_credentials_json" rows="3"
+                    placeholder="Pegar el contenido completo del drive.json"
                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-sky-500"></textarea>
-          <p class="text-xs text-gray-400 mt-0.5">Se cifra con Fernet. No se guarda ninguna ruta de archivo en la BD.</p>
+          <p class="text-xs text-gray-400 mt-0.5">Se cifra con Fernet</p>
         </div>
-        <div class="col-span-2 flex items-center gap-4 pt-2 border-t border-gray-100">
+        <div class="col-span-2 flex items-center gap-3 pt-2 border-t border-gray-100">
           <button type="submit"
-                  class="px-6 py-2 bg-sky-600 text-white text-sm font-semibold rounded-lg hover:bg-sky-700 shadow-sm transition-colors">
-            <i class="fa-solid fa-floppy-disk mr-1.5"></i>Guardar hospital
+                  class="px-5 py-2 bg-sky-600 text-white text-sm font-semibold rounded-lg hover:bg-sky-700 shadow-sm transition-colors">
+            <i class="fa-solid fa-floppy-disk mr-1.5"></i>Guardar
           </button>
-          <button type="button" @click="resetForm()"
+          <button type="button" @click="resetInstForm()"
                   class="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
             Limpiar
           </button>
-          <span x-show="saveMsg" x-text="saveMsg" class="text-sm text-green-600 font-medium"></span>
-          <span x-show="saveError" x-text="saveError" class="text-sm text-red-600 font-medium"></span>
         </div>
       </form>
     </div>
 
-    <!-- Hospital list -->
-    <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">
-        <i class="fa-solid fa-list mr-2 text-gray-500"></i>Hospitales registrados
-      </h3>
-      <div class="space-y-2">
+    <!-- List -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
+        <h3 class="text-sm font-semibold text-gray-700">
+          <i class="fa-solid fa-list mr-2 text-gray-400"></i>Instituciones registradas
+          <span class="ml-2 text-xs text-gray-400 font-normal" x-text="'(' + institutions.length + ')'"></span>
+        </h3>
+      </div>
+      <div class="divide-y divide-gray-100">
         <template x-for="h in institutions" :key="h.id">
-          <div class="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-lg border border-gray-100">
+          <div class="flex items-center justify-between px-5 py-3 hover:bg-gray-50">
             <div>
               <div class="text-sm font-semibold text-gray-800" x-text="h.display_name"></div>
-              <div class="text-xs text-gray-500 mt-0.5">
-                NIT: <span x-text="h.nit"></span>
-                <span class="mx-1 text-gray-300">|</span>
-                Clave: <span class="font-mono" x-text="h.name"></span>
-                <span class="mx-1 text-gray-300">|</span>
-                Prefijo: <span class="font-mono" x-text="h.invoice_id_prefix"></span>
+              <div class="text-xs text-gray-500 mt-0.5 space-x-2">
+                <span>NIT: <span x-text="h.nit"></span></span>
+                <span class="text-gray-300">|</span>
+                <span class="font-mono" x-text="h.name"></span>
+                <span class="text-gray-300">|</span>
+                <span>Prefijo: <span class="font-mono" x-text="h.invoice_id_prefix"></span></span>
               </div>
             </div>
-            <button @click="editHospital(h)"
-                    class="text-xs px-3 py-1.5 text-sky-600 border border-sky-200 rounded-lg hover:bg-sky-50 transition-colors">
-              <i class="fa-solid fa-pen-to-square mr-1"></i>Editar
-            </button>
+            <div class="flex items-center gap-2">
+              <button @click="editInstitution(h)"
+                      class="text-xs px-3 py-1.5 text-sky-600 border border-sky-200 rounded-lg hover:bg-sky-50 transition-colors">
+                <i class="fa-solid fa-pen-to-square mr-1"></i>Editar
+              </button>
+              <template x-if="confirmDeleteInstId !== h.id">
+                <button @click="confirmDeleteInstId = h.id"
+                        class="text-xs px-2.5 py-1.5 text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </template>
+              <template x-if="confirmDeleteInstId === h.id">
+                <div class="flex items-center gap-1">
+                  <button @click="deleteInstitution(h.id)"
+                          class="text-xs px-2.5 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold">
+                    Eliminar
+                  </button>
+                  <button @click="confirmDeleteInstId = null"
+                          class="text-xs px-2.5 py-1.5 text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+                    Cancelar
+                  </button>
+                </div>
+              </template>
+            </div>
           </div>
         </template>
         <template x-if="institutions.length === 0">
-          <div class="text-sm text-gray-400 text-center py-6">
-            <i class="fa-solid fa-hospital text-2xl mb-2 text-gray-300"></i><br/>
-            No hay hospitales registrados
+          <div class="text-sm text-gray-400 text-center py-8">
+            <i class="fa-solid fa-hospital text-2xl mb-2 block text-gray-300"></i>
+            No hay instituciones registradas
           </div>
         </template>
       </div>
     </div>
   </div>
 
-  <!-- ==================== Mappings tab ==================== -->
-  <div x-show="tab === 'mappings'" class="space-y-5">
-    <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-      <h2 class="text-sm font-semibold text-gray-700 mb-3">
-        <i class="fa-solid fa-arrows-left-right mr-2 text-sky-600"></i>Seleccionar hospital
-      </h2>
-      <select x-model="mapInstitutionId" @change="loadMappings()"
-              class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 min-w-[280px]">
-        <option value="">— Seleccionar hospital —</option>
+  <!-- ============================================================ -->
+  <!--  TAB: MAPEOS                                                 -->
+  <!-- ============================================================ -->
+  <div x-show="tab === 'mapeos'" class="space-y-4">
+
+    <!-- Institution selector -->
+    <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+      <label class="block text-xs font-medium text-gray-600 mb-1">Institución</label>
+      <select x-model="mapInstId" @change="loadMappings()"
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 min-w-[300px]">
+        <option value="">— Seleccionar institución —</option>
         <template x-for="h in institutions" :key="h.id">
           <option :value="h.id" x-text="h.display_name"></option>
         </template>
       </select>
     </div>
 
-    <!-- Pending admins -->
-    <div x-show="pendingAdmins.length > 0" class="bg-white rounded-xl border border-amber-200 p-5 shadow-sm">
-      <h3 class="text-sm font-semibold text-amber-700 mb-4">
-        <i class="fa-solid fa-triangle-exclamation mr-1.5"></i>
-        Administradoras sin mapear (<span x-text="pendingAdmins.length"></span>)
-      </h3>
-      <div class="space-y-2">
-        <template x-for="admin in pendingAdmins" :key="admin.id">
-          <div class="flex items-center gap-3">
-            <span class="text-sm text-gray-700 font-mono w-56 truncate bg-gray-50 px-2 py-1 rounded" x-text="admin.raw_admin"></span>
-            <i class="fa-solid fa-arrow-right text-gray-400 shrink-0"></i>
-            <input type="text" :id="'admin-' + admin.id" placeholder="Valor canónico"
-                   class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
-            <button @click="saveAdmin(admin.id)"
-                    class="shrink-0 px-3 py-1.5 text-xs bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors">
-              Guardar
-            </button>
-          </div>
+    <!-- Sub-tabs -->
+    <div x-show="mapInstId" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="flex border-b border-gray-200 bg-gray-50/60">
+        <template x-for="st in [{id:'admins',icon:'fa-user-shield',label:'Administradoras'},{id:'contracts',icon:'fa-file-contract',label:'Contratos'},{id:'services',icon:'fa-briefcase-medical',label:'Servicios'},{id:'stdocs',icon:'fa-file-circle-check',label:'Docs por Servicio'}]" :key="st.id">
+          <button @click="mapSubTab = st.id"
+                  :class="mapSubTab === st.id ? 'border-b-2 border-sky-600 text-sky-700 bg-white' : 'text-gray-500 hover:text-gray-700'"
+                  class="px-4 py-2.5 text-xs font-medium transition-colors">
+            <i :class="'fa-solid ' + st.icon + ' mr-1.5'"></i>
+            <span x-text="st.label"></span>
+          </button>
         </template>
       </div>
-    </div>
 
-    <!-- Pending contracts -->
-    <div x-show="pendingContracts.length > 0" class="bg-white rounded-xl border border-amber-200 p-5 shadow-sm">
-      <h3 class="text-sm font-semibold text-amber-700 mb-4">
-        <i class="fa-solid fa-triangle-exclamation mr-1.5"></i>
-        Contratos sin mapear (<span x-text="pendingContracts.length"></span>)
-      </h3>
-      <div class="space-y-2">
-        <template x-for="contract in pendingContracts" :key="contract.id">
-          <div class="flex items-center gap-3">
-            <span class="text-sm text-gray-700 font-mono w-56 truncate bg-gray-50 px-2 py-1 rounded" x-text="contract.raw_contract"></span>
-            <i class="fa-solid fa-arrow-right text-gray-400 shrink-0"></i>
-            <input type="text" :id="'contract-' + contract.id" placeholder="Valor canónico"
-                   class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
-            <button @click="saveContract(contract.id)"
-                    class="shrink-0 px-3 py-1.5 text-xs bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors">
-              Guardar
-            </button>
-          </div>
-        </template>
+      <!-- Admins -->
+      <div x-show="mapSubTab === 'admins'" class="p-4 space-y-3">
+        <table class="w-full text-sm">
+          <thead class="text-xs text-gray-500 border-b border-gray-100">
+            <tr>
+              <th class="text-left py-2 px-2 font-semibold">Raw</th>
+              <th class="text-left py-2 px-2 font-semibold">Canónico</th>
+              <th class="text-left py-2 px-2 font-semibold">Tipo</th>
+              <th class="py-2 px-2"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50">
+            <template x-for="a in allAdmins" :key="a.id">
+              <tr class="hover:bg-gray-50">
+                <td class="px-2 py-2 font-mono text-xs text-gray-600 max-w-[200px] truncate" x-text="a.raw_admin"></td>
+                <td class="px-2 py-2">
+                  <template x-if="editingAdminId !== a.id">
+                    <span :class="a.canonical_admin ? 'text-gray-800' : 'text-amber-500 italic text-xs'"
+                          x-text="a.canonical_admin || 'Sin mapear'"></span>
+                  </template>
+                  <template x-if="editingAdminId === a.id">
+                    <input type="text" x-model="editingAdminVal"
+                           class="border border-sky-400 rounded px-2 py-1 text-xs w-full focus:outline-none focus:ring-1 focus:ring-sky-500" />
+                  </template>
+                </td>
+                <td class="px-2 py-2">
+                  <template x-if="editingAdminId !== a.id">
+                    <span class="text-xs text-gray-500" x-text="a.type || '—'"></span>
+                  </template>
+                  <template x-if="editingAdminId === a.id">
+                    <select x-model="editingAdminType" class="border border-sky-400 rounded px-1 py-1 text-xs focus:outline-none">
+                      <option value="">—</option>
+                      <option>EPS</option><option>SOAT</option><option>ARL</option><option>OTRO</option>
+                    </select>
+                  </template>
+                </td>
+                <td class="px-2 py-2">
+                  <div class="flex items-center justify-end gap-1">
+                    <template x-if="editingAdminId !== a.id">
+                      <button @click="startEditAdmin(a)"
+                              class="text-xs px-2 py-1 text-sky-600 border border-sky-200 rounded hover:bg-sky-50">
+                        <i class="fa-solid fa-pen text-xs"></i>
+                      </button>
+                    </template>
+                    <template x-if="editingAdminId === a.id">
+                      <button @click="saveAdminEdit(a.id)"
+                              class="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700">
+                        <i class="fa-solid fa-check text-xs"></i>
+                      </button>
+                    </template>
+                    <template x-if="editingAdminId === a.id">
+                      <button @click="editingAdminId = null"
+                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                        <i class="fa-solid fa-xmark text-xs"></i>
+                      </button>
+                    </template>
+                    <template x-if="confirmDeleteAdminId !== a.id && editingAdminId !== a.id">
+                      <button @click="confirmDeleteAdminId = a.id"
+                              class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
+                        <i class="fa-solid fa-trash text-xs"></i>
+                      </button>
+                    </template>
+                    <template x-if="confirmDeleteAdminId === a.id">
+                      <button @click="deleteAdmin(a.id)"
+                              class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
+                        Eliminar
+                      </button>
+                    </template>
+                    <template x-if="confirmDeleteAdminId === a.id">
+                      <button @click="confirmDeleteAdminId = null"
+                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                        Cancelar
+                      </button>
+                    </template>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <!-- Add admin row -->
+        <div class="flex gap-2 pt-2 border-t border-gray-100">
+          <input type="text" x-model="newAdmin.raw_admin" placeholder="Valor raw"
+                 class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
+          <input type="text" x-model="newAdmin.canonical_admin" placeholder="Canónico"
+                 class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
+          <select x-model="newAdmin.type"
+                  class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
+            <option value="">Tipo</option>
+            <option>EPS</option><option>SOAT</option><option>ARL</option><option>OTRO</option>
+          </select>
+          <button @click="addAdmin()" :disabled="!newAdmin.raw_admin.trim()"
+                  class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
+            <i class="fa-solid fa-plus mr-1"></i>Agregar
+          </button>
+        </div>
       </div>
-    </div>
 
-    <div x-show="mapInstitutionId && pendingAdmins.length === 0 && pendingContracts.length === 0"
-         class="bg-green-50 rounded-xl border border-green-200 p-5 text-center text-sm text-green-700">
-      <i class="fa-solid fa-circle-check text-xl mb-1.5"></i><br/>
-      Todos los mapeos están completos para este hospital.
+      <!-- Contracts -->
+      <div x-show="mapSubTab === 'contracts'" class="p-4 space-y-3">
+        <table class="w-full text-sm">
+          <thead class="text-xs text-gray-500 border-b border-gray-100">
+            <tr>
+              <th class="text-left py-2 px-2 font-semibold">Raw</th>
+              <th class="text-left py-2 px-2 font-semibold">Canónico</th>
+              <th class="py-2 px-2"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50">
+            <template x-for="c in allContracts" :key="c.id">
+              <tr class="hover:bg-gray-50">
+                <td class="px-2 py-2 font-mono text-xs text-gray-600 max-w-[220px] truncate" x-text="c.raw_contract"></td>
+                <td class="px-2 py-2">
+                  <template x-if="editingContractId !== c.id">
+                    <span :class="c.canonical_contract ? 'text-gray-800' : 'text-amber-500 italic text-xs'"
+                          x-text="c.canonical_contract || 'Sin mapear'"></span>
+                  </template>
+                  <template x-if="editingContractId === c.id">
+                    <input type="text" x-model="editingContractVal"
+                           class="border border-sky-400 rounded px-2 py-1 text-xs w-full focus:outline-none focus:ring-1 focus:ring-sky-500" />
+                  </template>
+                </td>
+                <td class="px-2 py-2">
+                  <div class="flex items-center justify-end gap-1">
+                    <template x-if="editingContractId !== c.id">
+                      <button @click="startEditContract(c)"
+                              class="text-xs px-2 py-1 text-sky-600 border border-sky-200 rounded hover:bg-sky-50">
+                        <i class="fa-solid fa-pen text-xs"></i>
+                      </button>
+                    </template>
+                    <template x-if="editingContractId === c.id">
+                      <button @click="saveContractEdit(c.id)"
+                              class="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700">
+                        <i class="fa-solid fa-check text-xs"></i>
+                      </button>
+                    </template>
+                    <template x-if="editingContractId === c.id">
+                      <button @click="editingContractId = null"
+                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                        <i class="fa-solid fa-xmark text-xs"></i>
+                      </button>
+                    </template>
+                    <template x-if="confirmDeleteContractId !== c.id && editingContractId !== c.id">
+                      <button @click="confirmDeleteContractId = c.id"
+                              class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
+                        <i class="fa-solid fa-trash text-xs"></i>
+                      </button>
+                    </template>
+                    <template x-if="confirmDeleteContractId === c.id">
+                      <button @click="deleteContract(c.id)"
+                              class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
+                        Eliminar
+                      </button>
+                    </template>
+                    <template x-if="confirmDeleteContractId === c.id">
+                      <button @click="confirmDeleteContractId = null"
+                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                        Cancelar
+                      </button>
+                    </template>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="flex gap-2 pt-2 border-t border-gray-100">
+          <input type="text" x-model="newContract.raw_contract" placeholder="Valor raw"
+                 class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
+          <input type="text" x-model="newContract.canonical_contract" placeholder="Canónico"
+                 class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
+          <button @click="addContract()" :disabled="!newContract.raw_contract.trim()"
+                  class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
+            <i class="fa-solid fa-plus mr-1"></i>Agregar
+          </button>
+        </div>
+      </div>
+
+      <!-- Services -->
+      <div x-show="mapSubTab === 'services'" class="p-4 space-y-3">
+        <table class="w-full text-sm">
+          <thead class="text-xs text-gray-500 border-b border-gray-100">
+            <tr>
+              <th class="text-left py-2 px-2 font-semibold">Servicio raw</th>
+              <th class="text-left py-2 px-2 font-semibold">Tipo de servicio</th>
+              <th class="py-2 px-2"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50">
+            <template x-for="s in allServices" :key="s.id">
+              <tr class="hover:bg-gray-50">
+                <td class="px-2 py-2 font-mono text-xs text-gray-600 max-w-[220px] truncate" x-text="s.raw_service"></td>
+                <td class="px-2 py-2">
+                  <template x-if="editingServiceId !== s.id">
+                    <span class="text-gray-800 text-xs" x-text="stName(s.service_type_id)"></span>
+                  </template>
+                  <template x-if="editingServiceId === s.id">
+                    <select x-model="editingServiceTypeId"
+                            class="border border-sky-400 rounded px-2 py-1 text-xs focus:outline-none">
+                      <template x-for="st in serviceTypes" :key="st.id">
+                        <option :value="st.id" x-text="st.display_name"></option>
+                      </template>
+                    </select>
+                  </template>
+                </td>
+                <td class="px-2 py-2">
+                  <div class="flex items-center justify-end gap-1">
+                    <template x-if="editingServiceId !== s.id">
+                      <button @click="startEditService(s)"
+                              class="text-xs px-2 py-1 text-sky-600 border border-sky-200 rounded hover:bg-sky-50">
+                        <i class="fa-solid fa-pen text-xs"></i>
+                      </button>
+                    </template>
+                    <template x-if="editingServiceId === s.id">
+                      <button @click="saveServiceEdit(s.id)"
+                              class="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700">
+                        <i class="fa-solid fa-check text-xs"></i>
+                      </button>
+                    </template>
+                    <template x-if="editingServiceId === s.id">
+                      <button @click="editingServiceId = null"
+                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                        <i class="fa-solid fa-xmark text-xs"></i>
+                      </button>
+                    </template>
+                    <template x-if="confirmDeleteServiceId !== s.id && editingServiceId !== s.id">
+                      <button @click="confirmDeleteServiceId = s.id"
+                              class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
+                        <i class="fa-solid fa-trash text-xs"></i>
+                      </button>
+                    </template>
+                    <template x-if="confirmDeleteServiceId === s.id">
+                      <button @click="deleteService(s.id)"
+                              class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
+                        Eliminar
+                      </button>
+                    </template>
+                    <template x-if="confirmDeleteServiceId === s.id">
+                      <button @click="confirmDeleteServiceId = null"
+                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                        Cancelar
+                      </button>
+                    </template>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="flex gap-2 pt-2 border-t border-gray-100">
+          <input type="text" x-model="newService.raw_service" placeholder="Servicio raw"
+                 class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
+          <select x-model="newService.service_type_id"
+                  class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500 min-w-[160px]">
+            <option value="">Tipo de servicio</option>
+            <template x-for="st in serviceTypes" :key="st.id">
+              <option :value="st.id" x-text="st.display_name"></option>
+            </template>
+          </select>
+          <button @click="addService()" :disabled="!newService.raw_service.trim() || !newService.service_type_id"
+                  class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
+            <i class="fa-solid fa-plus mr-1"></i>Agregar
+          </button>
+        </div>
+      </div>
+
+      <!-- Docs por Servicio -->
+      <div x-show="mapSubTab === 'stdocs'" class="p-4 space-y-3">
+        <p class="text-xs text-gray-500">Define qué tipos de documento se requieren por tipo de servicio para esta institución.</p>
+        <table class="w-full text-sm">
+          <thead class="text-xs text-gray-500 border-b border-gray-100">
+            <tr>
+              <th class="text-left py-2 px-2 font-semibold">Tipo de servicio</th>
+              <th class="text-left py-2 px-2 font-semibold">Tipo de documento</th>
+              <th class="py-2 px-2"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50">
+            <template x-for="d in serviceTypeDocs" :key="d.id">
+              <tr class="hover:bg-gray-50">
+                <td class="px-2 py-2 text-xs text-gray-700" x-text="stName(d.service_type_id)"></td>
+                <td class="px-2 py-2 text-xs text-gray-700" x-text="dtName(d.doc_type_id)"></td>
+                <td class="px-2 py-2 text-right">
+                  <template x-if="confirmDeleteSTDId !== d.id">
+                    <button @click="confirmDeleteSTDId = d.id"
+                            class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
+                      <i class="fa-solid fa-trash text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="confirmDeleteSTDId === d.id">
+                    <div class="flex justify-end gap-1">
+                      <button @click="deleteSTD(d.service_type_id, d.doc_type_id)"
+                              class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
+                        Eliminar
+                      </button>
+                      <button @click="confirmDeleteSTDId = null"
+                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                        Cancelar
+                      </button>
+                    </div>
+                  </template>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="flex gap-2 pt-2 border-t border-gray-100">
+          <select x-model="newSTD.service_type_id"
+                  class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
+            <option value="">Tipo de servicio</option>
+            <template x-for="st in serviceTypes" :key="st.id">
+              <option :value="st.id" x-text="st.display_name"></option>
+            </template>
+          </select>
+          <select x-model="newSTD.doc_type_id"
+                  class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
+            <option value="">Tipo de documento</option>
+            <template x-for="dt in docTypes" :key="dt.id">
+              <option :value="dt.id" x-text="dt.code + ' — ' + dt.description"></option>
+            </template>
+          </select>
+          <button @click="addSTD()" :disabled="!newSTD.service_type_id || !newSTD.doc_type_id"
+                  class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
+            <i class="fa-solid fa-plus mr-1"></i>Agregar
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- ==================== Rules tab ==================== -->
-  <div x-show="tab === 'rules'" class="space-y-6">
-    <!-- Service types -->
+  <!-- ============================================================ -->
+  <!--  TAB: PERÍODOS                                               -->
+  <!-- ============================================================ -->
+  <div x-show="tab === 'periodos'" class="space-y-4">
+
+    <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+      <label class="block text-xs font-medium text-gray-600 mb-1">Institución</label>
+      <select x-model="periodInstId" @change="loadPeriods()"
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 min-w-[300px]">
+        <option value="">— Seleccionar institución —</option>
+        <template x-for="h in institutions" :key="h.id">
+          <option :value="h.id" x-text="h.display_name"></option>
+        </template>
+      </select>
+    </div>
+
+    <div x-show="periodInstId" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-gray-700">
+          <i class="fa-solid fa-calendar-days mr-2 text-sky-600"></i>Períodos de auditoría
+        </h3>
+      </div>
+      <div class="divide-y divide-gray-100">
+        <template x-for="p in periods" :key="p.id">
+          <div class="flex items-center justify-between px-5 py-3 hover:bg-gray-50">
+            <div>
+              <div class="text-sm font-semibold text-gray-800" x-text="p.period_label"></div>
+              <div class="text-xs text-gray-500 mt-0.5">
+                <span x-text="p.date_from"></span> → <span x-text="p.date_to"></span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1">
+              <template x-if="confirmDeletePeriodId !== p.id">
+                <button @click="confirmDeletePeriodId = p.id"
+                        class="text-xs px-2.5 py-1.5 text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
+                  <i class="fa-solid fa-trash text-xs"></i>
+                </button>
+              </template>
+              <template x-if="confirmDeletePeriodId === p.id">
+                <div class="flex gap-1">
+                  <button @click="deletePeriod(p.id)"
+                          class="text-xs px-2.5 py-1.5 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700">
+                    Eliminar
+                  </button>
+                  <button @click="confirmDeletePeriodId = null"
+                          class="text-xs px-2.5 py-1.5 text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+                    Cancelar
+                  </button>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+        <template x-if="periods.length === 0">
+          <div class="text-sm text-gray-400 text-center py-6">
+            <i class="fa-solid fa-calendar text-xl mb-2 block text-gray-300"></i>
+            No hay períodos registrados
+          </div>
+        </template>
+      </div>
+
+      <!-- Add period form -->
+      <div class="px-5 py-4 border-t border-gray-200 bg-gray-50/50">
+        <div class="text-xs font-semibold text-gray-600 mb-3">Agregar período</div>
+        <div class="flex gap-3 flex-wrap items-end">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Etiqueta *</label>
+            <input type="text" x-model="newPeriod.period_label" placeholder="2024-01"
+                   class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500 w-32" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Fecha inicio *</label>
+            <input type="date" x-model="newPeriod.date_from"
+                   class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Fecha fin *</label>
+            <input type="date" x-model="newPeriod.date_to"
+                   class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
+          </div>
+          <button @click="addPeriod()"
+                  :disabled="!newPeriod.period_label.trim() || !newPeriod.date_from || !newPeriod.date_to"
+                  class="px-4 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
+            <i class="fa-solid fa-plus mr-1"></i>Agregar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!--  TAB: REGLAS                                                 -->
+  <!-- ============================================================ -->
+  <div x-show="tab === 'reglas'" class="space-y-5">
+
+    <!-- Service Types -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div class="px-5 py-4 border-b border-gray-100 bg-gray-50">
+      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
         <h2 class="text-sm font-semibold text-gray-700">
           <i class="fa-solid fa-tags mr-2 text-sky-600"></i>Tipos de servicio
         </h2>
       </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50/50 border-b border-gray-100">
-            <tr>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Código</th>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Nombre</th>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Prioridad</th>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50/50 border-b border-gray-100">
+          <tr>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Código</th>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Nombre</th>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Prioridad</th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50">
+          <template x-for="st in serviceTypes" :key="st.id">
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="st.code"></td>
+              <td class="px-4 py-2.5 text-gray-800" x-text="st.display_name"></td>
+              <td class="px-4 py-2.5 text-gray-500" x-text="st.priority"></td>
+              <td class="px-4 py-2.5 text-right">
+                <template x-if="confirmDeleteSTId !== st.id">
+                  <button @click="confirmDeleteSTId = st.id"
+                          class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
+                    <i class="fa-solid fa-trash text-xs"></i>
+                  </button>
+                </template>
+                <template x-if="confirmDeleteSTId === st.id">
+                  <div class="flex justify-end gap-1">
+                    <button @click="deleteServiceType(st.id)"
+                            class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
+                      Eliminar
+                    </button>
+                    <button @click="confirmDeleteSTId = null"
+                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                      Cancelar
+                    </button>
+                  </div>
+                </template>
+              </td>
             </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-50">
-            <template x-for="st in serviceTypes" :key="st.id">
-              <tr class="hover:bg-gray-50">
-                <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="st.code"></td>
-                <td class="px-4 py-2.5 font-medium text-gray-800" x-text="st.display_name"></td>
-                <td class="px-4 py-2.5 text-gray-500" x-text="st.priority"></td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
+          </template>
+        </tbody>
+      </table>
+      <div class="px-4 py-3 border-t border-gray-100 bg-gray-50/50 flex gap-2">
+        <input type="text" x-model="newST.code" placeholder="Código"
+               class="w-28 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500 uppercase"
+               @input="newST.code = newST.code.toUpperCase()" />
+        <input type="text" x-model="newST.display_name" placeholder="Nombre"
+               class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
+        <input type="number" x-model="newST.priority" placeholder="Prioridad"
+               class="w-24 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
+        <button @click="addServiceType()" :disabled="!newST.code.trim() || !newST.display_name.trim()"
+                class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
+          <i class="fa-solid fa-plus mr-1"></i>Agregar
+        </button>
       </div>
     </div>
 
-    <!-- Doc types -->
+    <!-- Doc Types -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div class="px-5 py-4 border-b border-gray-100 bg-gray-50">
+      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
         <h2 class="text-sm font-semibold text-gray-700">
           <i class="fa-solid fa-file-lines mr-2 text-sky-600"></i>Tipos de documento
         </h2>
       </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50/50 border-b border-gray-100">
-            <tr>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Código</th>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Descripción</th>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Prefijo</th>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50/50 border-b border-gray-100">
+          <tr>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Código</th>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Descripción</th>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Prefijo</th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50">
+          <template x-for="dt in docTypes" :key="dt.id">
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="dt.code"></td>
+              <td class="px-4 py-2.5 text-gray-800" x-text="dt.description"></td>
+              <td class="px-4 py-2.5 font-mono text-xs text-gray-500" x-text="dt.prefix || '—'"></td>
+              <td class="px-4 py-2.5 text-right">
+                <template x-if="confirmDeleteDTId !== dt.id">
+                  <button @click="confirmDeleteDTId = dt.id"
+                          class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
+                    <i class="fa-solid fa-trash text-xs"></i>
+                  </button>
+                </template>
+                <template x-if="confirmDeleteDTId === dt.id">
+                  <div class="flex justify-end gap-1">
+                    <button @click="deleteDocType(dt.id)"
+                            class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
+                      Eliminar
+                    </button>
+                    <button @click="confirmDeleteDTId = null"
+                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                      Cancelar
+                    </button>
+                  </div>
+                </template>
+              </td>
             </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-50">
-            <template x-for="dt in docTypes" :key="dt.id">
-              <tr class="hover:bg-gray-50">
-                <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="dt.code"></td>
-                <td class="px-4 py-2.5 font-medium text-gray-800" x-text="dt.description"></td>
-                <td class="px-4 py-2.5 text-xs text-gray-500 font-mono" x-text="dt.prefix || '—'"></td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
+          </template>
+        </tbody>
+      </table>
+      <div class="px-4 py-3 border-t border-gray-100 bg-gray-50/50 flex gap-2">
+        <input type="text" x-model="newDT.code" placeholder="Código"
+               class="w-28 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500 uppercase"
+               @input="newDT.code = newDT.code.toUpperCase()" />
+        <input type="text" x-model="newDT.description" placeholder="Descripción"
+               class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
+        <input type="text" x-model="newDT.prefix" placeholder="Prefijo"
+               class="w-24 border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono focus:ring-2 focus:ring-sky-500" />
+        <button @click="addDocType()" :disabled="!newDT.code.trim() || !newDT.description.trim()"
+                class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
+          <i class="fa-solid fa-plus mr-1"></i>Agregar
+        </button>
       </div>
     </div>
 
-    <!-- Folder statuses -->
+    <!-- Folder Statuses -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div class="px-5 py-4 border-b border-gray-100 bg-gray-50">
+      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
         <h2 class="text-sm font-semibold text-gray-700">
           <i class="fa-solid fa-folder mr-2 text-sky-600"></i>Estados de carpeta
         </h2>
       </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50/50 border-b border-gray-100">
-            <tr>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">ID</th>
-              <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Estado</th>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50/50 border-b border-gray-100">
+          <tr>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">ID</th>
+            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Estado</th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50">
+          <template x-for="fs in folderStatuses" :key="fs.id">
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-2.5 text-gray-400 text-xs" x-text="fs.id"></td>
+              <td class="px-4 py-2.5">
+                <template x-if="editingFSId !== fs.id">
+                  <span class="font-mono text-xs text-gray-700" x-text="fs.status"></span>
+                </template>
+                <template x-if="editingFSId === fs.id">
+                  <input type="text" x-model="editingFSVal"
+                         class="border border-sky-400 rounded px-2 py-1 text-xs font-mono w-36 focus:outline-none focus:ring-1 focus:ring-sky-500" />
+                </template>
+              </td>
+              <td class="px-4 py-2.5 text-right">
+                <div class="flex items-center justify-end gap-1">
+                  <template x-if="editingFSId !== fs.id">
+                    <button @click="startEditFS(fs)"
+                            class="text-xs px-2 py-1 text-sky-600 border border-sky-200 rounded hover:bg-sky-50">
+                      <i class="fa-solid fa-pen text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="editingFSId === fs.id">
+                    <button @click="saveFSEdit(fs.id)"
+                            class="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700">
+                      <i class="fa-solid fa-check text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="editingFSId === fs.id">
+                    <button @click="editingFSId = null"
+                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                      <i class="fa-solid fa-xmark text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="confirmDeleteFSId !== fs.id && editingFSId !== fs.id">
+                    <button @click="confirmDeleteFSId = fs.id"
+                            class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
+                      <i class="fa-solid fa-trash text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="confirmDeleteFSId === fs.id">
+                    <button @click="deleteFolderStatus(fs.id)"
+                            class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
+                      Eliminar
+                    </button>
+                  </template>
+                  <template x-if="confirmDeleteFSId === fs.id">
+                    <button @click="confirmDeleteFSId = null"
+                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                      Cancelar
+                    </button>
+                  </template>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-50">
-            <template x-for="fs in folderStatuses" :key="fs.id">
-              <tr class="hover:bg-gray-50">
-                <td class="px-4 py-2.5 text-gray-500" x-text="fs.id"></td>
-                <td class="px-4 py-2.5 font-mono text-xs text-gray-700" x-text="fs.status"></td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
+          </template>
+        </tbody>
+      </table>
+      <div class="px-4 py-3 border-t border-gray-100 bg-gray-50/50 flex gap-2">
+        <input type="text" x-model="newFS.status" placeholder="Código del estado (ej. AUDITADA)"
+               class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono uppercase focus:ring-2 focus:ring-sky-500"
+               @input="newFS.status = newFS.status.toUpperCase()" />
+        <button @click="addFolderStatus()" :disabled="!newFS.status.trim()"
+                class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
+          <i class="fa-solid fa-plus mr-1"></i>Agregar
+        </button>
       </div>
     </div>
   </div>
+
 </div>
 {% endblock %}
 
@@ -299,120 +833,265 @@
 <script>
 function settingsApp() {
   return {
-    tab: 'hospital',
+    tab: 'instituciones',
+
+    // Instituciones
     institutions: [],
-    mapInstitutionId: '',
-    pendingAdmins: [],
-    pendingContracts: [],
-    serviceTypes: [],
-    docTypes: [],
-    folderStatuses: [],
-    saveMsg: '',
-    saveError: '',
     editingId: null,
-    form: {
-      name: '', display_name: '', nit: '', invoice_id_prefix: '',
-      sihos_base_url: '', sihos_doc_code: '', sihos_user: '', sihos_password: '',
-      base_path: '', drive_credentials_json: '',
-    },
+    editingName: '',
+    confirmDeleteInstId: null,
+    form: { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'', base_path:'', drive_credentials_json:'' },
+
+    // Mapeos
+    mapInstId: '',
+    mapSubTab: 'admins',
+    allAdmins: [], allContracts: [], allServices: [], serviceTypeDocs: [],
+    editingAdminId: null, editingAdminVal: '', editingAdminType: '',
+    editingContractId: null, editingContractVal: '',
+    editingServiceId: null, editingServiceTypeId: '',
+    confirmDeleteAdminId: null, confirmDeleteContractId: null, confirmDeleteServiceId: null, confirmDeleteSTDId: null,
+    newAdmin: { raw_admin:'', canonical_admin:'', type:'' },
+    newContract: { raw_contract:'', canonical_contract:'' },
+    newService: { raw_service:'', service_type_id:'' },
+    newSTD: { service_type_id:'', doc_type_id:'' },
+
+    // Períodos
+    periodInstId: '',
+    periods: [],
+    confirmDeletePeriodId: null,
+    newPeriod: { period_label:'', date_from:'', date_to:'' },
+
+    // Reglas
+    serviceTypes: [], docTypes: [], folderStatuses: [],
+    confirmDeleteSTId: null, confirmDeleteDTId: null, confirmDeleteFSId: null,
+    editingFSId: null, editingFSVal: '',
+    newST: { code:'', display_name:'', priority:10 },
+    newDT: { code:'', description:'', prefix:'' },
+    newFS: { status:'' },
+
+    // Toast
+    toast: { msg:'', type:'success' },
 
     async init() {
-      const res = await fetch('/api/institutions');
-      this.institutions = await res.json();
+      const [instRes, stRes, dtRes, fsRes] = await Promise.all([
+        fetch('/api/institutions'),
+        fetch('/api/settings/service-types'),
+        fetch('/api/settings/doc-types'),
+        fetch('/api/settings/folder-statuses'),
+      ]);
+      this.institutions = await instRes.json();
+      this.serviceTypes = await stRes.json();
+      this.docTypes = await dtRes.json();
+      this.folderStatuses = await fsRes.json();
     },
 
-    resetForm() {
-      this.form = {
-        name: '', display_name: '', nit: '', invoice_id_prefix: '',
-        sihos_base_url: '', sihos_doc_code: '', sihos_user: '', sihos_password: '',
-        base_path: '', drive_credentials_json: '',
-      };
-      this.editingId = null;
-      this.saveMsg = '';
-      this.saveError = '';
+    showToast(msg, type = 'success') {
+      this.toast = { msg, type };
+      setTimeout(() => { this.toast.msg = ''; }, 3500);
     },
 
-    editHospital(h) {
+    switchTab(t) {
+      this.tab = t;
+    },
+
+    // ---- HELPERS ----
+    stName(id) {
+      const st = this.serviceTypes.find(s => s.id === id || s.id === parseInt(id));
+      return st ? st.display_name : `#${id}`;
+    },
+    dtName(id) {
+      const dt = this.docTypes.find(d => d.id === id || d.id === parseInt(id));
+      return dt ? `${dt.code} — ${dt.description}` : `#${id}`;
+    },
+
+    // ---- INSTITUCIONES ----
+    resetInstForm() {
+      this.editingId = null; this.editingName = '';
+      this.form = { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'', base_path:'', drive_credentials_json:'' };
+    },
+
+    editInstitution(h) {
       this.editingId = h.id;
-      this.form = {
-        name: h.name,
-        display_name: h.display_name,
-        nit: h.nit,
-        invoice_id_prefix: h.invoice_id_prefix,
-        sihos_base_url: h.sihos_base_url || '',
-        sihos_doc_code: h.sihos_doc_code || '',
-        sihos_user: h.sihos_user || '',
-        sihos_password: '',
-        base_path: h.base_path || '',
-        drive_credentials_json: '',
-      };
-      this.tab = 'hospital';
+      this.editingName = h.display_name;
+      this.form = { name:h.name, display_name:h.display_name, nit:h.nit, invoice_id_prefix:h.invoice_id_prefix, sihos_base_url:h.sihos_base_url||'', sihos_doc_code:h.sihos_doc_code||'', sihos_user:h.sihos_user||'', sihos_password:'', base_path:h.base_path||'', drive_credentials_json:'' };
       window.scrollTo({ top: 0, behavior: 'smooth' });
     },
 
-    async saveHospital() {
-      this.saveMsg = '';
-      this.saveError = '';
+    async saveInstitution() {
       const method = this.editingId ? 'PUT' : 'POST';
       const url = this.editingId ? `/api/institutions/${this.editingId}` : '/api/institutions';
       const body = Object.fromEntries(Object.entries(this.form).filter(([, v]) => v !== ''));
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
       if (res.ok) {
-        this.saveMsg = 'Hospital guardado correctamente.';
-        const res2 = await fetch('/api/institutions');
-        this.institutions = await res2.json();
-        setTimeout(() => { this.saveMsg = ''; }, 4000);
+        this.institutions = await fetch('/api/institutions').then(r => r.json());
+        this.showToast(this.editingId ? 'Institución actualizada.' : 'Institución creada.');
+        this.resetInstForm();
       } else {
-        const err = await res.json();
-        this.saveError = err.detail || 'Error al guardar el hospital.';
+        const err = await res.json().catch(() => ({}));
+        this.showToast(err.detail || 'Error al guardar.', 'error');
       }
     },
 
+    async deleteInstitution(id) {
+      const res = await fetch(`/api/institutions/${id}`, { method: 'DELETE' });
+      if (res.ok || res.status === 204) {
+        this.institutions = this.institutions.filter(h => h.id !== id);
+        this.confirmDeleteInstId = null;
+        this.showToast('Institución eliminada.');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        this.confirmDeleteInstId = null;
+        this.showToast(err.detail || 'No se pudo eliminar.', 'error');
+      }
+    },
+
+    // ---- MAPEOS ----
     async loadMappings() {
-      if (!this.mapInstitutionId) return;
-      const [ra, rc] = await Promise.all([
-        fetch(`/api/institutions/${this.mapInstitutionId}/admins?pending_only=true`).then(r => r.json()),
-        fetch(`/api/institutions/${this.mapInstitutionId}/contracts?pending_only=true`).then(r => r.json()),
+      if (!this.mapInstId) return;
+      const id = this.mapInstId;
+      const [admins, contracts, services, stdocs] = await Promise.all([
+        fetch(`/api/institutions/${id}/admins`).then(r => r.json()),
+        fetch(`/api/institutions/${id}/contracts`).then(r => r.json()),
+        fetch(`/api/institutions/${id}/services`).then(r => r.json()),
+        fetch(`/api/institutions/${id}/service-type-documents`).then(r => r.json()),
       ]);
-      this.pendingAdmins = ra;
-      this.pendingContracts = rc;
+      this.allAdmins = admins; this.allContracts = contracts;
+      this.allServices = services; this.serviceTypeDocs = stdocs;
     },
 
-    async saveAdmin(adminId) {
-      const input = document.getElementById(`admin-${adminId}`);
-      if (!input || !input.value.trim()) return;
-      await fetch(`/api/institutions/admins/${adminId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canonical_admin: input.value.trim() }),
-      });
-      await this.loadMappings();
+    // Admins
+    startEditAdmin(a) { this.editingAdminId = a.id; this.editingAdminVal = a.canonical_admin || ''; this.editingAdminType = a.type || ''; },
+    async saveAdminEdit(id) {
+      const res = await fetch(`/api/institutions/admins/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ canonical_admin: this.editingAdminVal || null, type: this.editingAdminType || null }) });
+      if (res.ok) { this.editingAdminId = null; await this.loadMappings(); this.showToast('Actualizado.'); }
+      else this.showToast('Error al actualizar.', 'error');
+    },
+    async addAdmin() {
+      if (!this.mapInstId || !this.newAdmin.raw_admin.trim()) return;
+      const body = { raw_admin: this.newAdmin.raw_admin };
+      if (this.newAdmin.canonical_admin) body.canonical_admin = this.newAdmin.canonical_admin;
+      if (this.newAdmin.type) body.type = this.newAdmin.type;
+      const res = await fetch(`/api/institutions/${this.mapInstId}/admins`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if (res.ok) { this.newAdmin = {raw_admin:'',canonical_admin:'',type:''}; await this.loadMappings(); this.showToast('Administradora agregada.'); }
+      else this.showToast('Error al agregar.', 'error');
+    },
+    async deleteAdmin(id) {
+      const res = await fetch(`/api/institutions/admins/${id}`, { method:'DELETE' });
+      if (res.ok || res.status === 204) { this.confirmDeleteAdminId = null; await this.loadMappings(); this.showToast('Eliminado.'); }
+      else this.showToast('No se pudo eliminar.', 'error');
     },
 
-    async saveContract(contractId) {
-      const input = document.getElementById(`contract-${contractId}`);
-      if (!input || !input.value.trim()) return;
-      await fetch(`/api/institutions/contracts/${contractId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canonical_contract: input.value.trim() }),
-      });
-      await this.loadMappings();
+    // Contracts
+    startEditContract(c) { this.editingContractId = c.id; this.editingContractVal = c.canonical_contract || ''; },
+    async saveContractEdit(id) {
+      const res = await fetch(`/api/institutions/contracts/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ canonical_contract: this.editingContractVal || null }) });
+      if (res.ok) { this.editingContractId = null; await this.loadMappings(); this.showToast('Actualizado.'); }
+      else this.showToast('Error al actualizar.', 'error');
+    },
+    async addContract() {
+      if (!this.mapInstId || !this.newContract.raw_contract.trim()) return;
+      const body = { raw_contract: this.newContract.raw_contract };
+      if (this.newContract.canonical_contract) body.canonical_contract = this.newContract.canonical_contract;
+      const res = await fetch(`/api/institutions/${this.mapInstId}/contracts`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if (res.ok) { this.newContract = {raw_contract:'',canonical_contract:''}; await this.loadMappings(); this.showToast('Contrato agregado.'); }
+      else this.showToast('Error al agregar.', 'error');
+    },
+    async deleteContract(id) {
+      const res = await fetch(`/api/institutions/contracts/${id}`, { method:'DELETE' });
+      if (res.ok || res.status === 204) { this.confirmDeleteContractId = null; await this.loadMappings(); this.showToast('Eliminado.'); }
+      else this.showToast('No se pudo eliminar.', 'error');
     },
 
-    async loadRules() {
-      const [st, dt, fs] = await Promise.all([
-        fetch('/api/settings/service-types').then(r => r.json()),
-        fetch('/api/settings/doc-types').then(r => r.json()),
-        fetch('/api/settings/folder-statuses').then(r => r.json()),
-      ]);
-      this.serviceTypes = st;
-      this.docTypes = dt;
-      this.folderStatuses = fs;
+    // Services
+    startEditService(s) { this.editingServiceId = s.id; this.editingServiceTypeId = s.service_type_id; },
+    async saveServiceEdit(id) {
+      const res = await fetch(`/api/institutions/services/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ service_type_id: parseInt(this.editingServiceTypeId) }) });
+      if (res.ok) { this.editingServiceId = null; await this.loadMappings(); this.showToast('Actualizado.'); }
+      else this.showToast('Error al actualizar.', 'error');
+    },
+    async addService() {
+      if (!this.mapInstId || !this.newService.raw_service.trim() || !this.newService.service_type_id) return;
+      const res = await fetch(`/api/institutions/${this.mapInstId}/services`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ raw_service: this.newService.raw_service, service_type_id: parseInt(this.newService.service_type_id) }) });
+      if (res.ok) { this.newService = {raw_service:'',service_type_id:''}; await this.loadMappings(); this.showToast('Servicio agregado.'); }
+      else this.showToast('Error al agregar.', 'error');
+    },
+    async deleteService(id) {
+      const res = await fetch(`/api/institutions/services/${id}`, { method:'DELETE' });
+      if (res.ok || res.status === 204) { this.confirmDeleteServiceId = null; await this.loadMappings(); this.showToast('Eliminado.'); }
+      else this.showToast('No se pudo eliminar.', 'error');
+    },
+
+    // ServiceTypeDocs
+    async addSTD() {
+      if (!this.mapInstId || !this.newSTD.service_type_id || !this.newSTD.doc_type_id) return;
+      const res = await fetch(`/api/institutions/${this.mapInstId}/service-type-documents`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ institution_id: parseInt(this.mapInstId), service_type_id: parseInt(this.newSTD.service_type_id), doc_type_id: parseInt(this.newSTD.doc_type_id) }) });
+      if (res.ok) { this.newSTD = {service_type_id:'',doc_type_id:''}; await this.loadMappings(); this.showToast('Regla de documento agregada.'); }
+      else this.showToast('Error al agregar.', 'error');
+    },
+    async deleteSTD(stId, dtId) {
+      const res = await fetch(`/api/institutions/${this.mapInstId}/service-type-documents/${stId}/${dtId}`, { method:'DELETE' });
+      if (res.ok || res.status === 204) { this.confirmDeleteSTDId = null; await this.loadMappings(); this.showToast('Eliminado.'); }
+      else this.showToast('No se pudo eliminar.', 'error');
+    },
+
+    // ---- PERÍODOS ----
+    async loadPeriods() {
+      if (!this.periodInstId) return;
+      this.periods = await fetch(`/api/institutions/${this.periodInstId}/periods`).then(r => r.json());
+    },
+    async addPeriod() {
+      if (!this.periodInstId || !this.newPeriod.period_label.trim() || !this.newPeriod.date_from || !this.newPeriod.date_to) return;
+      const res = await fetch(`/api/institutions/${this.periodInstId}/periods`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ institution_id: parseInt(this.periodInstId), period_label: this.newPeriod.period_label, date_from: this.newPeriod.date_from, date_to: this.newPeriod.date_to }) });
+      if (res.ok) { this.newPeriod = {period_label:'',date_from:'',date_to:''}; await this.loadPeriods(); this.showToast('Período creado.'); }
+      else this.showToast('Error al crear período.', 'error');
+    },
+    async deletePeriod(id) {
+      const res = await fetch(`/api/institutions/periods/${id}`, { method:'DELETE' });
+      if (res.ok || res.status === 204) { this.confirmDeletePeriodId = null; await this.loadPeriods(); this.showToast('Período eliminado.'); }
+      else this.showToast('No se pudo eliminar.', 'error');
+    },
+
+    // ---- REGLAS ----
+    async addServiceType() {
+      if (!this.newST.code.trim() || !this.newST.display_name.trim()) return;
+      const res = await fetch('/api/settings/service-types', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: this.newST.code, display_name: this.newST.display_name, priority: parseInt(this.newST.priority) || 10 }) });
+      if (res.ok) { this.serviceTypes = await fetch('/api/settings/service-types').then(r => r.json()); this.newST = {code:'',display_name:'',priority:10}; this.showToast('Tipo de servicio creado.'); }
+      else this.showToast('Error al crear.', 'error');
+    },
+    async deleteServiceType(id) {
+      const res = await fetch(`/api/settings/service-types/${id}`, { method:'DELETE' });
+      if (res.ok || res.status === 204) { this.serviceTypes = this.serviceTypes.filter(s => s.id !== id); this.confirmDeleteSTId = null; this.showToast('Eliminado.'); }
+      else { const err = await res.json().catch(()=>({})); this.confirmDeleteSTId = null; this.showToast(err.detail||'No se pudo eliminar.','error'); }
+    },
+    async addDocType() {
+      if (!this.newDT.code.trim() || !this.newDT.description.trim()) return;
+      const body = { code: this.newDT.code, description: this.newDT.description };
+      if (this.newDT.prefix.trim()) body.prefix = this.newDT.prefix.trim();
+      const res = await fetch('/api/settings/doc-types', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if (res.ok) { this.docTypes = await fetch('/api/settings/doc-types').then(r => r.json()); this.newDT = {code:'',description:'',prefix:''}; this.showToast('Tipo de documento creado.'); }
+      else this.showToast('Error al crear.', 'error');
+    },
+    async deleteDocType(id) {
+      const res = await fetch(`/api/settings/doc-types/${id}`, { method:'DELETE' });
+      if (res.ok || res.status === 204) { this.docTypes = this.docTypes.filter(d => d.id !== id); this.confirmDeleteDTId = null; this.showToast('Eliminado.'); }
+      else { const err = await res.json().catch(()=>({})); this.confirmDeleteDTId = null; this.showToast(err.detail||'No se pudo eliminar.','error'); }
+    },
+    startEditFS(fs) { this.editingFSId = fs.id; this.editingFSVal = fs.status; },
+    async saveFSEdit(id) {
+      const res = await fetch(`/api/settings/folder-statuses/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status: this.editingFSVal }) });
+      if (res.ok) { this.folderStatuses = await fetch('/api/settings/folder-statuses').then(r => r.json()); this.editingFSId = null; this.showToast('Estado actualizado.'); }
+      else this.showToast('Error al actualizar.', 'error');
+    },
+    async addFolderStatus() {
+      if (!this.newFS.status.trim()) return;
+      const res = await fetch('/api/settings/folder-statuses', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status: this.newFS.status }) });
+      if (res.ok) { this.folderStatuses = await fetch('/api/settings/folder-statuses').then(r => r.json()); this.newFS = {status:''}; this.showToast('Estado creado.'); }
+      else this.showToast('Error al crear.', 'error');
+    },
+    async deleteFolderStatus(id) {
+      const res = await fetch(`/api/settings/folder-statuses/${id}`, { method:'DELETE' });
+      if (res.ok || res.status === 204) { this.folderStatuses = this.folderStatuses.filter(f => f.id !== id); this.confirmDeleteFSId = null; this.showToast('Eliminado.'); }
+      else { const err = await res.json().catch(()=>({})); this.confirmDeleteFSId = null; this.showToast(err.detail||'No se pudo eliminar.','error'); }
     },
   };
 }
