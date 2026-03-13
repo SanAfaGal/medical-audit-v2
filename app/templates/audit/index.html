@@ -193,6 +193,29 @@
         <i class="fa-solid fa-plus mr-1"></i>Agregar
       </button>
     </div>
+
+    <!-- Delete invoice -->
+    <div class="pt-4 border-t border-gray-100 flex items-center gap-3">
+      <template x-if="!confirmDeleteInvoice">
+        <button @click="confirmDeleteInvoice = true"
+                class="px-3 py-1.5 text-xs text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
+          <i class="fa-solid fa-trash mr-1"></i>Eliminar factura
+        </button>
+      </template>
+      <template x-if="confirmDeleteInvoice">
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-red-700 font-medium">¿Eliminar esta factura y todos sus hallazgos?</span>
+          <button @click="deleteInvoice()"
+                  class="px-3 py-1.5 text-xs bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">
+            Confirmar eliminación
+          </button>
+          <button @click="confirmDeleteInvoice = false"
+                  class="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+            Cancelar
+          </button>
+        </div>
+      </template>
+    </div>
   </section>
 </div>
 {% endblock %}
@@ -217,6 +240,7 @@ function auditApp() {
     detailStatusId: '',
     missingFiles: [],
     newDocTypeId: '',
+    confirmDeleteInvoice: false,
 
     async init() {
       const [instRes, fsRes, dtRes] = await Promise.all([
@@ -255,6 +279,7 @@ function auditApp() {
       this.selectedInvoice = { ...inv };
       this.detailStatusId = inv.folder_status_id;
       this.newDocTypeId = '';
+      this.confirmDeleteInvoice = false;
       const res = await fetch(`/api/missing-files/${inv.id}`);
       this.missingFiles = await res.json();
       this.$nextTick(() => {
@@ -294,6 +319,16 @@ function auditApp() {
       await fetch(`/api/missing-files/${this.selectedInvoice.id}/${docTypeId}`, { method: 'DELETE' });
       await this.selectInvoice(this.selectedInvoice);
       await this.loadInvoices();
+    },
+
+    async deleteInvoice() {
+      if (!this.selectedInvoice) return;
+      const res = await fetch(`/api/invoices/${this.selectedInvoice.id}`, { method: 'DELETE' });
+      if (res.ok || res.status === 204) {
+        this.selectedInvoice = null;
+        this.confirmDeleteInvoice = false;
+        await this.loadInvoices();
+      }
     },
 
     docTypeLabel(docTypeId) {
