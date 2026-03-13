@@ -213,10 +213,13 @@ function pipeline() {
             } else {
               const data = await res.json();
               this.logLines.push(`[OK] Facturas insertadas: ${data.inserted}`);
-              if (data.skipped) this.logLines.push(`[INFO] Filas omitidas: ${data.skipped}`);
-              if (data.unknown_admins && data.unknown_admins.length > 0) {
-                this.logLines.push(`[WARN] Administradoras sin mapeo: ${data.unknown_admins.slice(0, 5).join(', ')}`);
-              }
+              if (data.skipped) this.logLines.push(`[WARN] Filas omitidas por registros sin mapear: ${data.skipped}`);
+              if (data.unknown_admins?.length)
+                this.logLines.push(`[WARN] Administradoras sin mapear (${data.unknown_admins.length}): ${data.unknown_admins.join(', ')} — revisa la configuración del hospital`);
+              if (data.unknown_contracts?.length)
+                this.logLines.push(`[WARN] Contratos sin mapear (${data.unknown_contracts.length}): ${data.unknown_contracts.join(', ')} — revisa la configuración del hospital`);
+              if (data.unknown_services?.length)
+                this.logLines.push(`[WARN] Servicios sin mapear (${data.unknown_services.length}): ${data.unknown_services.join(', ')} — revisa la configuración del hospital`);
             }
             this.scrollLog();
             continue;

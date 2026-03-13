@@ -97,19 +97,22 @@ async def ingest(
             skipped += 1
             continue
 
-        # Upsert contract (optional)
+        # Upsert contract — skip if present but not yet mapped
         contract = await inst_repo.upsert_contract(institution.id, raw_contract) if raw_contract else None
-        if contract and contract.canonical_contract is None and raw_contract:
+        if contract and contract.canonical_contract is None:
             if raw_contract not in unknown_contracts:
                 unknown_contracts.append(raw_contract)
-            # Still load — contract mapping is optional
+            skipped += 1
+            continue
 
-        # Upsert service with default service_type; track those still at default
+        # Upsert service — skip if still at default (not yet mapped)
         service = await inst_repo.upsert_service(institution.id, raw_service, default_st.id)
         service_type_id = service.service_type_id
-        if service_type_id == default_st.id and raw_service:
+        if raw_service and service_type_id == default_st.id:
             if raw_service not in unknown_services:
                 unknown_services.append(raw_service)
+            skipped += 1
+            continue
 
         invoice_data = {
             "date":             invoice_date,
