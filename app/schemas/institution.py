@@ -40,6 +40,7 @@ class InstitutionOut(BaseModel):
     sihos_doc_code: str | None
     sihos_user: str | None
     base_path: str | None
+    logo_url: str | None = None
     # NOTE: sihos_password and drive_credentials_enc are never exposed
 
 

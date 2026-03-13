@@ -6,29 +6,16 @@
 {% block content %}
 <div x-data="auditApp()" class="space-y-4">
 
+  <!-- No context warning -->
+  <div x-show="!$store.ctx.periodId"
+       class="flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+    <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+    Selecciona un hospital y período en el panel lateral para ver las facturas.
+  </div>
+
   <!-- Filters -->
-  <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Hospital</label>
-        <select x-model="institutionId" @change="loadPeriods()"
-                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
-          <option value="">— Seleccionar —</option>
-          <template x-for="h in institutions" :key="h.id">
-            <option :value="h.id" x-text="h.display_name"></option>
-          </template>
-        </select>
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Período</label>
-        <select x-model="periodId" @change="loadInvoices()" :disabled="!institutionId"
-                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
-          <option value="">— Seleccionar —</option>
-          <template x-for="p in periods" :key="p.id">
-            <option :value="p.id" x-text="p.period_label"></option>
-          </template>
-        </select>
-      </div>
+  <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-4" x-show="$store.ctx.periodId">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Estado</label>
         <select x-model="filterStatusId" @change="page=1; loadInvoices()"
@@ -55,17 +42,14 @@
   </section>
 
   <!-- Invoice table -->
-  <section class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+  <section class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" x-show="$store.ctx.periodId">
     <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
       <span class="text-sm text-gray-600">
         <template x-if="total > 0">
           <span><strong x-text="total"></strong> facturas</span>
         </template>
-        <template x-if="total === 0 && periodId">
+        <template x-if="total === 0 && $store.ctx.periodId">
           <span class="text-gray-400">No se encontraron facturas</span>
-        </template>
-        <template x-if="!periodId">
-          <span class="text-gray-400">Seleccione un hospital y período</span>
         </template>
       </span>
       <div class="flex items-center gap-2 text-sm text-gray-500" x-show="total > pageSize">
@@ -224,10 +208,6 @@
 <script>
 function auditApp() {
   return {
-    institutions: [],
-    institutionId: '',
-    periods: [],
-    periodId: '',
     folderStatuses: [],
     docTypes: [],
     filterStatusId: '',
@@ -243,32 +223,33 @@ function auditApp() {
     confirmDeleteInvoice: false,
 
     async init() {
-      const [instRes, fsRes, dtRes] = await Promise.all([
-        fetch('/api/institutions'),
+      const [fsRes, dtRes] = await Promise.all([
         fetch('/api/settings/folder-statuses'),
         fetch('/api/settings/doc-types'),
       ]);
-      this.institutions = await instRes.json();
       this.folderStatuses = await fsRes.json();
-      this.docTypes = await dtRes.json();
-    },
+      this.docTypes       = await dtRes.json();
 
-    async loadPeriods() {
-      this.periods = []; this.periodId = ''; this.invoices = []; this.total = 0;
-      if (!this.institutionId) return;
-      const res = await fetch(`/api/institutions/${this.institutionId}/periods`);
-      this.periods = await res.json();
+      // Load invoices if a period is already selected in the global store
+      if (this.$store.ctx.periodId) this.loadInvoices();
+
+      // React to period changes made from the sidebar
+      this.$watch('$store.ctx.periodId', (val) => {
+        this.invoices = []; this.total = 0; this.selectedInvoice = null; this.page = 1;
+        if (val) this.loadInvoices();
+      });
     },
 
     async loadInvoices() {
-      if (!this.institutionId || !this.periodId) return;
-      let url = `/api/invoices?period_id=${encodeURIComponent(this.periodId)}&page=${this.page}&page_size=${this.pageSize}`;
+      const periodId = this.$store.ctx.periodId;
+      if (!periodId) return;
+      let url = `/api/invoices?period_id=${encodeURIComponent(periodId)}&page=${this.page}&page_size=${this.pageSize}`;
       if (this.filterStatusId) url += `&folder_status_id=${encodeURIComponent(this.filterStatusId)}`;
-      if (this.searchQuery)   url += `&search=${encodeURIComponent(this.searchQuery)}`;
-      const res = await fetch(url);
+      if (this.searchQuery)    url += `&search=${encodeURIComponent(this.searchQuery)}`;
+      const res  = await fetch(url);
       const data = await res.json();
       this.invoices = data.items;
-      this.total = data.total;
+      this.total    = data.total;
     },
 
     clearFilters() { this.filterStatusId = ''; this.searchQuery = ''; this.page = 1; this.loadInvoices(); },
@@ -277,8 +258,8 @@ function auditApp() {
 
     async selectInvoice(inv) {
       this.selectedInvoice = { ...inv };
-      this.detailStatusId = inv.folder_status_id;
-      this.newDocTypeId = '';
+      this.detailStatusId  = inv.folder_status_id;
+      this.newDocTypeId    = '';
       this.confirmDeleteInvoice = false;
       const res = await fetch(`/api/missing-files/${inv.id}`);
       this.missingFiles = await res.json();
@@ -304,8 +285,8 @@ function auditApp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          invoice_id: this.selectedInvoice.id,
-          doc_type_id: parseInt(this.newDocTypeId),
+          invoice_id:    this.selectedInvoice.id,
+          doc_type_id:   parseInt(this.newDocTypeId),
           expected_path: '',
         }),
       });

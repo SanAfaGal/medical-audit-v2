@@ -6,35 +6,12 @@
 {% block content %}
 <div x-data="pipeline()" class="max-w-5xl mx-auto space-y-6">
 
-  <!-- Hospital + period selector -->
-  <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
-      <i class="fa-solid fa-hospital-user text-sky-600 mr-2"></i>Selección de hospital y período
-    </h2>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Hospital</label>
-        <select x-model="institutionId" @change="loadPeriods()"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500">
-          <option value="">— Seleccione un hospital —</option>
-          <template x-for="h in institutions" :key="h.id">
-            <option :value="h.id" x-text="h.display_name"></option>
-          </template>
-        </select>
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Período</label>
-        <select x-model="periodId"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-                :disabled="!institutionId">
-          <option value="">— Seleccione un período —</option>
-          <template x-for="p in periods" :key="p.id">
-            <option :value="p.id" x-text="p.period_label"></option>
-          </template>
-        </select>
-      </div>
-    </div>
-  </section>
+  <!-- No context warning -->
+  <div x-show="!$store.ctx.institutionId || !$store.ctx.periodId"
+       class="flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+    <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+    Selecciona un hospital y período en el panel lateral para ejecutar el pipeline.
+  </div>
 
   <!-- Stage checklist -->
   <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
@@ -88,7 +65,7 @@
   <!-- Run button -->
   <div class="flex items-center gap-4">
     <button @click="runPipeline()"
-            :disabled="running || !institutionId || !periodId || selectedStages.length === 0"
+            :disabled="running || !$store.ctx.institutionId || !$store.ctx.periodId || selectedStages.length === 0"
             class="flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:bg-gray-300
                    disabled:cursor-not-allowed text-white font-medium rounded-lg text-sm transition-colors">
       <i class="fa-solid fa-play" x-show="!running"></i>
@@ -129,10 +106,6 @@
 <script>
 function pipeline() {
   return {
-    institutions: [],
-    institutionId: '',
-    periods: [],
-    periodId: '',
     selectedStages: [],
     running: false,
     logLines: [],
@@ -162,17 +135,8 @@ function pipeline() {
       { id: 'DOWNLOAD_MISSING_DOCS',         label: 'Descargar docs faltantes',     description: 'Descargar documentos faltantes desde Drive',               icon: 'fa-solid fa-file-arrow-down' },
     ],
 
-    async init() {
-      const res = await fetch('/api/institutions');
-      this.institutions = await res.json();
-    },
-
-    async loadPeriods() {
-      this.periods = [];
-      this.periodId = '';
-      if (!this.institutionId) return;
-      const res = await fetch(`/api/institutions/${this.institutionId}/periods`);
-      this.periods = await res.json();
+    init() {
+      // Context is managed by the global store; nothing to fetch here
     },
 
     selectAll(checked) {
@@ -194,6 +158,8 @@ function pipeline() {
 
     async runPipeline() {
       if (this.running) return;
+      const institutionId = this.$store.ctx.institutionId;
+      const periodId      = this.$store.ctx.periodId;
       this.running = true;
       this.logLines = [];
 
@@ -205,8 +171,8 @@ function pipeline() {
         try {
           if (stageId === 'LOAD_AND_PROCESS' && this.excelFile) {
             const formData = new FormData();
-            formData.append('institution_id', this.institutionId);
-            formData.append('period_id', this.periodId);
+            formData.append('institution_id', institutionId);
+            formData.append('period_id', periodId);
             formData.append('file', this.excelFile);
 
             this.logLines.push('[INFO] Enviando archivo Excel al servidor...');
@@ -227,7 +193,7 @@ function pipeline() {
           }
 
           // SSE-based stage execution
-          const url = `/api/pipeline/run/${stageId}?institution_id=${encodeURIComponent(this.institutionId)}&period_id=${encodeURIComponent(this.periodId)}`;
+          const url = `/api/pipeline/run/${stageId}?institution_id=${encodeURIComponent(institutionId)}&period_id=${encodeURIComponent(periodId)}`;
           const evtSource = new EventSource(url);
 
           await new Promise((resolve) => {

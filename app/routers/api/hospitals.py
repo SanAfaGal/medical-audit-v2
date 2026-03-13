@@ -1,8 +1,12 @@
 """API router for institutions CRUD (mounted at /api/institutions)."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+
+_LOGOS_DIR = Path(__file__).parent.parent.parent / "static" / "logos"
 
 from app import crypto
 from app.database import get_db
@@ -45,10 +49,23 @@ def _encrypt_sensitive(data: dict) -> dict:
 # Institutions
 # ------------------------------------------------------------------
 
+def _logo_url(institution_name: str) -> str | None:
+    slug = institution_name.lower()
+    if (_LOGOS_DIR / f"{slug}.avif").exists():
+        return f"/static/logos/{slug}.avif"
+    return None
+
+
 @router.get("", response_model=list[InstitutionOut])
 async def list_institutions(db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
-    return await repo.get_all()
+    institutions = await repo.get_all()
+    out = []
+    for inst in institutions:
+        item = InstitutionOut.model_validate(inst)
+        item.logo_url = _logo_url(inst.name)
+        out.append(item)
+    return out
 
 
 @router.post("", response_model=InstitutionOut, status_code=201)

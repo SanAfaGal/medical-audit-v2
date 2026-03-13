@@ -1,9 +1,13 @@
 <!DOCTYPE html>
-<html lang="es" class="h-full bg-gray-50">
+<html lang="es" class="h-full">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Auditoría Médica{% endblock %}</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -20,6 +24,7 @@
     tailwind.config = {
       theme: {
         extend: {
+          fontFamily: { sans: ['Plus Jakarta Sans', 'sans-serif'] },
           colors: {
             brand: { 600: '#0369a1', 700: '#0c4a6e' }
           }
@@ -27,44 +32,215 @@
       }
     }
   </script>
-</head>
-<body class="h-full flex" x-data="{}">
 
-  <!-- ====== Sidebar ====== -->
-  <aside class="w-56 bg-white border-r border-gray-200 flex flex-col shrink-0">
-    <div class="px-6 py-5 border-b border-gray-200">
-      <span class="text-brand-700 font-bold text-lg tracking-tight">
-        <i class="fa-solid fa-hospital-user mr-2"></i>Auditoría
+  <!-- Global context store — must register before Alpine deferred init -->
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.store('ctx', {
+        institutions: [],
+        institutionId: null,
+        institution:   null,
+        periods:       [],
+        periodId:      null,
+        period:        null,
+        ready:         false,
+
+        init() {
+          try {
+            const s = JSON.parse(localStorage.getItem('audit_ctx') || '{}');
+            this.institutionId = s.institutionId || null;
+            this.institution   = s.institution   || null;
+            this.periodId      = s.periodId      || null;
+            this.period        = s.period        || null;
+          } catch {}
+          this._loadInstitutions();
+        },
+
+        async _loadInstitutions() {
+          const res = await fetch('/api/institutions');
+          this.institutions = await res.json();
+          if (this.institutionId) {
+            const found = this.institutions.find(i => i.id == this.institutionId);
+            if (found) { this.institution = found; await this._loadPeriods(); }
+            else this.clear();
+          }
+          this.ready = true;
+        },
+
+        async _loadPeriods() {
+          if (!this.institutionId) { this.periods = []; return; }
+          const res = await fetch(`/api/institutions/${this.institutionId}/periods`);
+          this.periods = await res.json();
+          if (this.periodId) {
+            const found = this.periods.find(p => p.id == this.periodId);
+            if (found) this.period = found;
+            else { this.periodId = null; this.period = null; }
+          }
+          this._save();
+        },
+
+        async selectInstitution(id) {
+          this.institutionId = id ? parseInt(id) : null;
+          this.institution   = this.institutions.find(i => i.id == this.institutionId) || null;
+          this.periodId = null; this.period = null; this.periods = [];
+          this._save();
+          if (this.institutionId) await this._loadPeriods();
+        },
+
+        selectPeriod(id) {
+          this.periodId = id ? parseInt(id) : null;
+          this.period   = this.periods.find(p => p.id == this.periodId) || null;
+          this._save();
+        },
+
+        clear() {
+          this.institutionId = null; this.institution = null;
+          this.periodId      = null; this.period      = null;
+          this.periods = [];
+          this._save();
+        },
+
+        _save() {
+          localStorage.setItem('audit_ctx', JSON.stringify({
+            institutionId: this.institutionId, institution: this.institution,
+            periodId:      this.periodId,      period:      this.period,
+          }));
+        }
+      });
+    });
+  </script>
+</head>
+
+<body class="h-full flex font-sans bg-gray-50" x-data="{}">
+
+  <!-- ================================================================ -->
+  <!--  SIDEBAR                                                         -->
+  <!-- ================================================================ -->
+  <aside class="w-64 bg-slate-900 flex flex-col shrink-0" style="box-shadow: 4px 0 24px rgba(0,0,0,0.25)">
+
+    <!-- Brand -->
+    <div class="px-5 py-4 border-b border-white/10">
+      <span class="text-white font-bold text-sm tracking-wide flex items-center gap-2.5">
+        <span class="w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-400/30 flex items-center justify-center">
+          <i class="fa-solid fa-stethoscope text-sky-400 text-xs"></i>
+        </span>
+        Auditoría Médica
       </span>
     </div>
 
-    <nav class="flex-1 px-3 py-4 space-y-1">
+    <!-- ── Context card ── -->
+    <div class="px-4 pt-4 pb-3 border-b border-white/10 space-y-3">
+
+      <!-- Hospital logo + name row -->
+      <div class="flex items-center gap-3">
+        <!-- Logo box -->
+        <div class="w-11 h-11 rounded-xl bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-sm"
+             style="box-shadow: 0 0 0 1px rgba(255,255,255,0.12)">
+          <template x-if="$store.ctx.institution && $store.ctx.institution.logo_url">
+            <img :src="$store.ctx.institution.logo_url"
+                 :alt="$store.ctx.institution.display_name"
+                 class="w-full h-full object-contain p-1">
+          </template>
+          <template x-if="!$store.ctx.institution || !$store.ctx.institution.logo_url">
+            <i class="fa-solid fa-hospital-user text-slate-400 text-sm"></i>
+          </template>
+        </div>
+
+        <!-- Name + period -->
+        <div class="min-w-0 flex-1">
+          <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Hospital</div>
+          <div class="text-sm font-semibold text-white leading-tight truncate"
+               x-text="$store.ctx.institution ? $store.ctx.institution.display_name : '—'"></div>
+        </div>
+      </div>
+
+      <!-- Period pill -->
+      <div class="flex items-center gap-2">
+        <i class="fa-regular fa-calendar text-slate-500 text-xs w-3.5 text-center shrink-0"></i>
+        <template x-if="$store.ctx.period">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
+                       bg-amber-400/15 text-amber-300 border border-amber-400/25">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+            <span x-text="$store.ctx.period.period_label"></span>
+          </span>
+        </template>
+        <template x-if="!$store.ctx.period">
+          <span class="text-xs text-slate-600 italic">Sin período</span>
+        </template>
+      </div>
+
+      <!-- Compact selectors -->
+      <div class="space-y-1.5">
+        <div class="relative">
+          <select @change="$store.ctx.selectInstitution($event.target.value)"
+                  class="w-full bg-slate-800/80 border border-white/10 text-slate-300 text-xs
+                         rounded-lg pl-2.5 pr-7 py-1.5 appearance-none cursor-pointer
+                         focus:outline-none focus:ring-1 focus:ring-sky-500/70 focus:border-sky-500/70
+                         hover:border-white/20 transition-colors">
+            <option value="">— Seleccionar hospital —</option>
+            <template x-for="h in $store.ctx.institutions" :key="h.id">
+              <option :value="h.id" x-text="h.display_name"
+                      :selected="h.id == $store.ctx.institutionId"></option>
+            </template>
+          </select>
+          <i class="fa-solid fa-chevron-down text-slate-500 text-[9px] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+        </div>
+
+        <div class="relative">
+          <select @change="$store.ctx.selectPeriod($event.target.value)"
+                  :disabled="!$store.ctx.institutionId || $store.ctx.periods.length === 0"
+                  class="w-full bg-slate-800/80 border border-white/10 text-slate-300 text-xs
+                         rounded-lg pl-2.5 pr-7 py-1.5 appearance-none cursor-pointer
+                         focus:outline-none focus:ring-1 focus:ring-sky-500/70 focus:border-sky-500/70
+                         hover:border-white/20 transition-colors
+                         disabled:opacity-40 disabled:cursor-not-allowed">
+            <option value="">— Seleccionar período —</option>
+            <template x-for="p in $store.ctx.periods" :key="p.id">
+              <option :value="p.id" x-text="p.period_label"
+                      :selected="p.id == $store.ctx.periodId"></option>
+            </template>
+          </select>
+          <i class="fa-solid fa-chevron-down text-slate-500 text-[9px] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+        </div>
+      </div>
+
+    </div>
+    <!-- ── /Context card ── -->
+
+    <!-- Nav -->
+    <nav class="flex-1 px-3 py-4 space-y-0.5">
       <a href="/"
-         class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
-                {% if request.url.path == '/' %}bg-sky-50 text-sky-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
-        <i class="fa-solid fa-gears w-5 text-center"></i>Pipeline
+         class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all
+                {% if request.url.path == '/' %}bg-sky-500/15 text-sky-300 border border-sky-500/20{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+        <i class="fa-solid fa-gears w-4 text-center opacity-80"></i>
+        Pipeline
       </a>
       <a href="/audit"
-         class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
-                {% if request.url.path == '/audit' %}bg-sky-50 text-sky-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
-        <i class="fa-solid fa-magnifying-glass-chart w-5 text-center"></i>Auditoría
+         class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all
+                {% if request.url.path == '/audit' %}bg-sky-500/15 text-sky-300 border border-sky-500/20{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+        <i class="fa-solid fa-magnifying-glass-chart w-4 text-center opacity-80"></i>
+        Auditoría
       </a>
       <a href="/settings"
-         class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
-                {% if request.url.path == '/settings' %}bg-sky-50 text-sky-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
-        <i class="fa-solid fa-sliders w-5 text-center"></i>Configuración
+         class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all
+                {% if request.url.path == '/settings' %}bg-sky-500/15 text-sky-300 border border-sky-500/20{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+        <i class="fa-solid fa-sliders w-4 text-center opacity-80"></i>
+        Configuración
       </a>
     </nav>
 
-    <div class="px-4 py-3 border-t border-gray-200 text-xs text-gray-400">
+    <!-- Footer -->
+    <div class="px-4 py-3 border-t border-white/10 text-[11px] text-slate-600">
       Auditoría Médica v2
     </div>
   </aside>
 
-  <!-- ====== Main content ====== -->
+  <!-- ================================================================ -->
+  <!--  MAIN CONTENT                                                    -->
+  <!-- ================================================================ -->
   <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
     <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0">
-      <h1 class="text-lg font-semibold text-gray-800">{% block page_title %}{% endblock %}</h1>
+      <h1 class="text-base font-semibold text-gray-800">{% block page_title %}{% endblock %}</h1>
       <div class="text-sm text-gray-500">{% block header_extra %}{% endblock %}</div>
     </header>
 
