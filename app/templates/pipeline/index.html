@@ -152,7 +152,19 @@ function pipeline() {
     ],
 
     init() {
-      // Context is managed by the global store; nothing to fetch here
+      // Restore persisted log and stage selection from sessionStorage
+      try {
+        const savedLog   = sessionStorage.getItem('pipeline_logLines');
+        const savedLabel = sessionStorage.getItem('pipeline_currentStageLabel');
+        const savedStages = sessionStorage.getItem('pipeline_selectedStages');
+        if (savedLog)    this.logLines           = JSON.parse(savedLog);
+        if (savedLabel)  this.currentStageLabel  = savedLabel;
+        if (savedStages) this.selectedStages     = JSON.parse(savedStages);
+      } catch {}
+
+      this.$watch('logLines',          v => sessionStorage.setItem('pipeline_logLines',          JSON.stringify(v)));
+      this.$watch('currentStageLabel', v => sessionStorage.setItem('pipeline_currentStageLabel', v));
+      this.$watch('selectedStages',    v => sessionStorage.setItem('pipeline_selectedStages',    JSON.stringify(v)));
     },
 
     selectAll(checked) {
@@ -166,6 +178,8 @@ function pipeline() {
     clearLog() {
       this.logLines = [];
       this.currentStageLabel = '';
+      sessionStorage.removeItem('pipeline_logLines');
+      sessionStorage.removeItem('pipeline_currentStageLabel');
     },
 
     getStageLabelById(id) {
