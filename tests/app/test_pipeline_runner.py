@@ -41,18 +41,18 @@ class TestBuildContext:
 # ---------------------------------------------------------------------------
 
 class TestStageRegistry:
-    def test_all_21_stages_registered(self):
+    def test_all_20_stages_registered(self):
         expected = {
             "LOAD_AND_PROCESS", "RUN_STAGING", "REMOVE_NON_PDF", "CHECK_INVALID_FILES",
             "NORMALIZE_FILES", "LIST_UNREADABLE_PDFS", "DELETE_UNREADABLE_PDFS",
             "DOWNLOAD_INVOICES_FROM_SIHOS", "CHECK_INVOICES", "VERIFY_INVOICE_CODE",
             "CHECK_INVOICE_NUMBER_ON_FILES", "CHECK_FOLDERS_WITH_EXTRA_TEXT",
-            "NORMALIZE_DIR_NAMES", "CHECK_DIRS", "CATEGORIZE_INVOICES",
+            "NORMALIZE_DIR_NAMES", "CHECK_DIRS",
             "CHECK_REQUIRED_DOCS", "VERIFY_CUFE", "TAG_MISSING_CUFE",
             "ORGANIZE", "DOWNLOAD_DRIVE", "DOWNLOAD_MISSING_DOCS",
         }
         assert expected.issubset(set(_STAGE_HANDLERS.keys()))
-        assert len(_STAGE_HANDLERS) == 21
+        assert len(_STAGE_HANDLERS) == 20
 
 
 # ---------------------------------------------------------------------------
@@ -165,34 +165,3 @@ class TestRemoveNonPdfStage:
         assert (stage_dir / "keep.pdf").exists()
 
 
-# ---------------------------------------------------------------------------
-# CATEGORIZE_INVOICES — mocked DB
-# ---------------------------------------------------------------------------
-
-class TestCategorizeInvoicesStage:
-    async def test_yields_distribution(self, minimal_institution, minimal_period):
-        from app.services.pipeline_runner import _build_context, _STAGE_HANDLERS
-
-        db = AsyncMock()
-        with patch("app.services.pipeline_runner.InvoiceRepo") as MockRepo:
-            MockRepo.return_value.get_service_type_distribution = AsyncMock(
-                return_value={"URGENCIAS": 5, "GENERAL": 10}
-            )
-            ctx = _build_context(minimal_institution, minimal_period, db, {})
-            handler = _STAGE_HANDLERS["CATEGORIZE_INVOICES"]
-            lines = [line async for line in handler(ctx)]
-
-        assert any("URGENCIAS" in line and "5" in line for line in lines)
-        assert any("GENERAL" in line and "10" in line for line in lines)
-
-    async def test_no_invoices_yields_warn(self, minimal_institution, minimal_period):
-        from app.services.pipeline_runner import _build_context, _STAGE_HANDLERS
-
-        db = AsyncMock()
-        with patch("app.services.pipeline_runner.InvoiceRepo") as MockRepo:
-            MockRepo.return_value.get_service_type_distribution = AsyncMock(return_value={})
-            ctx = _build_context(minimal_institution, minimal_period, db, {})
-            handler = _STAGE_HANDLERS["CATEGORIZE_INVOICES"]
-            lines = [line async for line in handler(ctx)]
-
-        assert any("[WARN]" in line for line in lines)

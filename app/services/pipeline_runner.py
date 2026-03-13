@@ -509,24 +509,6 @@ async def _check_dirs(ctx: dict) -> AsyncGenerator[str, None]:
             yield f"[WARN] Sin carpeta: {name}"
 
 
-@_stage("CATEGORIZE_INVOICES")
-async def _categorize_invoices(ctx: dict) -> AsyncGenerator[str, None]:
-    """Report distribution of invoices by service type."""
-    from app.repositories.invoice_repo import InvoiceRepo
-
-    period = ctx["period"]
-    db = ctx["db"]
-
-    inv_repo = InvoiceRepo(db)
-    dist = await inv_repo.get_service_type_distribution(period.id)
-    if dist:
-        for code, count in sorted(dist.items()):
-            yield f"[INFO] {code}: {count} factura(s)"
-    else:
-        yield "[WARN] No se encontraron facturas para categorizar."
-    yield f"[INFO] Total tipos de servicio: {len(dist)}"
-
-
 @_stage("CHECK_REQUIRED_DOCS")
 async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
     """Verify required documents per service type; record findings for missing ones."""
