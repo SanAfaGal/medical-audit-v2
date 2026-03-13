@@ -15,7 +15,7 @@
 
   <!-- Filters -->
   <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-4" x-show="$store.ctx.periodId">
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Estado</label>
         <select x-model="filterStatusId" @change="page=1; loadInvoices()"
@@ -27,11 +27,21 @@
         </select>
       </div>
       <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Tipo de administradora</label>
+        <select x-model="filterAdminType" @change="filterAdminCanonical=''; page=1; loadInvoices()"
+                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
+          <option value="">Todos</option>
+          <template x-for="t in uniqueAdminTypes" :key="t">
+            <option :value="t" x-text="t"></option>
+          </template>
+        </select>
+      </div>
+      <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Administradora</label>
         <select x-model="filterAdminCanonical" @change="page=1; loadInvoices()"
                 class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
           <option value="">Todas</option>
-          <template x-for="name in uniqueAdmins" :key="name">
+          <template x-for="name in filteredAdmins" :key="name">
             <option :value="name" x-text="name"></option>
           </template>
         </select>
@@ -114,7 +124,13 @@
                 @click="selectInvoice(inv)">
               <td class="px-4 py-2.5 font-mono font-semibold text-sky-700 text-xs whitespace-nowrap" x-text="inv.invoice_number"></td>
               <td class="px-4 py-2.5 text-gray-700 max-w-[200px] truncate" x-text="inv.patient_name || '—'"></td>
-              <td class="px-4 py-2.5 text-gray-500 text-xs max-w-[160px] truncate" x-text="inv.admin_canonical || '—'"></td>
+              <td class="px-4 py-2.5 text-xs max-w-[180px]">
+                <span class="text-gray-700 truncate block" x-text="inv.admin_canonical || '—'"></span>
+                <template x-if="inv.admin_type">
+                  <span class="inline-block px-1 py-0.5 rounded text-xs font-semibold bg-sky-100 text-sky-600"
+                        x-text="inv.admin_type"></span>
+                </template>
+              </td>
               <td class="px-4 py-2.5 text-gray-500 text-xs max-w-[160px] truncate" x-text="inv.contract_canonical || '—'"></td>
               <td class="px-4 py-2.5 text-gray-500 text-xs whitespace-nowrap" x-text="inv.service_type_code || '—'"></td>
               <td class="px-4 py-2.5">
@@ -162,6 +178,10 @@
       <div>
         <div class="text-xs text-gray-500 mb-0.5">Administradora</div>
         <div class="font-medium text-gray-700" x-text="selectedInvoice && selectedInvoice.admin_canonical || '—'"></div>
+        <template x-if="selectedInvoice && selectedInvoice.admin_type">
+          <span class="inline-block mt-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-sky-100 text-sky-700"
+                x-text="selectedInvoice.admin_type"></span>
+        </template>
       </div>
       <div>
         <div class="text-xs text-gray-500 mb-0.5">Contrato</div>
@@ -256,6 +276,7 @@ function auditApp() {
     contracts: [],
     serviceTypes: [],
     filterStatusId: '',
+    filterAdminType: '',
     filterAdminCanonical: '',
     filterContractCanonical: '',
     filterServiceTypeId: '',
@@ -290,18 +311,29 @@ function auditApp() {
 
       this.$watch('$store.ctx.institutionId', async (val) => {
         this.admins = []; this.contracts = [];
-        this.filterAdminCanonical = ''; this.filterContractCanonical = '';
+        this.filterAdminType = ''; this.filterAdminCanonical = ''; this.filterContractCanonical = '';
         if (val) await this.loadFilterOptions();
       });
+    },
+
+    get uniqueAdminTypes() {
+      const seen = new Set();
+      return this.admins
+        .map(a => a.type)
+        .filter(t => t && !seen.has(t) && seen.add(t))
+        .sort();
     },
 
     get uniqueAdmins() {
       const seen = new Set();
       return this.admins
+        .filter(a => a.canonical_admin && (!this.filterAdminType || a.type === this.filterAdminType))
         .map(a => a.canonical_admin)
-        .filter(name => name && !seen.has(name) && seen.add(name))
+        .filter(name => !seen.has(name) && seen.add(name))
         .sort();
     },
+
+    get filteredAdmins() { return this.uniqueAdmins; },
 
     get uniqueContracts() {
       const seen = new Set();
@@ -327,6 +359,7 @@ function auditApp() {
       if (!periodId) return;
       let url = `/api/invoices?period_id=${encodeURIComponent(periodId)}&page=${this.page}&page_size=${this.pageSize}`;
       if (this.filterStatusId)          url += `&folder_status_id=${encodeURIComponent(this.filterStatusId)}`;
+      if (this.filterAdminType)         url += `&admin_type=${encodeURIComponent(this.filterAdminType)}`;
       if (this.filterAdminCanonical)    url += `&admin_canonical=${encodeURIComponent(this.filterAdminCanonical)}`;
       if (this.filterContractCanonical) url += `&contract_canonical=${encodeURIComponent(this.filterContractCanonical)}`;
       if (this.filterServiceTypeId)     url += `&service_type_id=${encodeURIComponent(this.filterServiceTypeId)}`;
@@ -338,7 +371,7 @@ function auditApp() {
     },
 
     clearFilters() {
-      this.filterStatusId = ''; this.filterAdminCanonical = ''; this.filterContractCanonical = '';
+      this.filterStatusId = ''; this.filterAdminType = ''; this.filterAdminCanonical = ''; this.filterContractCanonical = '';
       this.filterServiceTypeId = ''; this.searchQuery = ''; this.page = 1;
       this.loadInvoices();
     },

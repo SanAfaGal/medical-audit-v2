@@ -110,6 +110,7 @@ class InvoiceRepo:
         folder_status_id: int | None = None,
         service_type_id: int | None = None,
         admin_canonical: str | None = None,
+        admin_type: str | None = None,
         contract_canonical: str | None = None,
         search: str | None = None,
         page: int = 1,
@@ -122,8 +123,14 @@ class InvoiceRepo:
             q = q.where(Invoice.folder_status_id == folder_status_id)
         if service_type_id is not None:
             q = q.where(Invoice.service_type_id == service_type_id)
-        if admin_canonical is not None:
+        if admin_canonical is not None and admin_type is not None:
+            q = q.join(Admin, Invoice.admin_id == Admin.id).where(
+                Admin.canonical_admin == admin_canonical, Admin.type == admin_type
+            )
+        elif admin_canonical is not None:
             q = q.join(Admin, Invoice.admin_id == Admin.id).where(Admin.canonical_admin == admin_canonical)
+        elif admin_type is not None:
+            q = q.join(Admin, Invoice.admin_id == Admin.id).where(Admin.type == admin_type)
         if contract_canonical is not None:
             q = q.join(Contract, Invoice.contract_id == Contract.id).where(Contract.canonical_contract == contract_canonical)
         if search:

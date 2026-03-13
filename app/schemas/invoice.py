@@ -15,6 +15,7 @@ class InvoiceListItem(BaseModel):
     patient_name: str
     admin_id: int | None
     admin_canonical: str | None       # resolved from admin.canonical_admin
+    admin_type: str | None            # resolved from admin.type (EPS, SOAT, ARL…)
     contract_id: int | None
     contract_canonical: str | None    # resolved from contract.canonical_contract
     folder_status: str                # resolved from folder_status.status
