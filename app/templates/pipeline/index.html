@@ -77,6 +77,64 @@
     </p>
   </section>
 
+  <!-- Unmapped items confirmation panel -->
+  <section x-show="unmappedConfirm"
+           class="bg-amber-50 border border-amber-300 rounded-xl p-5 space-y-4">
+    <div class="flex items-center gap-2 text-amber-800 font-semibold text-sm">
+      <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+      Registros sin mapear — revisa la configuración del hospital antes de continuar
+    </div>
+    <p class="text-sm text-amber-700">
+      El Excel contiene administradoras, contratos o servicios que aún no tienen un nombre canónico asignado.
+      Las facturas asociadas a estos registros serán <strong>omitidas</strong> si continúas ahora.
+      Puedes ir a la configuración del hospital, mapear los registros pendientes y luego volver a cargar.
+    </p>
+
+    <template x-if="unmappedConfirm && unmappedConfirm.admins.length">
+      <div>
+        <p class="text-xs font-semibold text-amber-800 mb-1">Administradoras sin mapear (<span x-text="unmappedConfirm.admins.length"></span>)</p>
+        <ul class="text-xs font-mono bg-amber-100 rounded-lg px-4 py-2 space-y-0.5 max-h-28 overflow-y-auto">
+          <template x-for="v in unmappedConfirm.admins" :key="v">
+            <li class="text-amber-900" x-text="v"></li>
+          </template>
+        </ul>
+      </div>
+    </template>
+
+    <template x-if="unmappedConfirm && unmappedConfirm.contracts.length">
+      <div>
+        <p class="text-xs font-semibold text-amber-800 mb-1">Contratos sin mapear (<span x-text="unmappedConfirm.contracts.length"></span>)</p>
+        <ul class="text-xs font-mono bg-amber-100 rounded-lg px-4 py-2 space-y-0.5 max-h-28 overflow-y-auto">
+          <template x-for="v in unmappedConfirm.contracts" :key="v">
+            <li class="text-amber-900" x-text="v"></li>
+          </template>
+        </ul>
+      </div>
+    </template>
+
+    <template x-if="unmappedConfirm && unmappedConfirm.services.length">
+      <div>
+        <p class="text-xs font-semibold text-amber-800 mb-1">Servicios sin mapear (<span x-text="unmappedConfirm.services.length"></span>)</p>
+        <ul class="text-xs font-mono bg-amber-100 rounded-lg px-4 py-2 space-y-0.5 max-h-28 overflow-y-auto">
+          <template x-for="v in unmappedConfirm.services" :key="v">
+            <li class="text-amber-900" x-text="v"></li>
+          </template>
+        </ul>
+      </div>
+    </template>
+
+    <div class="flex gap-3 pt-1">
+      <button @click="unmappedConfirm && unmappedConfirm.resolve(true)"
+              class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors">
+        <i class="fa-solid fa-circle-check mr-1"></i>Ya los corregí, continuar
+      </button>
+      <button @click="unmappedConfirm && unmappedConfirm.resolve(false)"
+              class="px-4 py-2 border border-amber-400 text-amber-800 text-sm font-medium rounded-lg hover:bg-amber-100 transition-colors">
+        <i class="fa-solid fa-xmark mr-1"></i>Cancelar — voy a corregirlos
+      </button>
+    </div>
+  </section>
+
   <!-- Run button -->
   <div class="flex items-center gap-4">
     <button @click="runPipeline()"
@@ -127,6 +185,7 @@ function pipeline() {
     currentStageLabel: '',
     excelFile: null,
     sihosInvoiceNumbers: '',
+    unmappedConfirm: null,   // { admins, contracts, services, resolve } while waiting for user
 
     stages: [
       { id: 'LOAD_AND_PROCESS',              label: 'Carga y procesamiento',        description: 'Cargar Excel SIHOS, registrar mapeos, insertar facturas', icon: 'fa-solid fa-file-import' },
@@ -200,27 +259,58 @@ function pipeline() {
 
         try {
           if (stageId === 'LOAD_AND_PROCESS' && this.excelFile) {
-            const formData = new FormData();
-            formData.append('institution_id', institutionId);
-            formData.append('period_id', periodId);
-            formData.append('file', this.excelFile);
+            const buildForm = (scanOnly) => {
+              const fd = new FormData();
+              fd.append('institution_id', institutionId);
+              fd.append('period_id', periodId);
+              fd.append('file', this.excelFile);
+              if (scanOnly) fd.append('scan_only', 'true');
+              return fd;
+            };
 
-            this.logLines.push('[INFO] Enviando archivo Excel al servidor...');
-            const res = await fetch('/api/invoices/ingest', { method: 'POST', body: formData });
+            // Phase 1: scan — detect unmapped items without inserting invoices
+            this.logLines.push('[INFO] Verificando mapeos del Excel...');
+            const scanRes = await fetch('/api/invoices/ingest', { method: 'POST', body: buildForm(true) });
+            if (!scanRes.ok) {
+              const err = await scanRes.json();
+              this.logLines.push(`[ERROR] ${err.detail || 'Error desconocido'}`);
+              this.scrollLog(); continue;
+            }
+            const scan = await scanRes.json();
+
+            const hasUnmapped = scan.unknown_admins?.length || scan.unknown_contracts?.length || scan.unknown_services?.length;
+            if (hasUnmapped) {
+              // Pause and show the confirmation panel
+              const confirmed = await new Promise(resolve => {
+                this.unmappedConfirm = {
+                  admins:    scan.unknown_admins    || [],
+                  contracts: scan.unknown_contracts || [],
+                  services:  scan.unknown_services  || [],
+                  resolve: (v) => { this.unmappedConfirm = null; resolve(v); },
+                };
+              });
+              if (!confirmed) {
+                this.logLines.push('[WARN] Ingestión cancelada — corrige los mapeos y vuelve a ejecutar esta etapa.');
+                this.scrollLog(); continue;
+              }
+              this.logLines.push('[INFO] Mapeos confirmados, cargando facturas...');
+            } else {
+              this.logLines.push('[INFO] Todos los mapeos están completos, cargando facturas...');
+            }
+
+            // Phase 2: actual ingest
+            const res = await fetch('/api/invoices/ingest', { method: 'POST', body: buildForm(false) });
             if (!res.ok) {
               const err = await res.json();
               this.logLines.push(`[ERROR] ${err.detail || 'Error desconocido'}`);
-            } else {
-              const data = await res.json();
-              this.logLines.push(`[OK] Facturas insertadas: ${data.inserted}`);
-              if (data.skipped) this.logLines.push(`[WARN] Filas omitidas por registros sin mapear: ${data.skipped}`);
-              if (data.unknown_admins?.length)
-                this.logLines.push(`[WARN] Administradoras sin mapear (${data.unknown_admins.length}): ${data.unknown_admins.join(', ')} — revisa la configuración del hospital`);
-              if (data.unknown_contracts?.length)
-                this.logLines.push(`[WARN] Contratos sin mapear (${data.unknown_contracts.length}): ${data.unknown_contracts.join(', ')} — revisa la configuración del hospital`);
-              if (data.unknown_services?.length)
-                this.logLines.push(`[WARN] Servicios sin mapear (${data.unknown_services.length}): ${data.unknown_services.join(', ')} — revisa la configuración del hospital`);
+              this.scrollLog(); continue;
             }
+            const data = await res.json();
+            this.logLines.push(`[OK] Facturas insertadas: ${data.inserted}`);
+            if (data.skipped)               this.logLines.push(`[INFO] Filas omitidas (sin fecha): ${data.skipped}`);
+            if (data.unknown_admins?.length)    this.logLines.push(`[WARN] Administradoras sin mapear (${data.unknown_admins.length}): ${data.unknown_admins.join(', ')}`);
+            if (data.unknown_contracts?.length) this.logLines.push(`[WARN] Contratos sin mapear (${data.unknown_contracts.length}): ${data.unknown_contracts.join(', ')}`);
+            if (data.unknown_services?.length)  this.logLines.push(`[WARN] Servicios sin mapear (${data.unknown_services.length}): ${data.unknown_services.join(', ')}`);
             this.scrollLog();
             continue;
           }

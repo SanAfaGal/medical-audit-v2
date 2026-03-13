@@ -46,6 +46,7 @@ async def ingest(
     institution: Institution,
     period_id: int,
     db: AsyncSession,
+    scan_only: bool = False,
 ) -> dict:
     """
     Full ingestion pipeline for SIHOS Excel (new uppercase format).
@@ -85,29 +86,23 @@ async def ingest(
             skipped += 1
             continue
 
-        # Upsert admin — skip if not yet mapped
+        # Upsert admin — record unmapped but always continue
         admin = await inst_repo.upsert_admin(institution.id, raw_admin)
-        if admin.canonical_admin is None:
-            if raw_admin not in unknown_admins:
-                unknown_admins.append(raw_admin)
-            skipped += 1
-            continue
+        if admin.canonical_admin is None and raw_admin not in unknown_admins:
+            unknown_admins.append(raw_admin)
 
-        # Upsert contract — skip if present but not yet mapped
+        # Upsert contract — record unmapped but always continue
         contract = await inst_repo.upsert_contract(institution.id, raw_contract) if raw_contract else None
-        if contract and contract.canonical_contract is None:
-            if raw_contract not in unknown_contracts:
-                unknown_contracts.append(raw_contract)
-            skipped += 1
-            continue
+        if contract and contract.canonical_contract is None and raw_contract not in unknown_contracts:
+            unknown_contracts.append(raw_contract)
 
-        # Upsert service — skip if not yet mapped (service_type_id is NULL)
+        # Upsert service — record unmapped but always continue
         service = await inst_repo.upsert_service(institution.id, raw_service) if raw_service else None
         service_type_id = service.service_type_id if service else None
-        if service and service_type_id is None:
-            if raw_service not in unknown_services:
-                unknown_services.append(raw_service)
-            skipped += 1
+        if service and service_type_id is None and raw_service not in unknown_services:
+            unknown_services.append(raw_service)
+
+        if scan_only:
             continue
 
         invoice_data = {
@@ -131,6 +126,7 @@ async def ingest(
         institution.name, period_id, inserted, skipped,
     )
     return {
+        "scan_only": scan_only,
         "inserted": inserted,
         "skipped": skipped,
         "unknown_admins": unknown_admins,

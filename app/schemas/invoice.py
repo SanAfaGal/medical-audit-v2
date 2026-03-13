@@ -20,8 +20,8 @@ class InvoiceListItem(BaseModel):
     contract_canonical: str | None    # resolved from contract.canonical_contract
     folder_status: str                # resolved from folder_status.status
     folder_status_id: int
-    service_type_code: str            # resolved from service_type.code
-    service_type_id: int
+    service_type_code: str | None     # resolved from service_type.code
+    service_type_id: int | None
     missing_file_count: int           # count of unresolved missing_files
     date: datetime.date
 

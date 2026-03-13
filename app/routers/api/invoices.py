@@ -55,7 +55,7 @@ async def list_invoices(
             contract_canonical=inv.contract.canonical_contract if inv.contract else None,
             folder_status=inv.folder_status.status,
             folder_status_id=inv.folder_status_id,
-            service_type_code=inv.service_type.code,
+            service_type_code=inv.service_type.code if inv.service_type else None,
             service_type_id=inv.service_type_id,
             missing_file_count=len([mf for mf in inv.missing_files if mf.resolved_at is None]),
             date=inv.date,
@@ -106,6 +106,7 @@ async def ingest_excel(
     institution_id: int = Form(...),
     period_id: int = Form(...),
     file: UploadFile = File(...),
+    scan_only: bool = Form(False),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload and ingest a SIHOS Excel export."""
@@ -118,5 +119,5 @@ async def ingest_excel(
         raise HTTPException(404, "Institución no encontrada")
 
     file_bytes = await file.read()
-    result = await ingest(file_bytes, institution, period_id, db)
+    result = await ingest(file_bytes, institution, period_id, db, scan_only=scan_only)
     return result

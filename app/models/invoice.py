@@ -22,7 +22,7 @@ class Invoice(Base):
     patient_name: Mapped[str] = mapped_column(String(300), nullable=False)
     admin_id: Mapped[int | None] = mapped_column(ForeignKey("admins.id"))
     contract_id: Mapped[int | None] = mapped_column(ForeignKey("contracts.id"))
-    service_type_id: Mapped[int] = mapped_column(ForeignKey("service_types.id"), nullable=False)
+    service_type_id: Mapped[int | None] = mapped_column(ForeignKey("service_types.id"), nullable=True)
     employee: Mapped[str | None] = mapped_column(String(200))
     folder_status_id: Mapped[int] = mapped_column(ForeignKey("folder_statuses.id"), nullable=False, default=2)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
