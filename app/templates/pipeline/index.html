@@ -4,178 +4,380 @@
 {% block page_title %}Pipeline de Auditoría{% endblock %}
 
 {% block content %}
-<div x-data="pipeline()" class="max-w-5xl mx-auto space-y-6">
+<div x-data="pipeline()" class="flex flex-col overflow-hidden"
+     style="margin:-1.5rem; height:calc(100vh - 58px);">
 
-  <!-- No context warning -->
+  <!-- ═══════════════════════════════════════ NO CONTEXT WARNING ══ -->
   <div x-show="!$store.ctx.institutionId || !$store.ctx.periodId"
-       class="flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-    <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+       x-transition
+       class="shrink-0 flex items-center gap-3 px-5 py-2.5 bg-amber-50 border-b border-amber-200 text-xs text-amber-800">
+    <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
     Selecciona un hospital y período en el panel lateral para ejecutar el pipeline.
   </div>
 
-  <!-- Stage checklist -->
-  <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-        <i class="fa-solid fa-list-check text-sky-600 mr-2"></i>Etapas del pipeline
-      </h2>
-      <div class="flex gap-2">
-        <button @click="selectAll(true)"
-                class="text-xs px-3 py-1.5 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-600 transition-colors">
-          Seleccionar todo
-        </button>
-        <button @click="selectAll(false)"
-                class="text-xs px-3 py-1.5 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-600 transition-colors">
-          Deseleccionar todo
-        </button>
-      </div>
-    </div>
+  <!-- ═══════════════════════════════════════ MAIN LAYOUT ══════════ -->
+  <div class="flex-1 flex min-h-0">
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-      <template x-for="stage in stages" :key="stage.id">
-        <label class="flex items-start gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
-               :class="{'border-sky-400 bg-sky-50': selectedStages.includes(stage.id)}">
-          <input type="checkbox" class="mt-0.5 rounded text-sky-600"
-                 :value="stage.id" x-model="selectedStages" />
-          <div class="min-w-0">
-            <div class="flex items-center gap-1.5">
-              <i :class="stage.icon + ' text-sky-500 text-xs w-4 text-center'"></i>
-              <span class="text-sm font-medium text-gray-800" x-text="stage.label"></span>
-            </div>
-            <p class="text-xs text-gray-500 mt-0.5 truncate" x-text="stage.description"></p>
+    <!-- ─────────────────────── LEFT PANEL: Stage selector ──────── -->
+    <div class="w-[300px] shrink-0 flex flex-col border-r border-gray-200 bg-gray-50">
+
+      <!-- Header + progress -->
+      <div class="px-4 py-3 bg-white border-b border-gray-200 shrink-0">
+        <div class="flex items-center justify-between mb-2.5">
+          <span class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Etapas</span>
+          <div class="flex gap-1">
+            <button @click="selectAll(true)"
+                    class="text-[10px] px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 text-gray-500 transition-colors">
+              Todo
+            </button>
+            <button @click="selectAll(false)"
+                    class="text-[10px] px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 text-gray-500 transition-colors">
+              Nada
+            </button>
           </div>
-        </label>
-      </template>
-    </div>
-  </section>
+        </div>
 
-  <!-- Excel upload (for LOAD_AND_PROCESS) -->
-  <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5"
-           x-show="selectedStages.includes('LOAD_AND_PROCESS')">
-    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
-      <i class="fa-solid fa-file-excel text-green-600 mr-2"></i>Archivo SIHOS (para carga de facturas)
-    </h2>
-    <input type="file" accept=".xlsx,.xls" @change="setFile($event)"
-           class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg
-                  file:border-0 file:text-sm file:font-medium file:bg-sky-50 file:text-sky-700
-                  hover:file:bg-sky-100 transition-colors" />
-    <p class="text-xs text-gray-400 mt-1.5">Archivo Excel exportado desde SIHOS con las facturas del período.</p>
-  </section>
+        <!-- Progress bar -->
+        <div class="space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] text-gray-400" x-text="selectedStages.length + ' etapas seleccionadas'"></span>
+            <span class="text-[10px] font-semibold text-sky-600"
+                  x-show="running || completedCount > 0"
+                  x-text="completedCount + '/' + selectedStages.length + ' completadas'"></span>
+          </div>
+          <div class="h-1 bg-gray-200 rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-500 ease-out"
+                 :class="progressPct === 100 ? 'bg-emerald-500' : 'bg-gradient-to-r from-sky-500 to-indigo-500'"
+                 :style="`width: ${progressPct}%`"></div>
+          </div>
+        </div>
+      </div>
 
-  <!-- Invoice numbers input (for DOWNLOAD_INVOICES_FROM_SIHOS) -->
-  <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5"
-           x-show="selectedStages.includes('DOWNLOAD_INVOICES_FROM_SIHOS')">
-    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
-      <i class="fa-solid fa-cloud-arrow-down text-sky-600 mr-2"></i>Facturas a descargar desde SIHOS
-    </h2>
-    <textarea x-model="sihosInvoiceNumbers" rows="4"
-              placeholder="Una factura por línea, o separadas por coma:&#10;HSL-001&#10;HSL-002&#10;HSL-003"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono
-                     focus:ring-2 focus:ring-sky-500 focus:border-sky-500 resize-y"></textarea>
-    <p class="text-xs text-gray-400 mt-1.5">
-      Ingresa los números de factura a descargar del portal SIHOS. Una por línea o separadas por coma.
-    </p>
-  </section>
+      <!-- Stage groups (scrollable) -->
+      <div class="flex-1 overflow-y-auto py-2">
+        <template x-for="group in stageGroups" :key="group.id">
+          <div class="mb-1">
 
-  <!-- Unmapped items confirmation panel -->
-  <section x-show="unmappedConfirm"
-           class="bg-amber-50 border border-amber-300 rounded-xl p-5 space-y-4">
-    <div class="flex items-center gap-2 text-amber-800 font-semibold text-sm">
-      <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
-      Registros sin mapear — revisa la configuración del hospital antes de continuar
-    </div>
-    <p class="text-sm text-amber-700">
-      El Excel contiene administradoras, contratos o servicios que aún no tienen un nombre canónico asignado.
-      Las facturas asociadas a estos registros serán <strong>omitidas</strong> si continúas ahora.
-      Puedes ir a la configuración del hospital, mapear los registros pendientes y luego volver a cargar.
-    </p>
+            <!-- Group header (click to toggle all) -->
+            <button @click="toggleGroup(group)"
+                    class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-white transition-colors group">
+              <div class="w-1.5 h-1.5 rounded-full shrink-0 transition-colors"
+                   :class="isGroupSelected(group) ? groupColors[group.id].dot : isGroupPartial(group) ? 'bg-gray-400' : 'bg-gray-300'"></div>
+              <i :class="group.icon + ' text-[10px] w-3 text-center shrink-0'" :style="`color: var(--g-${group.id})`"></i>
+              <span class="text-[10px] font-bold uppercase tracking-widest flex-1"
+                    :style="`color: var(--g-${group.id})`"
+                    x-text="group.label"></span>
+              <i class="fa-solid fa-chevron-right text-[8px] text-gray-400 group-hover:text-gray-600 transition-transform"
+                 :class="isGroupSelected(group) ? 'rotate-90' : ''"></i>
+            </button>
 
-    <template x-if="unmappedConfirm && unmappedConfirm.admins.length">
-      <div>
-        <p class="text-xs font-semibold text-amber-800 mb-1">Administradoras sin mapear (<span x-text="unmappedConfirm.admins.length"></span>)</p>
-        <ul class="text-xs font-mono bg-amber-100 rounded-lg px-4 py-2 space-y-0.5 max-h-28 overflow-y-auto">
-          <template x-for="v in unmappedConfirm.admins" :key="v">
-            <li class="text-amber-900" x-text="v"></li>
+            <!-- Stage items in group -->
+            <template x-for="stageId in group.stages" :key="stageId">
+              <label class="flex items-start gap-2.5 px-3 py-2 mx-1 rounded-lg cursor-pointer transition-all"
+                     :class="selectedStages.includes(stageId)
+                       ? 'bg-white shadow-sm border border-gray-200'
+                       : 'hover:bg-white/60 border border-transparent'">
+                <input type="checkbox" class="mt-0.5 rounded text-sky-600 shrink-0 cursor-pointer"
+                       :value="stageId" x-model="selectedStages" />
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[12px] font-semibold text-gray-800 leading-tight" x-text="stageById(stageId).label"></span>
+                    <!-- Status indicator -->
+                    <span class="ml-auto shrink-0">
+                      <template x-if="stageStatuses[stageId] === 'running'">
+                        <i class="fa-solid fa-spinner fa-spin text-sky-500 text-[10px]"></i>
+                      </template>
+                      <template x-if="stageStatuses[stageId] === 'done'">
+                        <i class="fa-solid fa-check text-emerald-500 text-[10px]"></i>
+                      </template>
+                      <template x-if="stageStatuses[stageId] === 'warn'">
+                        <i class="fa-solid fa-triangle-exclamation text-amber-500 text-[10px]"></i>
+                      </template>
+                      <template x-if="stageStatuses[stageId] === 'error'">
+                        <i class="fa-solid fa-xmark text-red-500 text-[10px]"></i>
+                      </template>
+                    </span>
+                  </div>
+                  <p class="text-[11px] text-gray-400 mt-0.5 leading-tight" x-text="stageById(stageId).description"></p>
+                </div>
+              </label>
+            </template>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── SIHOS Excel upload ── -->
+      <div x-show="selectedStages.includes('LOAD_AND_PROCESS')"
+           x-transition
+           class="shrink-0 border-t border-gray-200 bg-white p-3">
+        <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">
+          <i class="fa-solid fa-file-excel text-emerald-600 mr-1"></i>Archivo SIHOS
+        </p>
+
+        <!-- Drop zone -->
+        <div @dragover.prevent="dragOver=true"
+             @dragleave.prevent="dragOver=false"
+             @drop.prevent="handleDrop($event)"
+             @click="$refs.fileInput.click()"
+             class="relative border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-all"
+             :class="dragOver ? 'border-sky-400 bg-sky-50' : excelFile ? 'border-emerald-400 bg-emerald-50' : 'border-gray-300 hover:border-gray-400 bg-gray-50'">
+          <input type="file" accept=".xlsx,.xls" x-ref="fileInput"
+                 @change="setFile($event)" class="hidden" />
+          <template x-if="!excelFile">
+            <div>
+              <i class="fa-solid fa-cloud-arrow-up text-gray-400 text-lg mb-1"></i>
+              <p class="text-[11px] text-gray-500">Arrastra el Excel o <span class="text-sky-600 font-medium">haz clic</span></p>
+            </div>
           </template>
-        </ul>
-      </div>
-    </template>
-
-    <template x-if="unmappedConfirm && unmappedConfirm.contracts.length">
-      <div>
-        <p class="text-xs font-semibold text-amber-800 mb-1">Contratos sin mapear (<span x-text="unmappedConfirm.contracts.length"></span>)</p>
-        <ul class="text-xs font-mono bg-amber-100 rounded-lg px-4 py-2 space-y-0.5 max-h-28 overflow-y-auto">
-          <template x-for="v in unmappedConfirm.contracts" :key="v">
-            <li class="text-amber-900" x-text="v"></li>
+          <template x-if="excelFile">
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-file-excel text-emerald-600 text-base shrink-0"></i>
+              <div class="min-w-0 text-left">
+                <p class="text-[11px] font-medium text-gray-800 truncate" x-text="excelFile.name"></p>
+                <p class="text-[10px] text-gray-400" x-text="formatFileSize(excelFile.size)"></p>
+              </div>
+              <button @click.stop="excelFile=null" class="ml-auto text-gray-400 hover:text-red-400 transition-colors">
+                <i class="fa-solid fa-xmark text-xs"></i>
+              </button>
+            </div>
           </template>
-        </ul>
+        </div>
       </div>
-    </template>
 
-    <template x-if="unmappedConfirm && unmappedConfirm.services.length">
-      <div>
-        <p class="text-xs font-semibold text-amber-800 mb-1">Servicios sin mapear (<span x-text="unmappedConfirm.services.length"></span>)</p>
-        <ul class="text-xs font-mono bg-amber-100 rounded-lg px-4 py-2 space-y-0.5 max-h-28 overflow-y-auto">
-          <template x-for="v in unmappedConfirm.services" :key="v">
-            <li class="text-amber-900" x-text="v"></li>
-          </template>
-        </ul>
+      <!-- ── SIHOS invoice numbers ── -->
+      <div x-show="selectedStages.includes('DOWNLOAD_INVOICES_FROM_SIHOS')"
+           x-transition
+           class="shrink-0 border-t border-gray-200 bg-white p-3">
+        <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">
+          <i class="fa-solid fa-cloud-arrow-down text-sky-600 mr-1"></i>Facturas SIHOS
+        </p>
+        <textarea x-model="sihosInvoiceNumbers" rows="3"
+                  placeholder="Una por línea o separadas por coma&#10;HSL-001, HSL-002..."
+                  class="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-[11px] font-mono
+                         focus:ring-1 focus:ring-sky-500 focus:border-sky-500 resize-none text-gray-700"></textarea>
       </div>
-    </template>
 
-    <div class="flex gap-3 pt-1">
-      <button @click="unmappedConfirm && unmappedConfirm.resolve(true)"
-              class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors">
-        <i class="fa-solid fa-circle-check mr-1"></i>Ya los corregí, continuar
-      </button>
-      <button @click="unmappedConfirm && unmappedConfirm.resolve(false)"
-              class="px-4 py-2 border border-amber-400 text-amber-800 text-sm font-medium rounded-lg hover:bg-amber-100 transition-colors">
-        <i class="fa-solid fa-xmark mr-1"></i>Cancelar — voy a corregirlos
-      </button>
+      <!-- ── Run button ── -->
+      <div class="shrink-0 border-t border-gray-200 bg-white px-3 py-3 flex items-center gap-2">
+        <button @click="runPipeline()"
+                :disabled="running || !$store.ctx.institutionId || !$store.ctx.periodId || selectedStages.length === 0"
+                class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all"
+                :class="running
+                  ? 'bg-sky-600 text-white cursor-not-allowed'
+                  : (!$store.ctx.institutionId || !$store.ctx.periodId || selectedStages.length === 0)
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-sky-600 hover:bg-sky-700 text-white shadow-sm hover:shadow'">
+          <i class="fa-solid fa-play text-xs" x-show="!running"></i>
+          <i class="fa-solid fa-spinner fa-spin text-xs" x-show="running"></i>
+          <span x-text="running ? 'Ejecutando...' : 'Ejecutar'"></span>
+        </button>
+        <button @click="clearLog()" x-show="logLines.length > 0" :disabled="running"
+                class="p-2.5 rounded-lg border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200 disabled:opacity-40 transition-colors"
+                title="Limpiar log">
+          <i class="fa-solid fa-trash-can text-xs"></i>
+        </button>
+      </div>
     </div>
-  </section>
+    <!-- /LEFT PANEL -->
 
-  <!-- Run button -->
-  <div class="flex items-center gap-4">
-    <button @click="runPipeline()"
-            :disabled="running || !$store.ctx.institutionId || !$store.ctx.periodId || selectedStages.length === 0"
-            class="flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:bg-gray-300
-                   disabled:cursor-not-allowed text-white font-medium rounded-lg text-sm transition-colors">
-      <i class="fa-solid fa-play" x-show="!running"></i>
-      <i class="fa-solid fa-spinner fa-spin" x-show="running"></i>
-      <span x-text="running ? 'Ejecutando...' : 'Ejecutar pipeline'"></span>
-    </button>
-    <button @click="clearLog()" x-show="logLines.length > 0" :disabled="running"
-            class="text-sm text-gray-500 hover:text-gray-700 underline disabled:opacity-50">
-      Limpiar log
-    </button>
-    <span x-show="currentStageLabel" class="text-sm text-gray-600">
-      Etapa actual: <strong x-text="currentStageLabel"></strong>
-    </span>
-  </div>
+    <!-- ─────────────────────── RIGHT PANEL: Terminal ────────────── -->
+    <div class="flex-1 flex flex-col min-w-0 bg-[#0d1117] relative">
 
-  <!-- Log output area -->
-  <section class="bg-gray-900 rounded-xl shadow-sm border border-gray-700 p-4 min-h-[200px] max-h-[500px] overflow-y-auto font-mono text-xs"
-           x-ref="logContainer"
-           x-show="logLines.length > 0">
-    <template x-for="(line, idx) in logLines" :key="idx">
-      <div class="leading-5"
-           :class="{
-             'text-red-400':    line.startsWith('[ERROR]'),
-             'text-yellow-400': line.startsWith('[WARN]'),
-             'text-green-400':  line.startsWith('[OK]'),
-             'text-blue-300':   line.startsWith('[INFO]'),
-             'text-gray-300':   !line.startsWith('[ERROR]') && !line.startsWith('[WARN]') && !line.startsWith('[OK]') && !line.startsWith('[INFO]'),
-           }"
-           x-text="line">
+      <!-- Terminal titlebar -->
+      <div class="shrink-0 flex items-center gap-3 px-4 py-2.5 bg-[#161b22] border-b border-white/10">
+        <!-- Traffic lights -->
+        <div class="flex items-center gap-1.5">
+          <div class="w-3 h-3 rounded-full bg-red-500/70"></div>
+          <div class="w-3 h-3 rounded-full bg-amber-500/70"></div>
+          <div class="w-3 h-3 rounded-full bg-emerald-500/70"></div>
+        </div>
+        <div class="flex-1 min-w-0 font-mono text-[11px]">
+          <span class="text-slate-500" x-show="!running">pipeline — listo</span>
+          <span class="flex items-center gap-2" x-show="running">
+            <span class="inline-flex gap-0.5 items-end h-3">
+              <span class="w-0.5 bg-sky-400 rounded-sm animate-pulse" style="height:40%;animation-delay:0ms"></span>
+              <span class="w-0.5 bg-sky-400 rounded-sm animate-pulse" style="height:70%;animation-delay:150ms"></span>
+              <span class="w-0.5 bg-sky-400 rounded-sm animate-pulse" style="height:100%;animation-delay:300ms"></span>
+              <span class="w-0.5 bg-sky-400 rounded-sm animate-pulse" style="height:60%;animation-delay:450ms"></span>
+            </span>
+            <span class="text-sky-400" x-text="currentStageLabel"></span>
+          </span>
+        </div>
+        <span class="font-mono text-[10px] text-slate-600"
+              x-show="logLines.length > 0"
+              x-text="logLines.length + ' líneas'"></span>
       </div>
-    </template>
-  </section>
 
+      <!-- Log area -->
+      <div class="flex-1 overflow-y-auto min-h-0 px-4 py-3 font-mono text-[12px] leading-[1.65]"
+           x-ref="logContainer">
+
+        <!-- Empty state -->
+        <div x-show="logLines.length === 0"
+             class="h-full flex flex-col items-center justify-center text-slate-600 select-none">
+          <div class="mb-4 w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
+            <i class="fa-solid fa-terminal text-slate-500 text-2xl"></i>
+          </div>
+          <p class="text-sm font-semibold text-slate-500">Consola vacía</p>
+          <p class="text-xs text-slate-600 mt-1">Selecciona etapas y presiona Ejecutar</p>
+        </div>
+
+        <!-- Log lines -->
+        <template x-for="(line, idx) in logLines" :key="idx">
+          <div class="log-line" :class="lineClass(line)">
+            <!-- Stage separator -->
+            <template x-if="line.startsWith('───')">
+              <div class="flex items-center gap-3 py-2 mt-1">
+                <div class="h-px flex-1 bg-white/10"></div>
+                <span class="text-[10px] uppercase tracking-widest text-slate-500 font-semibold"
+                      x-text="line.replace(/─+/g, '').trim()"></span>
+                <div class="h-px flex-1 bg-white/10"></div>
+              </div>
+            </template>
+            <!-- Regular line -->
+            <template x-if="!line.startsWith('───')">
+              <div class="flex gap-2 py-px">
+                <span class="shrink-0 mt-px" x-html="linePrefix(line)"></span>
+                <span x-text="lineBody(line)"></span>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── Unmapped confirmation overlay (slides up from bottom) ── -->
+      <div x-show="unmappedConfirm"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0 translate-y-4"
+           x-transition:enter-end="opacity-100 translate-y-0"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100 translate-y-0"
+           x-transition:leave-end="opacity-0 translate-y-4"
+           class="absolute inset-x-0 bottom-0 bg-[#161b22] border-t border-amber-500/40 p-4 shadow-2xl overflow-y-auto"
+           style="max-height: 65%;">
+
+        <div class="flex items-start gap-3 mb-4">
+          <div class="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+            <i class="fa-solid fa-triangle-exclamation text-amber-400 text-sm"></i>
+          </div>
+          <div>
+            <p class="text-sm font-semibold text-amber-300 mb-0.5">Registros sin mapear detectados</p>
+            <p class="text-[11px] text-slate-400 leading-relaxed">
+              El Excel contiene administradoras, contratos o servicios sin nombre canónico asignado.
+              Ve a <strong class="text-slate-300">Configuración</strong> para mapearlos, luego vuelve y confirma.
+            </p>
+          </div>
+        </div>
+
+        <!-- Three columns -->
+        <div class="grid grid-cols-3 gap-3 mb-4">
+          <!-- Admins -->
+          <template x-if="unmappedConfirm">
+            <div class="bg-[#0d1117] rounded-lg p-3" :class="unmappedConfirm.admins.length === 0 ? 'opacity-40' : ''">
+              <p class="text-[10px] font-bold uppercase tracking-wider mb-2"
+                 :class="unmappedConfirm.admins.length > 0 ? 'text-amber-400' : 'text-slate-500'">
+                <i class="fa-solid mr-1" :class="unmappedConfirm.admins.length > 0 ? 'fa-building-user' : 'fa-check text-emerald-500'"></i>
+                Administradoras
+                <span x-show="unmappedConfirm.admins.length > 0" x-text="'(' + unmappedConfirm.admins.length + ')'"></span>
+              </p>
+              <template x-if="unmappedConfirm.admins.length > 0">
+                <ul class="space-y-0.5 max-h-24 overflow-y-auto">
+                  <template x-for="v in unmappedConfirm.admins" :key="v">
+                    <li class="text-[11px] font-mono text-slate-400 truncate" x-text="v"></li>
+                  </template>
+                </ul>
+              </template>
+              <template x-if="unmappedConfirm.admins.length === 0">
+                <p class="text-[11px] text-slate-500 italic">Todo mapeado</p>
+              </template>
+            </div>
+          </template>
+
+          <!-- Contracts -->
+          <template x-if="unmappedConfirm">
+            <div class="bg-[#0d1117] rounded-lg p-3" :class="unmappedConfirm.contracts.length === 0 ? 'opacity-40' : ''">
+              <p class="text-[10px] font-bold uppercase tracking-wider mb-2"
+                 :class="unmappedConfirm.contracts.length > 0 ? 'text-amber-400' : 'text-slate-500'">
+                <i class="fa-solid mr-1" :class="unmappedConfirm.contracts.length > 0 ? 'fa-file-contract' : 'fa-check text-emerald-500'"></i>
+                Contratos
+                <span x-show="unmappedConfirm.contracts.length > 0" x-text="'(' + unmappedConfirm.contracts.length + ')'"></span>
+              </p>
+              <template x-if="unmappedConfirm.contracts.length > 0">
+                <ul class="space-y-0.5 max-h-24 overflow-y-auto">
+                  <template x-for="v in unmappedConfirm.contracts" :key="v">
+                    <li class="text-[11px] font-mono text-slate-400 truncate" x-text="v"></li>
+                  </template>
+                </ul>
+              </template>
+              <template x-if="unmappedConfirm.contracts.length === 0">
+                <p class="text-[11px] text-slate-500 italic">Todo mapeado</p>
+              </template>
+            </div>
+          </template>
+
+          <!-- Services -->
+          <template x-if="unmappedConfirm">
+            <div class="bg-[#0d1117] rounded-lg p-3" :class="unmappedConfirm.services.length === 0 ? 'opacity-40' : ''">
+              <p class="text-[10px] font-bold uppercase tracking-wider mb-2"
+                 :class="unmappedConfirm.services.length > 0 ? 'text-amber-400' : 'text-slate-500'">
+                <i class="fa-solid mr-1" :class="unmappedConfirm.services.length > 0 ? 'fa-stethoscope' : 'fa-check text-emerald-500'"></i>
+                Servicios
+                <span x-show="unmappedConfirm.services.length > 0" x-text="'(' + unmappedConfirm.services.length + ')'"></span>
+              </p>
+              <template x-if="unmappedConfirm.services.length > 0">
+                <ul class="space-y-0.5 max-h-24 overflow-y-auto">
+                  <template x-for="v in unmappedConfirm.services" :key="v">
+                    <li class="text-[11px] font-mono text-slate-400 truncate" x-text="v"></li>
+                  </template>
+                </ul>
+              </template>
+              <template x-if="unmappedConfirm.services.length === 0">
+                <p class="text-[11px] text-slate-500 italic">Todo mapeado</p>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="flex items-center gap-3">
+          <button @click="unmappedConfirm && unmappedConfirm.resolve(true)"
+                  class="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm rounded-lg transition-colors">
+            <i class="fa-solid fa-circle-check text-xs"></i>
+            Ya los corregí — continuar
+          </button>
+          <button @click="unmappedConfirm && unmappedConfirm.resolve(false)"
+                  class="flex items-center gap-2 px-4 py-2 border border-white/20 text-slate-400 hover:text-white hover:border-white/40 text-sm rounded-lg transition-colors">
+            <i class="fa-solid fa-arrow-left text-xs"></i>
+            Cancelar — ir a corregir
+          </button>
+        </div>
+      </div>
+      <!-- /unmapped overlay -->
+
+    </div>
+    <!-- /RIGHT PANEL -->
+
+  </div><!-- /main layout -->
 </div>
 {% endblock %}
 
+
 {% block extra_scripts %}
+<style>
+  :root {
+    --g-sihos:        #0284c7;
+    --g-archivos:     #7c3aed;
+    --g-pdfs:         #4f46e5;
+    --g-verificacion: #b45309;
+    --g-organizacion: #059669;
+  }
+  @keyframes logFadeIn {
+    from { opacity: 0; transform: translateY(-3px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .log-line { animation: logFadeIn 0.12s ease; }
+</style>
+
 <script>
 function pipeline() {
   return {
@@ -184,41 +386,159 @@ function pipeline() {
     logLines: [],
     currentStageLabel: '',
     excelFile: null,
+    dragOver: false,
     sihosInvoiceNumbers: '',
-    unmappedConfirm: null,   // { admins, contracts, services, resolve } while waiting for user
+    unmappedConfirm: null,
+    stageStatuses: {},
 
-    stages: [
-      { id: 'LOAD_AND_PROCESS',              label: 'Carga y procesamiento',        description: 'Cargar Excel SIHOS, registrar mapeos, insertar facturas', icon: 'fa-solid fa-file-import' },
-      { id: 'RUN_STAGING',                   label: 'Mover a staging',              description: 'Mover carpetas de BASE a STAGE',                          icon: 'fa-solid fa-folder-open' },
-      { id: 'REMOVE_NON_PDF',                label: 'Eliminar no-PDF',              description: 'Borrar archivos que no sean PDF',                          icon: 'fa-solid fa-file-circle-xmark' },
-      { id: 'CHECK_INVALID_FILES',           label: 'Verificar PDFs corruptos',     description: 'Detectar archivos PDF corruptos',                          icon: 'fa-solid fa-triangle-exclamation' },
-      { id: 'NORMALIZE_FILES',               label: 'Normalizar archivos',          description: 'Renombrar archivos con nombres inválidos',                 icon: 'fa-solid fa-pen-to-square' },
-      { id: 'LIST_UNREADABLE_PDFS',          label: 'Listar PDFs ilegibles',        description: 'Identificar PDFs sin capa de texto',                      icon: 'fa-solid fa-eye-slash' },
-      { id: 'DELETE_UNREADABLE_PDFS',        label: 'Eliminar PDFs ilegibles',      description: 'Borrar PDFs sin capa de texto',                           icon: 'fa-solid fa-trash' },
-      { id: 'DOWNLOAD_INVOICES_FROM_SIHOS',  label: 'Descargar facturas SIHOS',     description: 'Descargar PDFs de facturas desde el portal SIHOS',         icon: 'fa-solid fa-cloud-arrow-down' },
-      { id: 'CHECK_INVOICES',                label: 'OCR de facturas',              description: 'Ejecutar OCR con ocrmypdf',                                icon: 'fa-solid fa-wand-magic-sparkles' },
-      { id: 'VERIFY_INVOICE_CODE',           label: 'Verificar código de factura',  description: 'Verificar número de factura en el texto del PDF',          icon: 'fa-solid fa-barcode' },
-      { id: 'CHECK_INVOICE_NUMBER_ON_FILES', label: 'Verificar nombres de archivo', description: 'Verificar que los nombres de archivo coincidan con la carpeta', icon: 'fa-solid fa-file-circle-check' },
-      { id: 'CHECK_FOLDERS_WITH_EXTRA_TEXT', label: 'Detectar texto extra',         description: 'Detectar carpetas con texto adicional en el nombre',       icon: 'fa-solid fa-magnifying-glass' },
-      { id: 'NORMALIZE_DIR_NAMES',           label: 'Normalizar carpetas',          description: 'Renombrar carpetas con texto adicional',                   icon: 'fa-solid fa-folder-open' },
-      { id: 'CHECK_DIRS',                    label: 'Verificar carpetas',           description: 'Detectar carpetas faltantes y marcar como FALTANTE',       icon: 'fa-solid fa-folder-minus' },
-      { id: 'CHECK_REQUIRED_DOCS',           label: 'Verificar documentos',         description: 'Registrar hallazgos por documentos requeridos faltantes',  icon: 'fa-solid fa-clipboard-list' },
-      { id: 'VERIFY_CUFE',                   label: 'Verificar CUFE',               description: 'Verificar código CUFE en los PDFs de factura',             icon: 'fa-solid fa-fingerprint' },
-      { id: 'TAG_MISSING_CUFE',              label: 'Etiquetar CUFE faltante',      description: 'Añadir sufijo CUFE a carpetas sin CUFE válido',            icon: 'fa-solid fa-tag' },
-      { id: 'ORGANIZE',                      label: 'Organizar en AUDIT',           description: 'Organizar carpetas auditadas en la estructura AUDIT',      icon: 'fa-solid fa-box-archive' },
-      { id: 'DOWNLOAD_DRIVE',                label: 'Descargar Drive',              description: 'Descargar carpetas faltantes desde Google Drive',          icon: 'fa-brands fa-google-drive' },
-      { id: 'DOWNLOAD_MISSING_DOCS',         label: 'Descargar docs faltantes',     description: 'Descargar documentos faltantes desde Drive',               icon: 'fa-solid fa-file-arrow-down' },
+    groupColors: {
+      sihos:        { dot: 'bg-sky-500' },
+      archivos:     { dot: 'bg-violet-500' },
+      pdfs:         { dot: 'bg-indigo-500' },
+      verificacion: { dot: 'bg-amber-500' },
+      organizacion: { dot: 'bg-emerald-500' },
+    },
+
+    stageGroups: [
+      {
+        id: 'sihos', label: 'SIHOS', icon: 'fa-solid fa-database',
+        stages: ['LOAD_AND_PROCESS', 'DOWNLOAD_INVOICES_FROM_SIHOS'],
+      },
+      {
+        id: 'archivos', label: 'Archivos', icon: 'fa-solid fa-folder',
+        stages: ['RUN_STAGING', 'REMOVE_NON_PDF', 'NORMALIZE_FILES'],
+      },
+      {
+        id: 'pdfs', label: 'PDFs', icon: 'fa-solid fa-file-pdf',
+        stages: ['LIST_UNREADABLE_PDFS', 'DELETE_UNREADABLE_PDFS', 'CHECK_INVOICES', 'VERIFY_INVOICE_CODE'],
+      },
+      {
+        id: 'verificacion', label: 'Verificación', icon: 'fa-solid fa-magnifying-glass-chart',
+        stages: [
+          'CHECK_INVOICE_NUMBER_ON_FILES', 'CHECK_FOLDERS_WITH_EXTRA_TEXT', 'NORMALIZE_DIR_NAMES',
+          'CHECK_DIRS', 'CHECK_REQUIRED_DOCS', 'VERIFY_CUFE',
+        ],
+      },
+      {
+        id: 'organizacion', label: 'Organización', icon: 'fa-solid fa-box-archive',
+        stages: ['ORGANIZE', 'DOWNLOAD_DRIVE', 'DOWNLOAD_MISSING_DOCS'],
+      },
     ],
 
+    stages: [
+      { id: 'LOAD_AND_PROCESS',              label: 'Carga y procesamiento',            description: 'Cargar Excel SIHOS, registrar mapeos e insertar facturas en la base de datos' },
+      { id: 'RUN_STAGING',                   label: 'Mover a staging',                  description: 'Mover las carpetas de facturas desde BASE hasta STAGE para su procesamiento' },
+      { id: 'REMOVE_NON_PDF',                label: 'Limpiar archivos inválidos',         description: 'Eliminar archivos no-PDF y PDFs corruptos dentro de las carpetas de facturas' },
+      { id: 'NORMALIZE_FILES',               label: 'Normalizar nombres de archivo',     description: 'Renombrar archivos con prefijos incorrectos aplicando las correcciones configuradas' },
+      { id: 'LIST_UNREADABLE_PDFS',          label: 'Listar PDFs ilegibles',             description: 'Identificar PDFs sin capa de texto extraíble (escaneados sin OCR)' },
+      { id: 'DELETE_UNREADABLE_PDFS',        label: 'Eliminar PDFs ilegibles',           description: 'Borrar definitivamente los PDFs sin capa de texto identificados anteriormente' },
+      { id: 'DOWNLOAD_INVOICES_FROM_SIHOS',  label: 'Descargar facturas SIHOS',          description: 'Descargar los PDFs de facturas electrónicas desde el portal web de SIHOS' },
+      { id: 'CHECK_INVOICES',                label: 'OCR de facturas',                   description: 'Ejecutar reconocimiento óptico de caracteres (ocrmypdf) sobre las facturas' },
+      { id: 'VERIFY_INVOICE_CODE',           label: 'Verificar código de factura',       description: 'Confirmar que el número extraído por OCR coincide con el nombre de la carpeta' },
+      { id: 'CHECK_INVOICE_NUMBER_ON_FILES', label: 'Verificar nombres de archivo',      description: 'Comprobar que los archivos dentro de cada carpeta contienen el número de factura correcto' },
+      { id: 'CHECK_FOLDERS_WITH_EXTRA_TEXT', label: 'Detectar texto extra en carpetas',  description: 'Encontrar carpetas con sufijos adicionales más allá del número de factura' },
+      { id: 'NORMALIZE_DIR_NAMES',           label: 'Normalizar nombres de carpeta',     description: 'Renombrar las carpetas que tienen texto adicional para dejar solo el número de factura' },
+      { id: 'CHECK_DIRS',                    label: 'Verificar carpetas faltantes',       description: 'Detectar facturas sin carpeta física y marcarlas como FALTANTE en la base de datos' },
+      { id: 'CHECK_REQUIRED_DOCS',           label: 'Verificar documentos requeridos',   description: 'Registrar hallazgos de auditoría por documentos obligatorios ausentes en cada carpeta' },
+      { id: 'VERIFY_CUFE',                   label: 'Verificar y etiquetar CUFE',        description: 'Validar el código CUFE en cada factura y marcar con _SINCUFE las carpetas sin CUFE válido' },
+      { id: 'ORGANIZE',                      label: 'Organizar en AUDIT',                description: 'Mover las carpetas procesadas a la estructura AUDIT según su estado' },
+      { id: 'DOWNLOAD_DRIVE',                label: 'Descargar desde Drive',             description: 'Descargar carpetas faltantes desde la copia de respaldo en Google Drive' },
+      { id: 'DOWNLOAD_MISSING_DOCS',         label: 'Descargar documentos faltantes',    description: 'Descargar documentos individuales faltantes desde las carpetas de Drive correspondientes' },
+    ],
+
+    // ── Computed ──────────────────────────────────────────────────
+    get completedCount() {
+      return this.selectedStages.filter(id =>
+        ['done', 'warn', 'error'].includes(this.stageStatuses[id])
+      ).length;
+    },
+    get progressPct() {
+      if (!this.selectedStages.length) return 0;
+      return Math.round(this.completedCount / this.selectedStages.length * 100);
+    },
+
+    // ── Helpers ───────────────────────────────────────────────────
+    stageById(id) { return this.stages.find(s => s.id === id) || { label: id, description: '' }; },
+
+    toggleGroup(group) {
+      const allSel = group.stages.every(id => this.selectedStages.includes(id));
+      if (allSel) {
+        this.selectedStages = this.selectedStages.filter(id => !group.stages.includes(id));
+      } else {
+        const missing = group.stages.filter(id => !this.selectedStages.includes(id));
+        this.selectedStages = [...this.selectedStages, ...missing];
+      }
+    },
+    isGroupSelected(group) {
+      return group.stages.every(id => this.selectedStages.includes(id));
+    },
+    isGroupPartial(group) {
+      return group.stages.some(id => this.selectedStages.includes(id)) && !this.isGroupSelected(group);
+    },
+
+    selectAll(checked) {
+      this.selectedStages = checked ? this.stages.map(s => s.id) : [];
+    },
+
+    setFile(event) { this.excelFile = event.target.files[0] || null; },
+    handleDrop(ev) {
+      this.dragOver = false;
+      const f = ev.dataTransfer.files[0];
+      if (f && /\.(xlsx|xls)$/i.test(f.name)) this.excelFile = f;
+    },
+    formatFileSize(b) {
+      if (b < 1024)    return b + ' B';
+      if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+      return (b / 1048576).toFixed(1) + ' MB';
+    },
+
+    lineClass(line) {
+      if (line.startsWith('───'))    return '';
+      if (line.startsWith('[ERROR]')) return 'text-red-400';
+      if (line.startsWith('[WARN]'))  return 'text-amber-300';
+      if (line.startsWith('[OK]'))    return 'text-emerald-400';
+      if (line.startsWith('[INFO]'))  return 'text-sky-300';
+      return 'text-slate-400';
+    },
+    linePrefix(line) {
+      if (line.startsWith('[ERROR]')) return '<span class="text-red-700 font-bold select-none">[ERR]</span>';
+      if (line.startsWith('[WARN]'))  return '<span class="text-amber-700 font-bold select-none">[WRN]</span>';
+      if (line.startsWith('[OK]'))    return '<span class="text-emerald-700 font-bold select-none">[ OK]</span>';
+      if (line.startsWith('[INFO]'))  return '<span class="text-sky-800 font-bold select-none">[INF]</span>';
+      return '<span class="text-slate-700 select-none">    </span>';
+    },
+    lineBody(line) {
+      const pfx = ['[ERROR]', '[WARN]', '[OK]', '[INFO]'].find(p => line.startsWith(p));
+      return pfx ? line.slice(pfx.length).trimStart() : line;
+    },
+
+    clearLog() {
+      this.logLines = [];
+      this.currentStageLabel = '';
+      this.stageStatuses = {};
+      sessionStorage.removeItem('pipeline_logLines');
+      sessionStorage.removeItem('pipeline_currentStageLabel');
+    },
+
+    getStageLabelById(id) { return this.stageById(id).label; },
+
+    _markLine(stageId, line) {
+      if (line.startsWith('[ERROR]')) {
+        this.stageStatuses[stageId] = 'error';
+      } else if (line.startsWith('[WARN]') && this.stageStatuses[stageId] !== 'error') {
+        this.stageStatuses[stageId] = 'warn';
+      }
+    },
+
+    // ── Lifecycle ─────────────────────────────────────────────────
     init() {
-      // Restore persisted log and stage selection from sessionStorage
       try {
-        const savedLog   = sessionStorage.getItem('pipeline_logLines');
-        const savedLabel = sessionStorage.getItem('pipeline_currentStageLabel');
+        const savedLog    = sessionStorage.getItem('pipeline_logLines');
+        const savedLabel  = sessionStorage.getItem('pipeline_currentStageLabel');
         const savedStages = sessionStorage.getItem('pipeline_selectedStages');
-        if (savedLog)    this.logLines           = JSON.parse(savedLog);
-        if (savedLabel)  this.currentStageLabel  = savedLabel;
-        if (savedStages) this.selectedStages     = JSON.parse(savedStages);
+        if (savedLog)    this.logLines          = JSON.parse(savedLog);
+        if (savedLabel)  this.currentStageLabel = savedLabel;
+        if (savedStages) this.selectedStages    = JSON.parse(savedStages);
       } catch {}
 
       this.$watch('logLines',          v => sessionStorage.setItem('pipeline_logLines',          JSON.stringify(v)));
@@ -226,38 +546,25 @@ function pipeline() {
       this.$watch('selectedStages',    v => sessionStorage.setItem('pipeline_selectedStages',    JSON.stringify(v)));
     },
 
-    selectAll(checked) {
-      this.selectedStages = checked ? this.stages.map(s => s.id) : [];
-    },
-
-    setFile(event) {
-      this.excelFile = event.target.files[0] || null;
-    },
-
-    clearLog() {
-      this.logLines = [];
-      this.currentStageLabel = '';
-      sessionStorage.removeItem('pipeline_logLines');
-      sessionStorage.removeItem('pipeline_currentStageLabel');
-    },
-
-    getStageLabelById(id) {
-      return this.stages.find(s => s.id === id)?.label || id;
-    },
-
+    // ── Main runner ───────────────────────────────────────────────
     async runPipeline() {
       if (this.running) return;
       const institutionId = this.$store.ctx.institutionId;
       const periodId      = this.$store.ctx.periodId;
+
       this.running = true;
       this.logLines = [];
+      this.stageStatuses = {};
+      this.selectedStages.forEach(id => { this.stageStatuses[id] = 'idle'; });
 
       for (const stageId of this.selectedStages) {
         this.currentStageLabel = this.getStageLabelById(stageId);
-        this.logLines.push(`─── Iniciando: ${this.currentStageLabel} ───`);
+        this.stageStatuses[stageId] = 'running';
+        this.logLines.push(`─── ${this.currentStageLabel.toUpperCase()} ───`);
         this.$nextTick(() => this.scrollLog());
 
         try {
+          // ── LOAD_AND_PROCESS (two-phase) ─────────────────────────
           if (stageId === 'LOAD_AND_PROCESS' && this.excelFile) {
             const buildForm = (scanOnly) => {
               const fd = new FormData();
@@ -268,19 +575,20 @@ function pipeline() {
               return fd;
             };
 
-            // Phase 1: scan — detect unmapped items without inserting invoices
+            // Phase 1: scan
             this.logLines.push('[INFO] Verificando mapeos del Excel...');
             const scanRes = await fetch('/api/invoices/ingest', { method: 'POST', body: buildForm(true) });
             if (!scanRes.ok) {
               const err = await scanRes.json();
-              this.logLines.push(`[ERROR] ${err.detail || 'Error desconocido'}`);
+              const msg = `[ERROR] ${err.detail || 'Error desconocido'}`;
+              this.logLines.push(msg);
+              this._markLine(stageId, msg);
               this.scrollLog(); continue;
             }
             const scan = await scanRes.json();
 
             const hasUnmapped = scan.unknown_admins?.length || scan.unknown_contracts?.length || scan.unknown_services?.length;
             if (hasUnmapped) {
-              // Pause and show the confirmation panel
               const confirmed = await new Promise(resolve => {
                 this.unmappedConfirm = {
                   admins:    scan.unknown_admins    || [],
@@ -290,7 +598,9 @@ function pipeline() {
                 };
               });
               if (!confirmed) {
-                this.logLines.push('[WARN] Ingestión cancelada — corrige los mapeos y vuelve a ejecutar esta etapa.');
+                const msg = '[WARN] Ingestión cancelada — corrige los mapeos y vuelve a ejecutar.';
+                this.logLines.push(msg);
+                this._markLine(stageId, msg);
                 this.scrollLog(); continue;
               }
               this.logLines.push('[INFO] Mapeos confirmados, cargando facturas...');
@@ -302,59 +612,71 @@ function pipeline() {
             const res = await fetch('/api/invoices/ingest', { method: 'POST', body: buildForm(false) });
             if (!res.ok) {
               const err = await res.json();
-              this.logLines.push(`[ERROR] ${err.detail || 'Error desconocido'}`);
+              const msg = `[ERROR] ${err.detail || 'Error desconocido'}`;
+              this.logLines.push(msg);
+              this._markLine(stageId, msg);
               this.scrollLog(); continue;
             }
             const data = await res.json();
             this.logLines.push(`[OK] Facturas insertadas: ${data.inserted}`);
-            if (data.skipped)               this.logLines.push(`[INFO] Filas omitidas (sin fecha): ${data.skipped}`);
-            if (data.unknown_admins?.length)    this.logLines.push(`[WARN] Administradoras sin mapear (${data.unknown_admins.length}): ${data.unknown_admins.join(', ')}`);
-            if (data.unknown_contracts?.length) this.logLines.push(`[WARN] Contratos sin mapear (${data.unknown_contracts.length}): ${data.unknown_contracts.join(', ')}`);
-            if (data.unknown_services?.length)  this.logLines.push(`[WARN] Servicios sin mapear (${data.unknown_services.length}): ${data.unknown_services.join(', ')}`);
+            if (data.skipped)
+              this.logLines.push(`[INFO] Filas omitidas (sin fecha): ${data.skipped}`);
+            if (data.unknown_admins?.length) {
+              const m = `[WARN] Administradoras sin mapear (${data.unknown_admins.length}): ${data.unknown_admins.join(', ')}`;
+              this.logLines.push(m); this._markLine(stageId, m);
+            }
+            if (data.unknown_contracts?.length) {
+              const m = `[WARN] Contratos sin mapear (${data.unknown_contracts.length}): ${data.unknown_contracts.join(', ')}`;
+              this.logLines.push(m); this._markLine(stageId, m);
+            }
+            if (data.unknown_services?.length) {
+              const m = `[WARN] Servicios sin mapear (${data.unknown_services.length}): ${data.unknown_services.join(', ')}`;
+              this.logLines.push(m); this._markLine(stageId, m);
+            }
             this.scrollLog();
-            continue;
-          }
 
-          // SSE-based stage execution
-          let url = `/api/pipeline/run/${stageId}?institution_id=${encodeURIComponent(institutionId)}&period_id=${encodeURIComponent(periodId)}`;
-          if (stageId === 'DOWNLOAD_INVOICES_FROM_SIHOS' && this.sihosInvoiceNumbers.trim()) {
-            const nums = this.sihosInvoiceNumbers.split(/[\n,]+/).map(s => s.trim()).filter(Boolean).join(',');
-            url += `&invoice_numbers=${encodeURIComponent(nums)}`;
-          }
-          const evtSource = new EventSource(url);
+          } else {
+            // ── SSE-based stage ───────────────────────────────────
+            let url = `/api/pipeline/run/${stageId}?institution_id=${encodeURIComponent(institutionId)}&period_id=${encodeURIComponent(periodId)}`;
+            if (stageId === 'DOWNLOAD_INVOICES_FROM_SIHOS' && this.sihosInvoiceNumbers.trim()) {
+              const nums = this.sihosInvoiceNumbers.split(/[\n,]+/).map(s => s.trim()).filter(Boolean).join(',');
+              url += `&invoice_numbers=${encodeURIComponent(nums)}`;
+            }
+            const evtSource = new EventSource(url);
 
-          await new Promise((resolve) => {
-            evtSource.onmessage = (event) => {
-              let line = event.data;
-              try {
-                const parsed = JSON.parse(event.data);
-                line = parsed.msg || event.data;
-              } catch {}
-              if (line === '[DONE]') {
+            await new Promise((resolve) => {
+              evtSource.onmessage = (event) => {
+                let line = event.data;
+                try { const p = JSON.parse(event.data); line = p.msg || event.data; } catch {}
+                if (line === '[DONE]') { evtSource.close(); resolve(); return; }
+                this._markLine(stageId, line);
+                this.logLines.push(line);
+                this.$nextTick(() => this.scrollLog());
+              };
+              evtSource.onerror = () => {
                 evtSource.close();
+                const msg = `[ERROR] Conexión SSE interrumpida para etapa ${stageId}`;
+                this.logLines.push(msg);
+                this._markLine(stageId, msg);
                 resolve();
-                return;
-              }
-              this.logLines.push(line);
-              this.$nextTick(() => this.scrollLog());
-            };
-            evtSource.onerror = () => {
-              evtSource.close();
-              this.logLines.push(`[ERROR] Conexión SSE interrumpida para etapa ${stageId}`);
-              resolve();
-            };
-          });
+              };
+            });
+          }
 
         } catch (e) {
-          this.logLines.push(`[ERROR] ${e.message}`);
+          const msg = `[ERROR] ${e.message}`;
+          this.logLines.push(msg);
+          this._markLine(stageId, msg);
         }
 
+        // Finalize stage status
+        if (this.stageStatuses[stageId] === 'running') this.stageStatuses[stageId] = 'done';
         this.scrollLog();
       }
 
       this.running = false;
       this.currentStageLabel = '';
-      this.logLines.push('─── Pipeline finalizado ───');
+      this.logLines.push('─── PIPELINE FINALIZADO ───');
       this.scrollLog();
     },
 
