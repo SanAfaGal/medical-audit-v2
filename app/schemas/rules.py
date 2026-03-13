@@ -67,3 +67,11 @@ class ServiceTypeDocumentCreate(BaseModel):
     institution_id: int
     service_type_id: int
     doc_type_id: int
+
+
+class FolderStatusCreate(BaseModel):
+    status: str
+
+
+class FolderStatusUpdate(BaseModel):
+    status: str | None = None

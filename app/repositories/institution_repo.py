@@ -235,3 +235,79 @@ class InstitutionRepo:
             )
         )
         await self.db.flush()
+
+    # ------------------------------------------------------------------
+    # Create / Delete helpers
+    # ------------------------------------------------------------------
+
+    async def create_admin(
+        self, institution_id: int, raw_admin: str, canonical_admin: str | None, type_: str | None
+    ) -> Admin:
+        admin = Admin(
+            institution_id=institution_id,
+            raw_admin=raw_admin,
+            canonical_admin=canonical_admin,
+            type=type_,
+        )
+        self.db.add(admin)
+        await self.db.flush()
+        await self.db.refresh(admin)
+        return admin
+
+    async def delete_admin(self, admin_id: int) -> bool:
+        admin = await self.db.get(Admin, admin_id)
+        if not admin:
+            return False
+        await self.db.delete(admin)
+        await self.db.flush()
+        return True
+
+    async def create_contract(
+        self, institution_id: int, raw_contract: str, canonical_contract: str | None
+    ) -> Contract:
+        contract = Contract(
+            institution_id=institution_id,
+            raw_contract=raw_contract,
+            canonical_contract=canonical_contract,
+        )
+        self.db.add(contract)
+        await self.db.flush()
+        await self.db.refresh(contract)
+        return contract
+
+    async def delete_contract(self, contract_id: int) -> bool:
+        contract = await self.db.get(Contract, contract_id)
+        if not contract:
+            return False
+        await self.db.delete(contract)
+        await self.db.flush()
+        return True
+
+    async def create_service(
+        self, institution_id: int, raw_service: str, service_type_id: int
+    ) -> Service:
+        service = Service(
+            institution_id=institution_id,
+            raw_service=raw_service,
+            service_type_id=service_type_id,
+        )
+        self.db.add(service)
+        await self.db.flush()
+        await self.db.refresh(service)
+        return service
+
+    async def delete_service(self, service_id: int) -> bool:
+        service = await self.db.get(Service, service_id)
+        if not service:
+            return False
+        await self.db.delete(service)
+        await self.db.flush()
+        return True
+
+    async def delete_institution(self, institution_id: int) -> bool:
+        inst = await self.db.get(Institution, institution_id)
+        if not inst:
+            return False
+        await self.db.delete(inst)
+        await self.db.flush()
+        return True

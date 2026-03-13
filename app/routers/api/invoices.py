@@ -82,6 +82,15 @@ async def batch_update_status(data: BatchStatusUpdate, db: AsyncSession = Depend
     return {"updated": len(data.invoice_ids)}
 
 
+@router.delete("/{invoice_id}", status_code=204)
+async def delete_invoice(invoice_id: int, db: AsyncSession = Depends(get_db)):
+    repo = InvoiceRepo(db)
+    deleted = await repo.delete_invoice(invoice_id)
+    if not deleted:
+        raise HTTPException(404, "Factura no encontrada")
+    await db.commit()
+
+
 @router.post("/ingest", status_code=200)
 async def ingest_excel(
     institution_id: int = Form(...),

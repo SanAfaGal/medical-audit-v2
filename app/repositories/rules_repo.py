@@ -86,3 +86,42 @@ class RulesRepo:
             select(FolderStatus).where(FolderStatus.status == status)
         )
         return result.scalar_one_or_none()
+
+    async def delete_service_type(self, service_type_id: int) -> bool:
+        obj = await self.db.get(ServiceType, service_type_id)
+        if not obj:
+            return False
+        await self.db.delete(obj)
+        await self.db.flush()
+        return True
+
+    async def create_folder_status(self, status: str) -> FolderStatus:
+        obj = FolderStatus(status=status)
+        self.db.add(obj)
+        await self.db.flush()
+        await self.db.refresh(obj)
+        return obj
+
+    async def update_folder_status_obj(self, fs_id: int, status: str) -> FolderStatus | None:
+        obj = await self.db.get(FolderStatus, fs_id)
+        if not obj:
+            return None
+        obj.status = status
+        await self.db.flush()
+        return obj
+
+    async def delete_folder_status(self, fs_id: int) -> bool:
+        obj = await self.db.get(FolderStatus, fs_id)
+        if not obj:
+            return False
+        await self.db.delete(obj)
+        await self.db.flush()
+        return True
+
+    async def delete_doc_type(self, doc_type_id: int) -> bool:
+        obj = await self.db.get(DocType, doc_type_id)
+        if not obj:
+            return False
+        await self.db.delete(obj)
+        await self.db.flush()
+        return True

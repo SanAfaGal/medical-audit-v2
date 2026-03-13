@@ -9,13 +9,16 @@ from app.database import get_db
 from app.models.institution import Admin, Contract, Service
 from app.repositories.institution_repo import InstitutionRepo
 from app.schemas.institution import (
+    AdminCreate,
     AdminOut,
     AdminUpdate,
+    ContractCreate,
     ContractOut,
     ContractUpdate,
     InstitutionCreate,
     InstitutionOut,
     InstitutionUpdate,
+    ServiceCreate,
     ServiceOut,
     ServiceUpdate,
 )
@@ -209,4 +212,97 @@ async def delete_service_type_document(
 ):
     repo = InstitutionRepo(db)
     await repo.delete_service_type_document(institution_id, service_type_id, doc_type_id)
+    await db.commit()
+
+
+# ------------------------------------------------------------------
+# Institution delete
+# ------------------------------------------------------------------
+
+@router.delete("/{institution_id}", status_code=204)
+async def delete_institution(institution_id: int, db: AsyncSession = Depends(get_db)):
+    repo = InstitutionRepo(db)
+    deleted = await repo.delete_institution(institution_id)
+    if not deleted:
+        raise HTTPException(404, "Institución no encontrada")
+    await db.commit()
+
+
+# ------------------------------------------------------------------
+# Admin create / delete
+# ------------------------------------------------------------------
+
+@router.post("/{institution_id}/admins", response_model=AdminOut, status_code=201)
+async def create_admin(
+    institution_id: int, data: AdminCreate, db: AsyncSession = Depends(get_db)
+):
+    repo = InstitutionRepo(db)
+    inst = await repo.get_by_id(institution_id)
+    if not inst:
+        raise HTTPException(404, "Institución no encontrada")
+    admin = await repo.create_admin(institution_id, data.raw_admin, data.canonical_admin, data.type)
+    await db.commit()
+    return admin
+
+
+@router.delete("/admins/{admin_id}", status_code=204)
+async def delete_admin(admin_id: int, db: AsyncSession = Depends(get_db)):
+    repo = InstitutionRepo(db)
+    deleted = await repo.delete_admin(admin_id)
+    if not deleted:
+        raise HTTPException(404, "Administradora no encontrada")
+    await db.commit()
+
+
+# ------------------------------------------------------------------
+# Contract create / delete
+# ------------------------------------------------------------------
+
+@router.post("/{institution_id}/contracts", response_model=ContractOut, status_code=201)
+async def create_contract(
+    institution_id: int, data: ContractCreate, db: AsyncSession = Depends(get_db)
+):
+    repo = InstitutionRepo(db)
+    inst = await repo.get_by_id(institution_id)
+    if not inst:
+        raise HTTPException(404, "Institución no encontrada")
+    contract = await repo.create_contract(
+        institution_id, data.raw_contract, data.canonical_contract
+    )
+    await db.commit()
+    return contract
+
+
+@router.delete("/contracts/{contract_id}", status_code=204)
+async def delete_contract(contract_id: int, db: AsyncSession = Depends(get_db)):
+    repo = InstitutionRepo(db)
+    deleted = await repo.delete_contract(contract_id)
+    if not deleted:
+        raise HTTPException(404, "Contrato no encontrado")
+    await db.commit()
+
+
+# ------------------------------------------------------------------
+# Service create / delete
+# ------------------------------------------------------------------
+
+@router.post("/{institution_id}/services", response_model=ServiceOut, status_code=201)
+async def create_service(
+    institution_id: int, data: ServiceCreate, db: AsyncSession = Depends(get_db)
+):
+    repo = InstitutionRepo(db)
+    inst = await repo.get_by_id(institution_id)
+    if not inst:
+        raise HTTPException(404, "Institución no encontrada")
+    svc = await repo.create_service(institution_id, data.raw_service, data.service_type_id)
+    await db.commit()
+    return svc
+
+
+@router.delete("/services/{service_id}", status_code=204)
+async def delete_service(service_id: int, db: AsyncSession = Depends(get_db)):
+    repo = InstitutionRepo(db)
+    deleted = await repo.delete_service(service_id)
+    if not deleted:
+        raise HTTPException(404, "Servicio no encontrado")
     await db.commit()

@@ -82,3 +82,19 @@ class ServiceOut(BaseModel):
 
 class ServiceUpdate(BaseModel):
     service_type_id: int
+
+
+class AdminCreate(BaseModel):
+    raw_admin: str
+    canonical_admin: str | None = None
+    type: str | None = None  # EPS | SOAT | ARL | OTRO
+
+
+class ContractCreate(BaseModel):
+    raw_contract: str
+    canonical_contract: str | None = None
+
+
+class ServiceCreate(BaseModel):
+    raw_service: str
+    service_type_id: int

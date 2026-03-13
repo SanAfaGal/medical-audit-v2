@@ -155,3 +155,11 @@ class InvoiceRepo:
             .values(folder_status_id=folder_status_id)
         )
         await self.db.flush()
+
+    async def delete_invoice(self, invoice_id: int) -> bool:
+        invoice = await self.db.get(Invoice, invoice_id)
+        if not invoice:
+            return False
+        await self.db.delete(invoice)
+        await self.db.flush()
+        return True
