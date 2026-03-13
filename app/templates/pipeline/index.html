@@ -62,6 +62,21 @@
     <p class="text-xs text-gray-400 mt-1.5">Archivo Excel exportado desde SIHOS con las facturas del período.</p>
   </section>
 
+  <!-- Invoice numbers input (for DOWNLOAD_INVOICES_FROM_SIHOS) -->
+  <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5"
+           x-show="selectedStages.includes('DOWNLOAD_INVOICES_FROM_SIHOS')">
+    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
+      <i class="fa-solid fa-cloud-arrow-down text-sky-600 mr-2"></i>Facturas a descargar desde SIHOS
+    </h2>
+    <textarea x-model="sihosInvoiceNumbers" rows="4"
+              placeholder="Una factura por línea, o separadas por coma:&#10;HSL-001&#10;HSL-002&#10;HSL-003"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono
+                     focus:ring-2 focus:ring-sky-500 focus:border-sky-500 resize-y"></textarea>
+    <p class="text-xs text-gray-400 mt-1.5">
+      Ingresa los números de factura a descargar del portal SIHOS. Una por línea o separadas por coma.
+    </p>
+  </section>
+
   <!-- Run button -->
   <div class="flex items-center gap-4">
     <button @click="runPipeline()"
@@ -111,6 +126,7 @@ function pipeline() {
     logLines: [],
     currentStageLabel: '',
     excelFile: null,
+    sihosInvoiceNumbers: '',
 
     stages: [
       { id: 'LOAD_AND_PROCESS',              label: 'Carga y procesamiento',        description: 'Cargar Excel SIHOS, registrar mapeos, insertar facturas', icon: 'fa-solid fa-file-import' },
@@ -193,7 +209,11 @@ function pipeline() {
           }
 
           // SSE-based stage execution
-          const url = `/api/pipeline/run/${stageId}?institution_id=${encodeURIComponent(institutionId)}&period_id=${encodeURIComponent(periodId)}`;
+          let url = `/api/pipeline/run/${stageId}?institution_id=${encodeURIComponent(institutionId)}&period_id=${encodeURIComponent(periodId)}`;
+          if (stageId === 'DOWNLOAD_INVOICES_FROM_SIHOS' && this.sihosInvoiceNumbers.trim()) {
+            const nums = this.sihosInvoiceNumbers.split(/[\n,]+/).map(s => s.trim()).filter(Boolean).join(',');
+            url += `&invoice_numbers=${encodeURIComponent(nums)}`;
+          }
           const evtSource = new EventSource(url);
 
           await new Promise((resolve) => {

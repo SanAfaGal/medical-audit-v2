@@ -198,9 +198,34 @@ async def _check_invalid_files(ctx: dict) -> AsyncGenerator[str, None]:
     yield f"[INFO] PDFs corruptos encontrados: {len(invalid)}"
 
 
+def _apply_prefix_corrections(stage_path: Path, corrections: dict[str, str]) -> int:
+    """Rename PDFs whose prefix matches a known wrong prefix to the correct one.
+
+    Iterates recursively through all .pdf files in stage_path and renames any
+    whose filename starts with a wrong prefix (case-insensitive).
+    Returns the number of files renamed.
+    """
+    renamed = 0
+    for pdf in stage_path.rglob("*.pdf"):
+        stem = pdf.stem
+        for wrong, correct in corrections.items():
+            if stem.upper().startswith(wrong.upper()):
+                remainder = stem[len(wrong):]
+                new_name = correct + remainder + pdf.suffix
+                pdf.rename(pdf.parent / new_name)
+                renamed += 1
+                break
+    return renamed
+
+
 @_stage("NORMALIZE_FILES")
 async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
-    """Rename files with invalid names to the canonical standard."""
+    """Rename files with invalid names to the canonical standard.
+
+    Step 1 — apply prefix corrections from the prefix_corrections table
+              (e.g. OPD → OPF, FVE → FEV).
+    Step 2 — run the generic FilenameStandardizer for remaining invalid names.
+    """
     from core.scanner import DocumentScanner
     from core.standardizer import FilenameStandardizer
 
@@ -216,6 +241,16 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
         return
 
     rules_repo = RulesRepo(db)
+
+    # -- Step 1: prefix corrections --
+    corrections = await rules_repo.get_prefix_corrections_map()
+    if corrections:
+        renamed = await executor(_apply_prefix_corrections, stage_path, corrections)
+        yield f"[INFO] Correcciones de prefijo aplicadas: {renamed} archivo(s)"
+    else:
+        yield "[INFO] Sin correcciones de prefijo configuradas"
+
+    # -- Step 2: generic standardization --
     prefixes = await rules_repo.get_all_active_doc_type_prefixes()
     yield f"[INFO] Prefijos de documentos activos: {prefixes}"
 
@@ -306,7 +341,11 @@ async def _delete_unreadable_pdfs(ctx: dict) -> AsyncGenerator[str, None]:
 
 @_stage("DOWNLOAD_INVOICES_FROM_SIHOS")
 async def _download_invoices_from_sihos(ctx: dict) -> AsyncGenerator[str, None]:
-    """Download invoices from SIHOS portal via Playwright."""
+    """Download invoices from SIHOS portal via Playwright.
+
+    Requires ctx['invoice_numbers'] — a list of invoice number strings provided
+    by the user through the UI textarea before running this stage.
+    """
     from core.downloader import SihosDownloader
 
     from app.crypto import decrypt
@@ -318,7 +357,7 @@ async def _download_invoices_from_sihos(ctx: dict) -> AsyncGenerator[str, None]:
     invoice_numbers: list[str] = ctx.get("invoice_numbers", [])
 
     if not invoice_numbers:
-        yield "[WARN] No se especificaron facturas para descargar."
+        yield "[WARN] No se especificaron facturas para descargar. Ingresa los números en el campo de texto antes de ejecutar esta etapa."
         return
 
     if not institution.sihos_user or not institution.sihos_password:

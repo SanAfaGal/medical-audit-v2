@@ -20,9 +20,14 @@ async def run_stage(
     stage: str,
     institution_id: int,
     period_id: int,
+    invoice_numbers: str = "",
     db: AsyncSession = Depends(get_db),
 ):
-    """Stream SSE log lines from a pipeline stage."""
+    """Stream SSE log lines from a pipeline stage.
+
+    Optional query param ``invoice_numbers``: comma-separated list of invoice
+    numbers, used by stages such as DOWNLOAD_INVOICES_FROM_SIHOS.
+    """
     inst_repo = InstitutionRepo(db)
     institution = await inst_repo.get_by_id(institution_id)
     if not institution:
@@ -33,8 +38,12 @@ async def run_stage(
     if not period:
         raise HTTPException(404, "Período no encontrado")
 
+    extra: dict = {}
+    if invoice_numbers:
+        extra["invoice_numbers"] = [n.strip() for n in invoice_numbers.split(",") if n.strip()]
+
     async def event_gen():
-        async for line in pipeline_runner.execute(stage, institution, period, db):
+        async for line in pipeline_runner.execute(stage, institution, period, db, extra):
             payload = json.dumps({"msg": line})
             yield f"data: {payload}\n\n"
         yield "data: {\"msg\": \"[DONE]\"}\n\n"

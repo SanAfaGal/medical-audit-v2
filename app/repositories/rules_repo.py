@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.institution import ServiceTypeDocument
-from app.models.rules import DocType, FolderStatus, ServiceType
+from app.models.rules import DocType, FolderStatus, PrefixCorrection, ServiceType
 
 
 class RulesRepo:
@@ -165,3 +165,51 @@ class RulesRepo:
             select(DocType.prefix).where(DocType.prefix.isnot(None))
         )
         return list(result.scalars().all())
+
+    # ------------------------------------------------------------------
+    # Prefix corrections
+    # ------------------------------------------------------------------
+
+    async def get_prefix_corrections(self) -> list[PrefixCorrection]:
+        result = await self.db.execute(
+            select(PrefixCorrection).order_by(PrefixCorrection.wrong_prefix)
+        )
+        return list(result.scalars().all())
+
+    async def get_prefix_corrections_map(self) -> dict[str, str]:
+        """Return ``{wrong_prefix: correct_prefix}`` for all corrections."""
+        result = await self.db.execute(
+            select(PrefixCorrection.wrong_prefix, PrefixCorrection.correct_prefix)
+        )
+        return {wrong.upper(): correct.upper() for wrong, correct in result.all()}
+
+    async def create_prefix_correction(self, data: dict) -> PrefixCorrection:
+        data = {**data, "wrong_prefix": data["wrong_prefix"].upper(), "correct_prefix": data["correct_prefix"].upper()}
+        stmt = (
+            pg_insert(PrefixCorrection)
+            .values(**data)
+            .on_conflict_do_update(index_elements=["wrong_prefix"], set_=data)
+            .returning(PrefixCorrection)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
+
+    async def update_prefix_correction(self, correction_id: int, data: dict) -> PrefixCorrection | None:
+        obj = await self.db.get(PrefixCorrection, correction_id)
+        if not obj:
+            return None
+        if "correct_prefix" in data and data["correct_prefix"]:
+            data["correct_prefix"] = data["correct_prefix"].upper()
+        for k, v in data.items():
+            if v is not None:
+                setattr(obj, k, v)
+        await self.db.flush()
+        return obj
+
+    async def delete_prefix_correction(self, correction_id: int) -> bool:
+        obj = await self.db.get(PrefixCorrection, correction_id)
+        if not obj:
+            return False
+        await self.db.delete(obj)
+        await self.db.flush()
+        return True

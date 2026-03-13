@@ -17,7 +17,7 @@
 
   <!-- Tabs -->
   <div class="flex gap-0.5 border-b border-gray-200 mb-5">
-    <template x-for="t in [{id:'instituciones',icon:'fa-hospital',label:'Instituciones'},{id:'mapeos',icon:'fa-arrows-left-right',label:'Mapeos'},{id:'periodos',icon:'fa-calendar-days',label:'Períodos'},{id:'reglas',icon:'fa-sliders',label:'Reglas'}]" :key="t.id">
+    <template x-for="t in [{id:'instituciones',icon:'fa-hospital',label:'Instituciones'},{id:'mapeos',icon:'fa-arrows-left-right',label:'Mapeos'},{id:'periodos',icon:'fa-calendar-days',label:'Períodos'},{id:'reglas',icon:'fa-sliders',label:'Reglas'},{id:'prefijos',icon:'fa-tag',label:'Prefijos'}]" :key="t.id">
       <button @click="switchTab(t.id)"
               :class="tab === t.id ? 'border-sky-600 text-sky-700 bg-sky-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'"
               class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-md">
@@ -921,6 +921,209 @@
     </div>
   </div>
 
+  <!-- ============================================================ -->
+  <!--  TAB: PREFIJOS                                               -->
+  <!-- ============================================================ -->
+  <div x-show="tab === 'prefijos'" class="space-y-5">
+
+    <!-- Header + description -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <div class="flex items-start gap-4 mb-6">
+        <div class="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
+          <i class="fa-solid fa-tag text-violet-600"></i>
+        </div>
+        <div>
+          <h2 class="text-sm font-semibold text-gray-800 mb-1">Correcciones de prefijos</h2>
+          <p class="text-xs text-gray-500 leading-relaxed">
+            Define los prefijos incorrectos que aparecen en los archivos y su forma correcta.
+            La etapa <span class="font-mono bg-gray-100 px-1 py-0.5 rounded text-xs">NORMALIZE_FILES</span>
+            aplicará estos renombrados automáticamente antes de la normalización estándar.
+          </p>
+        </div>
+      </div>
+
+      <!-- Add form -->
+      <div class="bg-gray-50 rounded-xl border border-gray-200 p-4">
+        <div class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">
+          <i class="fa-solid fa-plus text-violet-500 mr-1.5"></i>Agregar corrección
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+          <!-- Wrong prefix -->
+          <div class="flex items-center gap-2">
+            <div class="relative">
+              <input type="text" x-model="newPC.wrong_prefix"
+                     @input="newPC.wrong_prefix = newPC.wrong_prefix.toUpperCase()"
+                     placeholder="INCORRECTO"
+                     maxlength="20"
+                     class="w-32 border border-red-200 bg-red-50 rounded-lg px-3 py-2 text-sm font-mono
+                            text-red-700 placeholder-red-300 focus:ring-2 focus:ring-red-300 focus:border-red-300
+                            uppercase tracking-wider" />
+            </div>
+            <!-- Arrow -->
+            <div class="flex items-center gap-1 text-gray-400">
+              <div class="w-8 h-px bg-gray-300"></div>
+              <i class="fa-solid fa-arrow-right text-xs text-gray-400"></i>
+              <div class="w-8 h-px bg-gray-300"></div>
+            </div>
+            <!-- Correct prefix -->
+            <div class="relative">
+              <input type="text" x-model="newPC.correct_prefix"
+                     @input="newPC.correct_prefix = newPC.correct_prefix.toUpperCase()"
+                     placeholder="CORRECTO"
+                     maxlength="20"
+                     class="w-32 border border-emerald-200 bg-emerald-50 rounded-lg px-3 py-2 text-sm font-mono
+                            text-emerald-700 placeholder-emerald-300 focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300
+                            uppercase tracking-wider" />
+            </div>
+          </div>
+          <input type="text" x-model="newPC.notes" placeholder="Nota (opcional)"
+                 class="flex-1 min-w-[160px] border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-600
+                        focus:ring-2 focus:ring-violet-400 focus:border-violet-400" />
+          <button @click="addPrefixCorrection()"
+                  :disabled="!newPC.wrong_prefix.trim() || !newPC.correct_prefix.trim()"
+                  class="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg
+                         hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0">
+            <i class="fa-solid fa-plus mr-1.5"></i>Agregar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Corrections table -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-gray-700">
+          <i class="fa-solid fa-table-list mr-2 text-violet-500"></i>
+          Correcciones registradas
+        </h3>
+        <span class="text-xs text-gray-400 font-mono" x-text="prefixCorrections.length + ' regla(s)'"></span>
+      </div>
+
+      <!-- Empty state -->
+      <template x-if="prefixCorrections.length === 0">
+        <div class="px-5 py-10 text-center text-gray-400 text-sm">
+          <i class="fa-solid fa-tags text-2xl mb-3 text-gray-300 block"></i>
+          No hay correcciones configuradas aún.
+        </div>
+      </template>
+
+      <table class="w-full text-sm" x-show="prefixCorrections.length > 0">
+        <thead class="bg-gray-50/50 border-b border-gray-100">
+          <tr>
+            <th class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500">Incorrecto</th>
+            <th class="text-center px-2 py-2.5 text-xs text-gray-300 w-8"></th>
+            <th class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500">Correcto</th>
+            <th class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500">Nota</th>
+            <th class="px-4 py-2.5 w-24"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50">
+          <template x-for="pc in prefixCorrections" :key="pc.id">
+            <tr class="hover:bg-gray-50/60 group">
+
+              <!-- View mode -->
+              <template x-if="editingPCId !== pc.id">
+                <td class="px-5 py-3">
+                  <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono font-semibold
+                               bg-red-50 text-red-600 border border-red-200"
+                        x-text="pc.wrong_prefix"></span>
+                </td>
+              </template>
+              <!-- Edit mode wrong (non-editable) -->
+              <template x-if="editingPCId === pc.id">
+                <td class="px-5 py-3">
+                  <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono font-semibold
+                               bg-red-50 text-red-600 border border-red-200 opacity-60"
+                        x-text="pc.wrong_prefix"></span>
+                </td>
+              </template>
+
+              <!-- Arrow column -->
+              <td class="px-2 py-3 text-center text-gray-300">
+                <i class="fa-solid fa-arrow-right text-xs"></i>
+              </td>
+
+              <!-- Correct prefix -->
+              <template x-if="editingPCId !== pc.id">
+                <td class="px-5 py-3">
+                  <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono font-semibold
+                               bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        x-text="pc.correct_prefix"></span>
+                </td>
+              </template>
+              <template x-if="editingPCId === pc.id">
+                <td class="px-5 py-3">
+                  <input type="text" x-model="editingPC.correct_prefix"
+                         @input="editingPC.correct_prefix = editingPC.correct_prefix.toUpperCase()"
+                         maxlength="20"
+                         class="w-28 border border-emerald-300 bg-emerald-50 rounded-lg px-2.5 py-1
+                                text-xs font-mono text-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-400
+                                uppercase tracking-wider" />
+                </td>
+              </template>
+
+              <!-- Notes -->
+              <template x-if="editingPCId !== pc.id">
+                <td class="px-5 py-3 text-gray-400 text-xs truncate max-w-[200px]"
+                    x-text="pc.notes || '—'"></td>
+              </template>
+              <template x-if="editingPCId === pc.id">
+                <td class="px-5 py-3">
+                  <input type="text" x-model="editingPC.notes"
+                         class="w-full border border-gray-300 rounded-lg px-2.5 py-1 text-xs text-gray-600
+                                focus:outline-none focus:ring-1 focus:ring-violet-400" />
+                </td>
+              </template>
+
+              <!-- Actions -->
+              <td class="px-4 py-3 text-right">
+                <div class="flex items-center justify-end gap-1">
+                  <template x-if="editingPCId !== pc.id">
+                    <button @click="startEditPC(pc)"
+                            class="text-xs px-2 py-1 text-violet-600 border border-violet-200 rounded hover:bg-violet-50 transition-colors">
+                      <i class="fa-solid fa-pen text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="editingPCId === pc.id">
+                    <button @click="savePCEdit(pc.id)"
+                            class="text-xs px-2 py-1 bg-violet-600 text-white rounded hover:bg-violet-700">
+                      <i class="fa-solid fa-check text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="editingPCId === pc.id">
+                    <button @click="editingPCId = null"
+                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                      <i class="fa-solid fa-xmark text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="confirmDeletePCId !== pc.id && editingPCId !== pc.id">
+                    <button @click="confirmDeletePCId = pc.id"
+                            class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50 transition-colors">
+                      <i class="fa-solid fa-trash text-xs"></i>
+                    </button>
+                  </template>
+                  <template x-if="confirmDeletePCId === pc.id">
+                    <button @click="deletePrefixCorrection(pc.id)"
+                            class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
+                      Eliminar
+                    </button>
+                  </template>
+                  <template x-if="confirmDeletePCId === pc.id">
+                    <button @click="confirmDeletePCId = null"
+                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
+                      Cancelar
+                    </button>
+                  </template>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
 </div>
 {% endblock %}
 
@@ -966,20 +1169,28 @@ function settingsApp() {
     newDT: { code:'', description:'', prefix:'' },
     newFS: { status:'' },
 
+    // Prefijos
+    prefixCorrections: [],
+    confirmDeletePCId: null,
+    editingPCId: null, editingPC: { correct_prefix:'', notes:'' },
+    newPC: { wrong_prefix:'', correct_prefix:'', notes:'' },
+
     // Toast
     toast: { msg:'', type:'success' },
 
     async init() {
-      const [instRes, stRes, dtRes, fsRes] = await Promise.all([
+      const [instRes, stRes, dtRes, fsRes, pcRes] = await Promise.all([
         fetch('/api/institutions'),
         fetch('/api/settings/service-types'),
         fetch('/api/settings/doc-types'),
         fetch('/api/settings/folder-statuses'),
+        fetch('/api/settings/prefix-corrections'),
       ]);
-      this.institutions = await instRes.json();
-      this.serviceTypes = await stRes.json();
-      this.docTypes = await dtRes.json();
-      this.folderStatuses = await fsRes.json();
+      this.institutions       = await instRes.json();
+      this.serviceTypes       = await stRes.json();
+      this.docTypes           = await dtRes.json();
+      this.folderStatuses     = await fsRes.json();
+      this.prefixCorrections  = await pcRes.json();
     },
 
     showToast(msg, type = 'success') {
@@ -1224,6 +1435,46 @@ function settingsApp() {
       const res = await fetch(`/api/settings/folder-statuses/${id}`, { method:'DELETE' });
       if (res.ok || res.status === 204) { this.folderStatuses = this.folderStatuses.filter(f => f.id !== id); this.confirmDeleteFSId = null; this.showToast('Eliminado.'); }
       else { const err = await res.json().catch(()=>({})); this.confirmDeleteFSId = null; this.showToast(err.detail||'No se pudo eliminar.','error'); }
+    },
+
+    // ---- PREFIJOS ----
+    startEditPC(pc) {
+      this.editingPCId = pc.id;
+      this.editingPC = { correct_prefix: pc.correct_prefix, notes: pc.notes || '' };
+    },
+    async savePCEdit(id) {
+      const body = { correct_prefix: this.editingPC.correct_prefix };
+      if (this.editingPC.notes !== undefined) body.notes = this.editingPC.notes || null;
+      const res = await fetch(`/api/settings/prefix-corrections/${id}`, {
+        method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        this.prefixCorrections = this.prefixCorrections.map(p => p.id === id ? updated : p);
+        this.editingPCId = null;
+        this.showToast('Corrección actualizada.');
+      } else this.showToast('Error al actualizar.', 'error');
+    },
+    async addPrefixCorrection() {
+      if (!this.newPC.wrong_prefix.trim() || !this.newPC.correct_prefix.trim()) return;
+      const body = { wrong_prefix: this.newPC.wrong_prefix, correct_prefix: this.newPC.correct_prefix };
+      if (this.newPC.notes.trim()) body.notes = this.newPC.notes;
+      const res = await fetch('/api/settings/prefix-corrections', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        this.prefixCorrections = await fetch('/api/settings/prefix-corrections').then(r => r.json());
+        this.newPC = { wrong_prefix:'', correct_prefix:'', notes:'' };
+        this.showToast('Corrección agregada.');
+      } else { const err = await res.json().catch(()=>({})); this.showToast(err.detail||'Error al agregar.','error'); }
+    },
+    async deletePrefixCorrection(id) {
+      const res = await fetch(`/api/settings/prefix-corrections/${id}`, { method:'DELETE' });
+      if (res.ok || res.status === 204) {
+        this.prefixCorrections = this.prefixCorrections.filter(p => p.id !== id);
+        this.confirmDeletePCId = null;
+        this.showToast('Corrección eliminada.');
+      } else { this.confirmDeletePCId = null; this.showToast('No se pudo eliminar.','error'); }
     },
   };
 }

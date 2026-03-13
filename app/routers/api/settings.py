@@ -13,6 +13,9 @@ from app.schemas.rules import (
     FolderStatusCreate,
     FolderStatusOut,
     FolderStatusUpdate,
+    PrefixCorrectionCreate,
+    PrefixCorrectionOut,
+    PrefixCorrectionUpdate,
     ServiceTypeCreate,
     ServiceTypeOut,
     ServiceTypeUpdate,
@@ -165,3 +168,40 @@ async def delete_folder_status(fs_id: int, db: AsyncSession = Depends(get_db)):
         if "foreign key" in str(e).lower() or "fk" in str(e).lower():
             raise HTTPException(409, "No se puede eliminar: hay facturas que usan este estado")
         raise
+
+
+# ------------------------------------------------------------------
+# Prefix corrections
+# ------------------------------------------------------------------
+
+@router.get("/prefix-corrections", response_model=list[PrefixCorrectionOut])
+async def list_prefix_corrections(db: AsyncSession = Depends(get_db)):
+    return await RulesRepo(db).get_prefix_corrections()
+
+
+@router.post("/prefix-corrections", response_model=PrefixCorrectionOut, status_code=201)
+async def create_prefix_correction(data: PrefixCorrectionCreate, db: AsyncSession = Depends(get_db)):
+    obj = await RulesRepo(db).create_prefix_correction(data.model_dump())
+    await db.commit()
+    return obj
+
+
+@router.patch("/prefix-corrections/{correction_id}", response_model=PrefixCorrectionOut)
+async def update_prefix_correction(
+    correction_id: int, data: PrefixCorrectionUpdate, db: AsyncSession = Depends(get_db)
+):
+    obj = await RulesRepo(db).update_prefix_correction(
+        correction_id, {k: v for k, v in data.model_dump().items() if v is not None}
+    )
+    if not obj:
+        raise HTTPException(404, "Corrección no encontrada")
+    await db.commit()
+    return obj
+
+
+@router.delete("/prefix-corrections/{correction_id}", status_code=204)
+async def delete_prefix_correction(correction_id: int, db: AsyncSession = Depends(get_db)):
+    deleted = await RulesRepo(db).delete_prefix_correction(correction_id)
+    if not deleted:
+        raise HTTPException(404, "Corrección no encontrada")
+    await db.commit()

@@ -32,3 +32,17 @@ class FolderStatus(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     status: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     # values: PRESENTE | FALTANTE | AUDITADA | ANULAR | REVISAR | PENDIENTE
+
+
+class PrefixCorrection(Base):
+    """Maps a wrong file-name prefix to the canonical correct one.
+
+    Used by the NORMALIZE_FILES pipeline stage to fix mis-prefixed PDFs
+    before the main standardization pass (e.g. OPD → OPF, FVE → FEV).
+    """
+    __tablename__ = "prefix_corrections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    wrong_prefix: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    correct_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(200))

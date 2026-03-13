@@ -75,3 +75,23 @@ class FolderStatusCreate(BaseModel):
 
 class FolderStatusUpdate(BaseModel):
     status: str | None = None
+
+
+class PrefixCorrectionOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    wrong_prefix: str
+    correct_prefix: str
+    notes: str | None
+
+
+class PrefixCorrectionCreate(BaseModel):
+    wrong_prefix: str
+    correct_prefix: str
+    notes: str | None = None
+
+
+class PrefixCorrectionUpdate(BaseModel):
+    correct_prefix: str | None = None
+    notes: str | None = None
