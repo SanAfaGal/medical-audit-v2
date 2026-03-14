@@ -28,6 +28,12 @@ case "$CMD" in
     docker compose restart "$@"
     ;;
 
+  build)
+    echo -e "${YELLOW}Building images (with cache)...${NC}"
+    docker compose build && docker compose up -d
+    echo -e "${GREEN}Build complete.${NC}"
+    ;;
+
   rebuild)
     echo -e "${YELLOW}Rebuilding images (no cache)...${NC}"
     docker compose build --no-cache && docker compose up -d
@@ -115,7 +121,8 @@ case "$CMD" in
     echo -e "  ${GREEN}up${NC}                   Start all services (docker compose up -d)"
     echo -e "  ${GREEN}down${NC}                 Stop all services"
     echo -e "  ${GREEN}restart${NC} [service]    Restart all or a specific service"
-    echo -e "  ${GREEN}rebuild${NC}              Rebuild images (no cache) and restart"
+    echo -e "  ${GREEN}build${NC}                Build images (with cache) and restart"
+  echo -e "  ${GREEN}rebuild${NC}              Rebuild images (no cache) and restart"
     echo -e "  ${GREEN}logs${NC} [service]       Follow logs (all services or one)"
     echo -e "  ${GREEN}status${NC}               Show container status"
     echo -e "  ${GREEN}migrate${NC}              Apply pending Alembic migrations"
