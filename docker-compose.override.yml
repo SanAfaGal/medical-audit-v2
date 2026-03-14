@@ -10,4 +10,9 @@ services:
       - ./core:/app/core
 
   adminer:
-    profiles: []   # En dev el perfil no es necesario; levanta siempre
+    image: adminer:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db

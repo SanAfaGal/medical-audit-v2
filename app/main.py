@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import structlog
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.config import settings
@@ -49,9 +47,6 @@ from app.routers.api.invoices import router as invoices_router
 from app.routers.api.findings import router as findings_router
 from app.routers.api.pipeline import router as pipeline_router
 from app.routers.api.settings import router as settings_router
-
-_STATIC_DIR = Path(__file__).parent / "static"
-app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 app.include_router(pages_router)
 app.include_router(hospitals_router, prefix="/api")
