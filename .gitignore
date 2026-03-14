@@ -47,3 +47,7 @@ htmlcov/
 
 # Snapshots de base de datos — comitear manualmente si se desea versionar
 backups/*.sql
+
+# Datos de auditoría locales (bind mount por defecto)
+audit_data/
+!audit_data/.gitkeep

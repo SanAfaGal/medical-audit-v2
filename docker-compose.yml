@@ -30,6 +30,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - "${AUDIT_HOST_PATH}:/audit_data"
     # NOT exposed to the host — nginx is the only entry point
 
   # ── Nginx reverse proxy / frontend ───────────────────────────────────────
