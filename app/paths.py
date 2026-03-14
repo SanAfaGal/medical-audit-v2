@@ -15,7 +15,7 @@ from pathlib import Path
 def to_container_path(path_str: str) -> Path:
     """Convert a user-supplied path (Windows or Linux) to a Path usable inside Docker."""
     if not path_str:
-        return Path("/mnt/c")
+        raise ValueError("audit_data_root no está configurado")
     m = re.match(r"^([A-Za-z])[:/\\](.*)", path_str)
     if m:
         drive = m.group(1).lower()

@@ -85,6 +85,9 @@ async def execute(
     """Yield log lines as a pipeline stage executes."""
     sys_settings = await RulesRepo(db).get_system_settings()
     audit_data_root = sys_settings.audit_data_root if sys_settings and sys_settings.audit_data_root else ""
+    if not audit_data_root:
+        yield "[ERROR] audit_data_root no está configurado. Ve a Configuración → Sistema y define la ruta base."
+        return
     ctx = _build_context(institution, period, db, extra or {}, audit_data_root)
     handler_fn = _STAGE_HANDLERS.get(stage)
 
