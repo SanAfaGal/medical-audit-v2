@@ -153,6 +153,7 @@ SECRET_KEY=<generate with: python -c "import secrets,base64; print(base64.b64enc
 POSTGRES_USER=audit
 POSTGRES_PASSWORD=audit
 POSTGRES_DB=medical_audit
+AUDIT_HOST_PATH=./audit_data
 LOG_LEVEL=INFO
 DOCS_ENABLED=true
 ```
@@ -232,6 +233,7 @@ All variables are read by `app/config.py` via pydantic-settings.
 | `POSTGRES_USER` | Yes | — | PostgreSQL username (used by the `db` service). |
 | `POSTGRES_PASSWORD` | Yes | — | PostgreSQL password. |
 | `POSTGRES_DB` | Yes | — | PostgreSQL database name. |
+| `AUDIT_HOST_PATH` | No | `./audit_data` | Host folder mounted at `/audit_data` inside the container. Use forward slashes. Change here and restart with `docker compose up -d backend` to point to a different folder. |
 | `LOG_LEVEL` | No | `INFO` | Structlog level: `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 | `DOCS_ENABLED` | No | `false` | Set `true` to enable `/docs` and `/redoc`. Never enable in production. |
 
@@ -370,6 +372,8 @@ Business rules configuration.
 | `PATCH` | `/api/settings/prefix-corrections/{id}` | Update prefix correction rule |
 | `DELETE` | `/api/settings/prefix-corrections/{id}` | Delete prefix correction rule |
 
+> The audit folder path is no longer a database setting — it is configured via `AUDIT_HOST_PATH` in `.env` and mounted at `/audit_data` inside the container.
+
 ---
 
 ## Audit Pipeline
@@ -425,6 +429,8 @@ The pipeline is composed of 18 sequential stages. Each stage is triggered indivi
 - **ServiceTypeDocument** — Join entity linking a ServiceType to a required DocType for a specific institution.
 - **Finding (MissingFile)** — Records a specific missing required document for an invoice.
 - **PrefixCorrection** — Maps known incorrect filename prefixes to their correct canonical form (used in the `NORMALIZE_FILES` pipeline stage).
+
+> **Audit folder path** — The base folder where institution subfolders live is set via `AUDIT_HOST_PATH` in `.env` (mounted at `/audit_data` inside the container). It is not stored in the database.
 
 ---
 
