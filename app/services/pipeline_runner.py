@@ -640,7 +640,8 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
             for dt_id in required_dt_ids
         }
 
-        folder = stage_path / invoice.invoice_number
+        prefix = institution.invoice_id_prefix or ""
+        folder = stage_path / (prefix + invoice.invoice_number)
         missing_codes = await executor(inspector.check_required_docs, folder, required_prefixes)
 
         for code in missing_codes:
@@ -816,6 +817,7 @@ async def _download_missing_docs(ctx: dict) -> AsyncGenerator[str, None]:
     creds = json.loads(decrypt(institution.drive_credentials_enc))
     drive = DriveSync(credentials_dict=creds)
 
+    id_prefix = institution.invoice_id_prefix or ""
     total_files = 0
     for invoice_number, doc_codes in grouped.items():
         file_names = [
@@ -824,7 +826,7 @@ async def _download_missing_docs(ctx: dict) -> AsyncGenerator[str, None]:
             if code in prefix_by_code
         ]
         if file_names:
-            dest_folder = stage_path / invoice_number
+            dest_folder = stage_path / (id_prefix + invoice_number)
             dest_folder.mkdir(parents=True, exist_ok=True)
             await executor(drive.download_specific_files, file_names, dest_folder)
             total_files += len(file_names)

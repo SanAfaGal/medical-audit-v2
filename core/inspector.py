@@ -22,7 +22,7 @@ class FolderInspector:
         _esc = re.escape(id_prefix)
         # When there is no prefix the separator token is meaningless — omitting it
         # prevents the wildcard from consuming the first digit of a numeric-only ID.
-        _sep = r"[^a-zA-Z]?" if id_prefix else ""
+        _sep = r"[^a-zA-Z0-9]?" if id_prefix else ""
         self._re_dir_name      = re.compile(rf"^{_esc}\d+$",           re.IGNORECASE)
         self._re_dir_pattern   = re.compile(rf"{_esc}{_sep}(\d+)",    re.IGNORECASE)
         self._re_folder_suffix = re.compile(rf"({_esc}{_sep}\d+)$",   re.IGNORECASE)
