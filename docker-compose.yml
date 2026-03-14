@@ -1,21 +1,63 @@
 services:
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: audit
-      POSTGRES_PASSWORD: audit
-      POSTGRES_DB: medical_audit
-    ports:
-      - "5432:5432"
+      POSTGRES_USER:     ${POSTGRES_USER:-audit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-audit}
+      POSTGRES_DB:       ${POSTGRES_DB:-medical_audit}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-audit}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # NOT exposed to the host — only accessible inside the Docker network
 
+  # ── FastAPI backend ───────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-audit}:${POSTGRES_PASSWORD:-audit}@db:5432/${POSTGRES_DB:-medical_audit}
+      DOCS_ENABLED: ${DOCS_ENABLED:-false}   # set to true in .env for dev
+    volumes:
+      # Share static files with nginx so nginx serves them directly
+      - static_files:/app/app/static
+    depends_on:
+      db:
+        condition: service_healthy
+    # NOT exposed to the host — nginx is the only entry point
+
+  # ── Nginx reverse proxy / frontend ───────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"        # Public HTTP (frontend + API through same domain)
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - static_files:/app/static:ro     # Serve /static/* without hitting Python
+    depends_on:
+      - backend
+
+  # ── Adminer (dev only) ────────────────────────────────────────────────────
   adminer:
     image: adminer:latest
+    restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8080:8080"   # DB GUI — only bind this in dev, never in production
     depends_on:
       - db
+    profiles:
+      - dev            # Only starts with: docker compose --profile dev up
 
 volumes:
   pgdata:
+  static_files:        # Shared volume: backend writes, nginx reads

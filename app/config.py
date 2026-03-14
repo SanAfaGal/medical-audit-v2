@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     host: str = "0.0.0.0"
     port: int = 8000
+    # Disable Swagger UI and ReDoc in production (set DOCS_ENABLED=false)
+    docs_enabled: bool = True
 
 
 settings = Settings()

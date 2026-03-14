@@ -154,30 +154,8 @@ async def _run_staging(ctx: dict) -> AsyncGenerator[str, None]:
 
 @_stage("REMOVE_NON_PDF")
 async def _remove_non_pdf(ctx: dict) -> AsyncGenerator[str, None]:
-    """Delete all non-PDF files in STAGE."""
+    """Delete non-PDF files and corrupt PDFs in STAGE."""
     from core.ops import DocumentOps
-    from core.scanner import DocumentScanner
-
-    executor = _get_executor()
-    stage_path: Path = ctx["stage_path"]
-
-    if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
-        return
-
-    scanner = DocumentScanner(stage_path)
-    non_pdf = await executor(scanner.find_non_pdf)
-    yield f"[INFO] Archivos no-PDF encontrados: {len(non_pdf)}"
-
-    if non_pdf:
-        ops = DocumentOps(stage_path)
-        removed = await executor(ops.remove_files, non_pdf)
-        yield f"[INFO] Archivos no-PDF eliminados: {removed}"
-
-
-@_stage("CHECK_INVALID_FILES")
-async def _check_invalid_files(ctx: dict) -> AsyncGenerator[str, None]:
-    """Detect corrupt PDFs (cannot be opened)."""
     from core.reader import DocumentReader
     from core.scanner import DocumentScanner
 
@@ -189,13 +167,25 @@ async def _check_invalid_files(ctx: dict) -> AsyncGenerator[str, None]:
         return
 
     scanner = DocumentScanner(stage_path)
-    all_files = await executor(scanner.find_by_extension)
-    yield f"[INFO] PDFs a verificar: {len(all_files)}"
+    ops = DocumentOps(stage_path)
 
-    invalid = await executor(DocumentReader.find_unreadable, all_files)
+    # Remove non-PDF files
+    non_pdf = await executor(scanner.find_non_pdf)
+    yield f"[INFO] Archivos no-PDF encontrados: {len(non_pdf)}"
+    if non_pdf:
+        removed = await executor(ops.remove_files, non_pdf)
+        yield f"[INFO] Archivos no-PDF eliminados: {removed}"
+
+    # Remove corrupt PDFs
+    all_pdfs = await executor(scanner.find_by_extension)
+    yield f"[INFO] PDFs a verificar: {len(all_pdfs)}"
+    invalid = await executor(DocumentReader.find_unreadable, all_pdfs)
     for f in invalid:
         yield f"[WARN] PDF corrupto: {f.name}"
     yield f"[INFO] PDFs corruptos encontrados: {len(invalid)}"
+    if invalid:
+        removed_corrupt = await executor(ops.remove_files, invalid)
+        yield f"[INFO] PDFs corruptos eliminados: {removed_corrupt}"
 
 
 def _apply_prefix_corrections(
@@ -666,7 +656,8 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
 
 @_stage("VERIFY_CUFE")
 async def _verify_cufe(ctx: dict) -> AsyncGenerator[str, None]:
-    """Verify CUFE presence in invoice PDFs."""
+    """Verify CUFE presence and tag folders missing a CUFE in invoice PDFs."""
+    from core.ops import DocumentOps
     from core.scanner import DocumentScanner
     from core.validator import InvoiceValidator
 
@@ -693,36 +684,6 @@ async def _verify_cufe(ctx: dict) -> AsyncGenerator[str, None]:
     for f in missing_cufe:
         yield f"[WARN] Sin CUFE: {f.name}"
     yield f"[INFO] Facturas sin CUFE: {len(missing_cufe)}"
-
-
-@_stage("TAG_MISSING_CUFE")
-async def _tag_missing_cufe(ctx: dict) -> AsyncGenerator[str, None]:
-    """Append ' CUFE' suffix to parent folders of invoice PDFs missing a CUFE."""
-    from core.ops import DocumentOps
-    from core.scanner import DocumentScanner
-    from core.validator import InvoiceValidator
-
-    from app.repositories.rules_repo import RulesRepo
-
-    executor = _get_executor()
-    stage_path: Path = ctx["stage_path"]
-    institution = ctx["institution"]
-    db = ctx["db"]
-
-    if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
-        return
-
-    rules_repo = RulesRepo(db)
-    invoice_doc = await rules_repo.get_doc_type_by_code("FACTURA")
-    invoice_prefix = invoice_doc.prefix if invoice_doc and invoice_doc.prefix else institution.invoice_id_prefix
-
-    scanner = DocumentScanner(stage_path)
-    invoices = await executor(scanner.find_by_prefix, invoice_prefix)
-
-    validator = InvoiceValidator(stage_path, institution.invoice_id_prefix)
-    _, missing_cufe = await executor(validator.validate_invoice_files, invoices)
-    yield f"[INFO] Facturas sin CUFE a marcar: {len(missing_cufe)}"
 
     if missing_cufe:
         ops = DocumentOps(stage_path, institution.invoice_id_prefix)

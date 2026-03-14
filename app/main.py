@@ -7,6 +7,7 @@ from pathlib import Path
 import structlog
 import uvicorn
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -18,13 +19,27 @@ logger = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("startup", host=settings.host, port=settings.port)
+    logger.info("startup", host=settings.host, port=settings.port, docs=settings.docs_enabled)
     yield
     await engine.dispose()
     logger.info("shutdown")
 
 
-app = FastAPI(title="Medical Audit v2", version="2.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="Medical Audit v2",
+    version="2.0.0",
+    lifespan=lifespan,
+    # Swagger UI and ReDoc are only available when DOCS_ENABLED=true (dev)
+    docs_url="/docs" if settings.docs_enabled else None,
+    redoc_url="/redoc" if settings.docs_enabled else None,
+    openapi_url="/openapi.json" if settings.docs_enabled else None,
+)
+
+
+@app.get("/health", include_in_schema=False)
+async def health() -> JSONResponse:
+    """Used by Docker HEALTHCHECK and nginx upstream probes."""
+    return JSONResponse({"status": "ok"})
 
 # --- Routers ---
 from app.routers.pages import router as pages_router

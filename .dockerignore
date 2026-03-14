@@ -37,6 +37,13 @@ htmlcov/
 *.log
 logs/
 
-# uv
+# uv (uv.lock is required for reproducible builds — do NOT exclude it)
 .python-version
-uv.lock
+
+# Tests (not needed in production image)
+tests/
+
+# Docker artifacts (not needed inside the image)
+Dockerfile
+docker-compose.yml
+nginx/
