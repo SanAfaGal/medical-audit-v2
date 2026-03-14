@@ -84,11 +84,33 @@
           <p class="text-xs text-gray-400 mt-0.5">Se cifra con Fernet antes de guardarse en la BD</p>
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Credenciales Google Drive (JSON)</label>
-          <textarea x-model="form.drive_credentials_json" rows="3"
-                    placeholder="Pegar el contenido completo del drive.json"
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-sky-500"></textarea>
-          <p class="text-xs text-gray-400 mt-0.5">Se cifra con Fernet</p>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Credenciales Google Drive (.json)</label>
+          <div class="flex items-center gap-2">
+            <button type="button" @click="$refs.driveJsonInput.click()"
+                    class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-gray-700">
+              <i class="fa-solid fa-file-arrow-up text-sky-500"></i>
+              Subir archivo .json
+            </button>
+            <input type="file" accept=".json,application/json" x-ref="driveJsonInput" class="hidden"
+                   @change="uploadDriveCredentials(editingId, $event.target.files[0]); $event.target.value=''">
+            <span x-show="driveCredsStatus === 'ok'" class="flex items-center gap-1 text-xs text-emerald-600 font-medium">
+              <i class="fa-solid fa-circle-check"></i> Configuradas
+            </span>
+            <span x-show="driveCredsStatus === 'error'" class="flex items-center gap-1 text-xs text-red-500 font-medium">
+              <i class="fa-solid fa-triangle-exclamation"></i> <span x-text="driveCredsError"></span>
+            </span>
+          </div>
+          <p class="text-xs text-gray-400 mt-1">
+            <template x-if="editingId">
+              <span x-show="currentInstHasDriveCreds" class="text-emerald-600">
+                <i class="fa-solid fa-lock mr-0.5"></i>Credenciales almacenadas y cifradas.
+                Sube un nuevo archivo para reemplazarlas.
+              </span>
+            </template>
+            <template x-if="!editingId || !currentInstHasDriveCreds">
+              <span>Sube el archivo <code class="bg-gray-100 px-1 rounded">service_account.json</code> de Google Cloud. Se cifra con Fernet.</span>
+            </template>
+          </p>
         </div>
         <div class="col-span-2 flex items-center gap-3 pt-2 border-t border-gray-100">
           <button type="submit"
@@ -141,6 +163,11 @@
               </div>
             </div>
             <div class="flex items-center gap-2">
+              <span x-show="h.has_drive_credentials"
+                    title="Credenciales Google Drive configuradas"
+                    class="inline-flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 font-medium">
+                <i class="fa-brands fa-google-drive text-[10px]"></i> Drive
+              </span>
               <button @click="editInstitution(h)"
                       class="text-xs px-3 py-1.5 text-sky-600 border border-sky-200 rounded-lg hover:bg-sky-50 transition-colors">
                 <i class="fa-solid fa-pen-to-square mr-1"></i>Editar
@@ -1218,7 +1245,10 @@ function settingsApp() {
     editingName: '',
     confirmDeleteInstId: null,
     uploadingLogoFor: null,
-    form: { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'', drive_credentials_json:'' },
+    currentInstHasDriveCreds: false,
+    driveCredsStatus: '',   // '' | 'ok' | 'error'
+    driveCredsError: '',
+    form: { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'' },
 
     // Mapeos
     mapInstId: '',
@@ -1307,13 +1337,17 @@ function settingsApp() {
     // ---- INSTITUCIONES ----
     resetInstForm() {
       this.editingId = null; this.editingName = '';
-      this.form = { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'', drive_credentials_json:'' };
+      this.currentInstHasDriveCreds = false;
+      this.driveCredsStatus = ''; this.driveCredsError = '';
+      this.form = { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'' };
     },
 
     editInstitution(h) {
       this.editingId = h.id;
       this.editingName = h.display_name;
-      this.form = { name:h.name, display_name:h.display_name, nit:h.nit, invoice_id_prefix:h.invoice_id_prefix, sihos_base_url:h.sihos_base_url||'', sihos_doc_code:h.sihos_doc_code||'', sihos_user:h.sihos_user||'', sihos_password:'', drive_credentials_json:'' };
+      this.currentInstHasDriveCreds = h.has_drive_credentials || false;
+      this.driveCredsStatus = ''; this.driveCredsError = '';
+      this.form = { name:h.name, display_name:h.display_name, nit:h.nit, invoice_id_prefix:h.invoice_id_prefix, sihos_base_url:h.sihos_base_url||'', sihos_doc_code:h.sihos_doc_code||'', sihos_user:h.sihos_user||'', sihos_password:'' };
       window.scrollTo({ top: 0, behavior: 'smooth' });
     },
 
@@ -1360,6 +1394,30 @@ function settingsApp() {
         this.showToast(err.detail || 'Error subiendo logo', 'error');
       }
       this.uploadingLogoFor = null;
+    },
+
+    async uploadDriveCredentials(id, file) {
+      if (!file || !id) {
+        this.driveCredsStatus = 'error';
+        this.driveCredsError = id ? 'Sin archivo seleccionado.' : 'Guarda la institución primero.';
+        return;
+      }
+      this.driveCredsStatus = '';
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`/api/institutions/${id}/drive-credentials`, { method: 'POST', body: fd });
+      if (res.ok) {
+        this.driveCredsStatus = 'ok';
+        this.currentInstHasDriveCreds = true;
+        const inst = this.institutions.find(i => i.id === id);
+        if (inst) inst.has_drive_credentials = true;
+        this.showToast('Credenciales de Drive guardadas y cifradas.', 'success');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        this.driveCredsStatus = 'error';
+        this.driveCredsError = err.detail || 'Error al guardar credenciales.';
+        this.showToast(this.driveCredsError, 'error');
+      }
     },
 
     // ---- MAPEOS ----

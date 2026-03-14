@@ -57,6 +57,7 @@ async def list_institutions(db: AsyncSession = Depends(get_db)):
     for inst in institutions:
         item = InstitutionOut.model_validate(inst)
         item.logo_url = f"/api/institutions/{inst.id}/logo" if inst.logo_content_type else None
+        item.has_drive_credentials = bool(inst.drive_credentials_enc)
         out.append(item)
     return out
 
@@ -75,6 +76,30 @@ async def serve_logo(institution_id: int, db: AsyncSession = Depends(get_db)):
         media_type=row.logo_content_type,
         headers={"Cache-Control": "public, max-age=86400"},
     )
+
+
+@router.post("/{institution_id}/drive-credentials", status_code=200)
+async def upload_drive_credentials(
+    institution_id: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a Google Drive service-account JSON file and store it encrypted."""
+    import json as _json
+
+    institution = await db.get(Institution, institution_id)
+    if institution is None:
+        raise HTTPException(status_code=404, detail="Institución no encontrada")
+
+    raw = await file.read()
+    try:
+        _json.loads(raw)  # validate it's valid JSON
+    except _json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="El archivo no es JSON válido")
+
+    institution.drive_credentials_enc = crypto.encrypt(raw.decode("utf-8"))
+    await db.commit()
+    return {"ok": True}
 
 
 @router.post("/{institution_id}/logo")

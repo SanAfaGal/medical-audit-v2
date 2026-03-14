@@ -101,7 +101,8 @@ async def execute(
         yield f"[INFO] Etapa completada: {stage}"
     except Exception as exc:
         logger.exception("Pipeline stage %s failed", stage)
-        yield f"[ERROR] {stage} falló: {exc}"
+        exc_desc = f"{type(exc).__name__}: {exc}" if str(exc).strip() else type(exc).__name__
+        yield f"[ERROR] {stage} falló: {exc_desc}"
 
 
 # ---------------------------------------------------------------------------
@@ -815,11 +816,22 @@ async def _download_drive(ctx: dict) -> AsyncGenerator[str, None]:
     creds = json.loads(decrypt(institution.drive_credentials_enc))
     drive = DriveSync(credentials_dict=creds)
 
-    stage_path.mkdir(parents=True, exist_ok=True)
-    downloaded = await executor(drive.download_missing_dirs, missing, stage_path)
-    yield f"[INFO] Carpetas descargadas de Drive: {len(downloaded)}/{len(missing)}"
+    id_prefix = institution.invoice_id_prefix or ""
+    # Folders on disk (and in Drive) are named PREFIX+invoice_number
+    search_names = [id_prefix + num for num in missing]
+    for sn in search_names:
+        yield f"[INFO] Buscando en Drive: {sn}"
 
-    if downloaded:
+    stage_path.mkdir(parents=True, exist_ok=True)
+    downloaded_prefixed = await executor(drive.download_missing_dirs, search_names, stage_path)
+    yield f"[INFO] Carpetas descargadas de Drive: {len(downloaded_prefixed)}/{len(missing)}"
+
+    if downloaded_prefixed:
+        # Strip prefix back to plain invoice numbers for DB update
+        downloaded = [
+            name[len(id_prefix):] if (id_prefix and name.upper().startswith(id_prefix.upper())) else name
+            for name in downloaded_prefixed
+        ]
         updated = await inv_repo.batch_update_folder_status(period.id, downloaded, "PRESENTE")
         await db.commit()
         yield f"[INFO] Facturas actualizadas a PRESENTE: {updated}"
