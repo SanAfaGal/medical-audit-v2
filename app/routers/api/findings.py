@@ -58,3 +58,15 @@ async def delete_all_missing_files(invoice_id: int, db: AsyncSession = Depends(g
     repo = MissingFileRepo(db)
     await repo.delete_all_for_invoice(invoice_id)
     await db.commit()
+
+
+@router.post("/batch-delete", status_code=200)
+async def batch_delete_findings(data: dict, db: AsyncSession = Depends(get_db)):
+    """Delete all findings for multiple invoices at once."""
+    invoice_ids = data.get("invoice_ids", [])
+    if not invoice_ids:
+        return {"deleted": 0}
+    repo = MissingFileRepo(db)
+    deleted = await repo.delete_all_for_invoices(invoice_ids)
+    await db.commit()
+    return {"deleted": deleted}

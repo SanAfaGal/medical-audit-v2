@@ -1,268 +1,620 @@
 {% extends "base.html" %}
-
 {% block title %}Auditoría — Auditoría Médica{% endblock %}
 {% block page_title %}Auditoría de facturas{% endblock %}
 
 {% block content %}
-<div x-data="auditApp()" class="space-y-4">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Outfit:wght@600;700;800&display=swap');
+  [x-cloak] { display: none !important; }
 
-  <!-- No context warning -->
-  <div x-show="!$store.ctx.periodId"
-       class="flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-    <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
-    Selecciona un hospital y período en el panel lateral para ver las facturas.
+  .audit-root { font-family: 'IBM Plex Sans', 'Plus Jakarta Sans', sans-serif; }
+
+  /* Stats numbers use Outfit */
+  .stat-num { font-family: 'Outfit', sans-serif; font-weight: 800; }
+
+  /* Status left-border on table rows */
+  .row-PENDIENTE { border-left: 3px solid #F59E0B; }
+  .row-PRESENTE  { border-left: 3px solid #10B981; }
+  .row-FALTANTE  { border-left: 3px solid #EF4444; }
+  .row-AUDITADA  { border-left: 3px solid #6366F1; }
+  .row-default   { border-left: 3px solid transparent; }
+
+  /* Batch bar slide-up */
+  .batch-bar {
+    transition: transform 0.25s cubic-bezier(.4,0,.2,1), opacity 0.2s;
+  }
+  .batch-bar-hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
+  .batch-bar-visible { transform: translateY(0); opacity: 1; }
+
+  /* Detail panel fade-slide */
+  .detail-enter { animation: detailIn 0.2s ease; }
+  @keyframes detailIn {
+    from { opacity: 0; transform: translateX(16px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  /* Stat card click ripple */
+  .stat-card { transition: box-shadow .15s, border-color .15s, background .15s; }
+  .stat-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+
+  /* Active filter chip */
+  .filter-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 10px;
+    border-radius: 9999px; font-size: 11px; font-weight: 500; background: #E0F2FE;
+    color: #0369A1; border: 1px solid #BAE6FD; cursor: default; }
+  .filter-chip button { opacity: .6; }
+  .filter-chip button:hover { opacity: 1; }
+
+  /* Compact select */
+  .field-select {
+    appearance: none; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236B7280'/%3E%3C/svg%3E") no-repeat right 8px center;
+    padding-right: 28px;
+  }
+  .field-select-dark {
+    appearance: none; background: rgba(255,255,255,0.1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2394A3B8'/%3E%3C/svg%3E") no-repeat right 8px center;
+    padding-right: 28px;
+  }
+
+  /* Table scroll area */
+  .table-scroll { overflow-x: auto; }
+
+  /* Sticky detail on desktop */
+  @media (min-width: 1024px) {
+    .detail-sticky { position: sticky; top: 0; max-height: calc(100vh - 120px); overflow-y: auto; }
+  }
+
+  /* Select-all banner animation */
+  .select-banner { animation: bannerIn 0.15s ease; }
+  @keyframes bannerIn { from { opacity:0; transform: translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+</style>
+
+<div x-data="auditApp()" class="audit-root flex flex-col gap-4 pb-20">
+
+  <!-- ── Empty state ── -->
+  <div x-show="!$store.ctx.periodId" x-cloak
+       class="flex flex-col items-center justify-center py-24 gap-4 text-center">
+    <div class="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 text-2xl">
+      <i class="fa-solid fa-magnifying-glass-chart"></i>
+    </div>
+    <div>
+      <p class="font-semibold text-slate-700 text-base">Selecciona un hospital y período</p>
+      <p class="text-sm text-slate-400 mt-1">Usa el panel lateral para elegir el contexto de auditoría.</p>
+    </div>
   </div>
 
-  <!-- Filters -->
-  <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-4" x-show="$store.ctx.periodId">
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Estado</label>
-        <select x-model="filterStatusId" @change="page=1; loadInvoices()"
-                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
-          <option value="">Todos</option>
-          <template x-for="fs in folderStatuses" :key="fs.id">
-            <option :value="fs.id" x-text="fs.status"></option>
-          </template>
-        </select>
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Tipo de administradora</label>
-        <select x-model="filterAdminType" @change="filterAdminCanonical=''; page=1; loadInvoices()"
-                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
-          <option value="">Todos</option>
-          <template x-for="t in uniqueAdminTypes" :key="t">
-            <option :value="t" x-text="t"></option>
-          </template>
-        </select>
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Administradora</label>
-        <select x-model="filterAdminCanonical" @change="page=1; loadInvoices()"
-                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
-          <option value="">Todas</option>
-          <template x-for="name in filteredAdmins" :key="name">
-            <option :value="name" x-text="name"></option>
-          </template>
-        </select>
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Contrato</label>
-        <select x-model="filterContractCanonical" @change="page=1; loadInvoices()"
-                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
-          <option value="">Todos</option>
-          <template x-for="name in uniqueContracts" :key="name">
-            <option :value="name" x-text="name"></option>
-          </template>
-        </select>
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Servicio</label>
-        <select x-model="filterServiceTypeId" @change="page=1; loadInvoices()"
-                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
-          <option value="">Todos</option>
-          <template x-for="st in serviceTypes" :key="st.id">
-            <option :value="st.id" x-text="st.code + (st.description ? ' — ' + st.description : '')"></option>
-          </template>
-        </select>
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Buscar</label>
-        <input type="text" x-model="searchQuery" @input.debounce.400ms="page=1; loadInvoices()"
-               placeholder="Factura, paciente..."
-               class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
-      </div>
-      <div class="flex items-end">
-        <button @click="clearFilters()"
-                class="w-full px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-          <i class="fa-solid fa-filter-circle-xmark mr-1"></i>Limpiar filtros
-        </button>
-      </div>
-    </div>
-  </section>
+  <!-- ── Stats bar ── -->
+  <section x-show="$store.ctx.periodId" x-cloak>
+    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2">
 
-  <!-- Invoice table -->
-  <section class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" x-show="$store.ctx.periodId">
-    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-      <span class="text-sm text-gray-600">
-        <template x-if="total > 0">
-          <span><strong x-text="total"></strong> facturas</span>
-        </template>
-        <template x-if="total === 0 && $store.ctx.periodId">
-          <span class="text-gray-400">No se encontraron facturas</span>
-        </template>
-      </span>
-      <div class="flex items-center gap-2 text-sm text-gray-500" x-show="total > pageSize">
-        <button @click="prevPage()" :disabled="page <= 1"
-                class="px-2 py-1 rounded border hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
-          <i class="fa-solid fa-chevron-left text-xs"></i>
-        </button>
-        <span>Pág. <strong x-text="page"></strong> / <strong x-text="Math.ceil(total/pageSize)"></strong></span>
-        <button @click="nextPage()" :disabled="page * pageSize >= total"
-                class="px-2 py-1 rounded border hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
-          <i class="fa-solid fa-chevron-right text-xs"></i>
-        </button>
+      <!-- Total -->
+      <div class="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-col gap-0.5 shadow-sm">
+        <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Total</div>
+        <div class="stat-num text-3xl text-gray-800 leading-none" x-text="stats.total ?? '—'"></div>
+        <div class="text-xs text-gray-400 mt-0.5">facturas</div>
       </div>
-    </div>
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50 border-b border-gray-200">
-          <tr>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Factura</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Paciente</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Administradora</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Contrato</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Servicio</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Estado</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">Hallazgos</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-          <template x-for="inv in invoices" :key="inv.id">
-            <tr class="hover:bg-sky-50 cursor-pointer transition-colors"
-                :class="{'bg-sky-50 ring-1 ring-inset ring-sky-200': selectedInvoice && selectedInvoice.id === inv.id}"
-                @click="selectInvoice(inv)">
-              <td class="px-4 py-2.5 font-mono font-semibold text-sky-700 text-xs whitespace-nowrap" x-text="inv.invoice_number"></td>
-              <td class="px-4 py-2.5 text-gray-700 max-w-[200px] truncate" x-text="inv.patient_name || '—'"></td>
-              <td class="px-4 py-2.5 text-xs max-w-[180px]">
-                <span class="text-gray-700 truncate block" x-text="inv.admin_canonical || '—'"></span>
-                <template x-if="inv.admin_type">
-                  <span class="inline-block px-1 py-0.5 rounded text-xs font-semibold bg-sky-100 text-sky-600"
-                        x-text="inv.admin_type"></span>
-                </template>
-              </td>
-              <td class="px-4 py-2.5 text-gray-500 text-xs max-w-[160px] truncate" x-text="inv.contract_canonical || '—'"></td>
-              <td class="px-4 py-2.5 text-gray-500 text-xs whitespace-nowrap" x-text="inv.service_type_code || '—'"></td>
-              <td class="px-4 py-2.5">
-                <span :class="statusBadge(inv.folder_status)"
-                      class="inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
-                      x-text="inv.folder_status"></span>
-              </td>
-              <td class="px-4 py-2.5">
-                <template x-if="inv.missing_file_count > 0">
-                  <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-medium">
-                    <i class="fa-solid fa-triangle-exclamation text-xs"></i>
-                    <span x-text="inv.missing_file_count"></span>
-                  </span>
-                </template>
-                <template x-if="inv.missing_file_count === 0">
-                  <span class="text-green-500 text-xs"><i class="fa-solid fa-check-circle"></i></span>
-                </template>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-    </div>
-  </section>
 
-  <!-- Detail panel -->
-  <section x-show="selectedInvoice"
-           class="bg-white rounded-xl shadow-sm border border-gray-200 p-5"
-           id="detail-panel">
-    <div class="flex items-center justify-between mb-5">
-      <h3 class="font-semibold text-gray-800 text-base">
-        <i class="fa-solid fa-file-invoice mr-2 text-sky-600"></i>
-        Factura <span class="font-mono" x-text="selectedInvoice && selectedInvoice.invoice_number"></span>
-      </h3>
-      <button @click="selectedInvoice = null" class="text-gray-400 hover:text-gray-600">
-        <i class="fa-solid fa-xmark text-lg"></i>
-      </button>
-    </div>
-
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-5 text-sm">
-      <div>
-        <div class="text-xs text-gray-500 mb-0.5">Paciente</div>
-        <div class="font-medium text-gray-800" x-text="selectedInvoice && selectedInvoice.patient_name || 'N/A'"></div>
-      </div>
-      <div>
-        <div class="text-xs text-gray-500 mb-0.5">Administradora</div>
-        <div class="font-medium text-gray-700" x-text="selectedInvoice && selectedInvoice.admin_canonical || '—'"></div>
-        <template x-if="selectedInvoice && selectedInvoice.admin_type">
-          <span class="inline-block mt-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-sky-100 text-sky-700"
-                x-text="selectedInvoice.admin_type"></span>
-        </template>
-      </div>
-      <div>
-        <div class="text-xs text-gray-500 mb-0.5">Contrato</div>
-        <div class="font-medium text-gray-700" x-text="selectedInvoice && selectedInvoice.contract_canonical || '—'"></div>
-      </div>
-      <div>
-        <div class="text-xs text-gray-500 mb-0.5">Servicio</div>
-        <div class="font-medium text-gray-700" x-text="selectedInvoice && selectedInvoice.service_type_code || '—'"></div>
-      </div>
-      <div class="col-span-2 sm:col-span-2">
-        <div class="text-xs text-gray-500 mb-1">Estado de la carpeta</div>
-        <select x-model="detailStatusId"
-                @change="updateStatus()"
-                class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
-          <template x-for="fs in folderStatuses" :key="fs.id">
-            <option :value="fs.id" x-text="fs.status"></option>
-          </template>
-        </select>
-      </div>
-    </div>
-
-    <div class="mb-5">
-      <div class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Hallazgos registrados</div>
-      <div class="space-y-1.5">
-        <template x-for="mf in missingFiles" :key="mf.id">
-          <div class="flex items-center justify-between px-3 py-2 bg-red-50 border border-red-100 rounded-lg">
-            <div class="flex items-center gap-2">
-              <i class="fa-solid fa-triangle-exclamation text-red-500 text-xs"></i>
-              <span class="text-sm font-medium text-red-800" x-text="docTypeLabel(mf.doc_type_id)"></span>
-            </div>
-            <button @click="deleteFile(mf.doc_type_id)"
-                    class="p-1 text-red-400 hover:text-red-600 hover:bg-red-100 rounded transition-colors">
-              <i class="fa-solid fa-trash text-xs"></i>
-            </button>
-          </div>
-        </template>
-        <template x-if="missingFiles.length === 0">
-          <div class="text-sm text-green-600 px-3 py-2">
-            <i class="fa-solid fa-circle-check mr-1.5"></i>Sin hallazgos registrados
-          </div>
-        </template>
-      </div>
-    </div>
-
-    <div class="flex gap-2">
-      <select x-model="newDocTypeId"
-              class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-400 focus:border-red-400">
-        <option value="">— Seleccionar tipo de documento —</option>
-        <template x-for="dt in docTypes" :key="dt.id">
-          <option :value="dt.id" x-text="dt.code + ' — ' + dt.description"></option>
-        </template>
-      </select>
-      <button @click="addFile()" :disabled="!newDocTypeId"
-              class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-        <i class="fa-solid fa-plus mr-1"></i>Agregar
-      </button>
-    </div>
-
-    <!-- Delete invoice -->
-    <div class="pt-4 border-t border-gray-100 flex items-center gap-3">
-      <template x-if="!confirmDeleteInvoice">
-        <button @click="confirmDeleteInvoice = true"
-                class="px-3 py-1.5 text-xs text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
-          <i class="fa-solid fa-trash mr-1"></i>Eliminar factura
+      <!-- Per-status -->
+      <template x-for="s in statCards" :key="s.status">
+        <button class="stat-card rounded-xl border px-4 py-3 flex flex-col gap-0.5 text-left shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1"
+          :class="filterStatusId == s.id
+            ? [s.activeBg, s.activeBorder, 'ring-2 ring-offset-1', s.activeRing]
+            : 'bg-white border-gray-200 hover:border-gray-300'"
+          @click="filterStatusId = (filterStatusId == s.id ? '' : s.id); page=1; loadInvoices()">
+          <div class="text-[10px] font-semibold uppercase tracking-widest"
+               :class="filterStatusId == s.id ? s.activeLabel : 'text-gray-400'"
+               x-text="s.status"></div>
+          <div class="stat-num text-3xl leading-none"
+               :class="filterStatusId == s.id ? s.activeCount : 'text-gray-800'"
+               x-text="(stats.by_status && stats.by_status[s.status] !== undefined) ? stats.by_status[s.status] : 0"></div>
+          <div class="text-xs mt-0.5"
+               :class="filterStatusId == s.id ? s.activeSub : 'text-gray-400'"
+               x-text="filterStatusId == s.id ? 'activo' : 'facturas'"></div>
         </button>
       </template>
-      <template x-if="confirmDeleteInvoice">
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-red-700 font-medium">¿Eliminar esta factura y todos sus hallazgos?</span>
-          <button @click="deleteInvoice()"
-                  class="px-3 py-1.5 text-xs bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">
-            Confirmar eliminación
+
+      <!-- Hallazgos -->
+      <div class="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-col gap-0.5 shadow-sm">
+        <div class="text-[10px] font-semibold uppercase tracking-widest"
+             :class="(stats.total_findings||0) > 0 ? 'text-red-400' : 'text-gray-400'">Hallazgos</div>
+        <div class="stat-num text-3xl leading-none"
+             :class="(stats.total_findings||0) > 0 ? 'text-red-600' : 'text-emerald-600'"
+             x-text="stats.total_findings ?? 0"></div>
+        <div class="text-xs text-gray-400 mt-0.5">sin resolver</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Filters ── -->
+  <section x-show="$store.ctx.periodId" x-cloak
+           class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+
+    <!-- Filter header -->
+    <div class="px-4 py-2.5 flex items-center justify-between border-b border-gray-100 cursor-pointer select-none"
+         @click="filtersOpen = !filtersOpen">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+          <i class="fa-solid fa-filter text-gray-400 mr-1.5"></i>Filtros
+        </span>
+        <!-- Active filter chips -->
+        <template x-if="filterStatusId">
+          <span class="filter-chip">
+            Estado: <strong x-text="folderStatuses.find(f=>f.id==filterStatusId)?.status"></strong>
+            <button @click.stop="filterStatusId=''; page=1; loadInvoices()"><i class="fa-solid fa-xmark text-xs"></i></button>
+          </span>
+        </template>
+        <template x-if="filterAdminType">
+          <span class="filter-chip">
+            Tipo: <strong x-text="filterAdminType"></strong>
+            <button @click.stop="filterAdminType=''; filterAdminCanonical=''; page=1; loadInvoices()"><i class="fa-solid fa-xmark text-xs"></i></button>
+          </span>
+        </template>
+        <template x-if="filterAdminCanonical">
+          <span class="filter-chip">
+            Admin: <strong x-text="filterAdminCanonical"></strong>
+            <button @click.stop="filterAdminCanonical=''; page=1; loadInvoices()"><i class="fa-solid fa-xmark text-xs"></i></button>
+          </span>
+        </template>
+        <template x-if="filterContractCanonical">
+          <span class="filter-chip">
+            Contrato: <strong x-text="filterContractCanonical"></strong>
+            <button @click.stop="filterContractCanonical=''; page=1; loadInvoices()"><i class="fa-solid fa-xmark text-xs"></i></button>
+          </span>
+        </template>
+        <template x-if="filterServiceTypeId">
+          <span class="filter-chip">
+            Servicio: <strong x-text="serviceTypes.find(s=>s.id==filterServiceTypeId)?.code"></strong>
+            <button @click.stop="filterServiceTypeId=''; page=1; loadInvoices()"><i class="fa-solid fa-xmark text-xs"></i></button>
+          </span>
+        </template>
+        <template x-if="searchQuery">
+          <span class="filter-chip">
+            Buscar: <strong x-text="searchQuery"></strong>
+            <button @click.stop="searchQuery=''; page=1; loadInvoices()"><i class="fa-solid fa-xmark text-xs"></i></button>
+          </span>
+        </template>
+      </div>
+      <div class="flex items-center gap-3">
+        <template x-if="hasActiveFilters">
+          <button @click.stop="clearFilters()"
+                  class="text-xs text-red-500 hover:text-red-700 font-medium transition-colors">
+            Limpiar todo
           </button>
-          <button @click="confirmDeleteInvoice = false"
-                  class="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
-            Cancelar
+        </template>
+        <i class="fa-solid fa-chevron-down text-gray-400 text-xs transition-transform duration-200"
+           :class="filtersOpen ? 'rotate-180' : ''"></i>
+      </div>
+    </div>
+
+    <!-- Filter body -->
+    <div x-show="filtersOpen" x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0 -translate-y-1" x-transition:enter-end="opacity-100 translate-y-0" class="px-4 py-3">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        <div>
+          <label class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Estado</label>
+          <select x-model="filterStatusId" @change="page=1; loadInvoices()"
+                  class="field-select w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-400">
+            <option value="">Todos</option>
+            <template x-for="fs in folderStatuses" :key="fs.id">
+              <option :value="fs.id" x-text="fs.status"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Tipo adm.</label>
+          <select x-model="filterAdminType" @change="filterAdminCanonical=''; page=1; loadInvoices()"
+                  class="field-select w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-400">
+            <option value="">Todos</option>
+            <template x-for="t in uniqueAdminTypes" :key="t">
+              <option :value="t" x-text="t"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Administradora</label>
+          <select x-model="filterAdminCanonical" @change="page=1; loadInvoices()"
+                  class="field-select w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-400">
+            <option value="">Todas</option>
+            <template x-for="name in filteredAdmins" :key="name">
+              <option :value="name" x-text="name"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Contrato</label>
+          <select x-model="filterContractCanonical" @change="page=1; loadInvoices()"
+                  class="field-select w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-400">
+            <option value="">Todos</option>
+            <template x-for="name in uniqueContracts" :key="name">
+              <option :value="name" x-text="name"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Servicio</label>
+          <select x-model="filterServiceTypeId" @change="page=1; loadInvoices()"
+                  class="field-select w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-400">
+            <option value="">Todos</option>
+            <template x-for="st in serviceTypes" :key="st.id">
+              <option :value="st.id" x-text="st.code + (st.description ? ' — ' + st.description : '')"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Buscar</label>
+          <div class="relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300 text-xs pointer-events-none"></i>
+            <input type="text" x-model="searchQuery" @input.debounce.400ms="page=1; loadInvoices()"
+                   placeholder="Factura, paciente…"
+                   class="w-full border border-gray-200 rounded-lg pl-7 pr-2.5 py-1.5 text-xs text-gray-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-400" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Main work area: table + detail ── -->
+  <div class="flex gap-4 items-start" x-show="$store.ctx.periodId" x-cloak>
+
+    <!-- ── Table panel ── -->
+    <div class="flex-1 min-w-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+
+      <!-- Table toolbar -->
+      <div class="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap bg-gray-50/60">
+        <div class="flex items-center gap-3 flex-wrap">
+          <span class="text-xs text-gray-500">
+            <template x-if="total > 0">
+              <span class="font-semibold text-gray-700" x-text="total"></span>
+            </template>
+            <template x-if="total === 0"><span class="text-gray-400">Sin resultados</span></template>
+            <template x-if="total > 0"><span class="text-gray-400"> facturas</span></template>
+          </span>
+          <!-- Page selection count -->
+          <template x-if="selectedIds.size > 0">
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+              <i class="fa-solid fa-square-check text-xs"></i>
+              <span x-text="selectedIds.size + ' seleccionadas'"></span>
+            </span>
+          </template>
+        </div>
+
+        <!-- Pagination -->
+        <div class="flex items-center gap-1.5 text-xs text-gray-500" x-show="total > pageSize">
+          <button @click="prevPage()" :disabled="page <= 1"
+                  class="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+            <i class="fa-solid fa-chevron-left text-[10px]"></i>
+          </button>
+          <span class="px-2 font-medium">
+            <span x-text="page"></span> / <span x-text="Math.ceil(total/pageSize) || 1"></span>
+          </span>
+          <button @click="nextPage()" :disabled="page * pageSize >= total"
+                  class="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+            <i class="fa-solid fa-chevron-right text-[10px]"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Select-all-filter banner -->
+      <template x-if="pageAllSelected && total > pageSize && !allFilterSelected">
+        <div class="select-banner px-4 py-2.5 bg-teal-50 border-b border-teal-100 flex items-center justify-between gap-3 text-xs">
+          <span class="text-teal-800">
+            Las <strong x-text="invoices.length"></strong> facturas de esta página están seleccionadas.
+          </span>
+          <button @click="selectAllFilter()"
+                  class="font-semibold text-teal-700 hover:text-teal-900 underline underline-offset-2 whitespace-nowrap">
+            Seleccionar las <span x-text="total"></span> facturas del filtro actual →
           </button>
         </div>
       </template>
+
+      <!-- All-filter selected banner -->
+      <template x-if="allFilterSelected">
+        <div class="select-banner px-4 py-2.5 bg-teal-100 border-b border-teal-200 flex items-center justify-between gap-3 text-xs">
+          <span class="text-teal-900 font-semibold">
+            <i class="fa-solid fa-square-check mr-1.5"></i>
+            Todas las <span x-text="selectedIds.size"></span> facturas del filtro están seleccionadas.
+          </span>
+          <button @click="clearSelection()"
+                  class="text-teal-700 hover:text-teal-900 underline underline-offset-2">
+            Cancelar selección
+          </button>
+        </div>
+      </template>
+
+      <div class="table-scroll">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="bg-gray-50 border-b border-gray-100">
+              <th class="px-3 py-2.5 w-9 text-center">
+                <input type="checkbox"
+                  :checked="pageAllSelected"
+                  :indeterminate="somethingSelected && !pageAllSelected"
+                  @change="togglePageSelection($event)"
+                  class="rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer w-3.5 h-3.5" />
+              </th>
+              <th class="text-left px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Factura</th>
+              <th class="text-left px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider">Paciente</th>
+              <th class="text-left px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">Administradora</th>
+              <th class="text-left px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Contrato</th>
+              <th class="text-left px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Servicio</th>
+              <th class="text-left px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Estado</th>
+              <th class="text-center px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider">Hall.</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50">
+            <template x-for="inv in invoices" :key="inv.id">
+              <tr class="group transition-colors cursor-pointer"
+                  :class="[
+                    'row-' + inv.folder_status,
+                    selectedInvoice && selectedInvoice.id === inv.id
+                      ? 'bg-teal-50'
+                      : selectedIds.has(inv.id)
+                        ? 'bg-teal-50/50'
+                        : 'hover:bg-gray-50/80'
+                  ]"
+                  @click="selectInvoice(inv)">
+
+                <!-- Checkbox — click doesn't open detail -->
+                <td class="px-3 py-2.5 text-center" @click.stop>
+                  <input type="checkbox"
+                    :checked="selectedIds.has(inv.id)"
+                    @change="toggleSelection(inv.id)"
+                    class="rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer w-3.5 h-3.5" />
+                </td>
+
+                <td class="px-3 py-2.5 whitespace-nowrap">
+                  <span class="font-mono font-semibold text-teal-700 text-xs" x-text="inv.invoice_number"></span>
+                </td>
+                <td class="px-3 py-2.5 max-w-[180px]">
+                  <span class="truncate block text-gray-700" x-text="inv.patient_name || '—'"></span>
+                </td>
+                <td class="px-3 py-2.5 hidden md:table-cell max-w-[160px]">
+                  <span class="truncate block text-gray-600" x-text="inv.admin_canonical || '—'"></span>
+                  <template x-if="inv.admin_type">
+                    <span class="inline-block px-1.5 py-px rounded text-[10px] font-semibold bg-sky-100 text-sky-700 mt-0.5"
+                          x-text="inv.admin_type"></span>
+                  </template>
+                </td>
+                <td class="px-3 py-2.5 text-gray-500 hidden lg:table-cell max-w-[140px]">
+                  <span class="truncate block" x-text="inv.contract_canonical || '—'"></span>
+                </td>
+                <td class="px-3 py-2.5 text-gray-500 hidden lg:table-cell whitespace-nowrap" x-text="inv.service_type_code || '—'"></td>
+                <td class="px-3 py-2.5">
+                  <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap"
+                        :class="statusBadgeClass(inv.folder_status)"
+                        x-text="inv.folder_status"></span>
+                </td>
+                <td class="px-3 py-2.5 text-center">
+                  <template x-if="inv.missing_file_count > 0">
+                    <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">
+                      <i class="fa-solid fa-triangle-exclamation text-[9px]"></i>
+                      <span x-text="inv.missing_file_count"></span>
+                    </span>
+                  </template>
+                  <template x-if="inv.missing_file_count === 0">
+                    <i class="fa-solid fa-circle-check text-emerald-400 text-sm"></i>
+                  </template>
+                </td>
+              </tr>
+            </template>
+
+            <!-- Empty state inside table -->
+            <template x-if="invoices.length === 0 && $store.ctx.periodId">
+              <tr>
+                <td colspan="8" class="py-16 text-center text-gray-400 text-sm">
+                  <i class="fa-regular fa-folder-open text-3xl mb-3 block opacity-30"></i>
+                  No se encontraron facturas
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
     </div>
-  </section>
+    <!-- ── /Table panel ── -->
+
+    <!-- ── Detail panel ── -->
+    <div x-show="selectedInvoice" x-cloak
+         class="detail-sticky w-80 xl:w-96 shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden detail-enter"
+         :key="selectedInvoice && selectedInvoice.id">
+
+      <!-- Detail header -->
+      <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
+        <div class="flex items-center gap-2 min-w-0">
+          <div class="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center shrink-0">
+            <i class="fa-solid fa-file-invoice text-teal-600 text-xs"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Factura</div>
+            <div class="font-mono font-bold text-teal-700 text-sm leading-none"
+                 x-text="selectedInvoice && selectedInvoice.invoice_number"></div>
+          </div>
+        </div>
+        <button @click="selectedInvoice = null"
+                class="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <div class="p-4 space-y-4">
+        <!-- Info grid -->
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div>
+            <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Paciente</div>
+            <div class="font-medium text-gray-800 leading-snug" x-text="selectedInvoice && selectedInvoice.patient_name || 'N/A'"></div>
+          </div>
+          <div>
+            <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Servicio</div>
+            <div class="font-medium text-gray-700" x-text="selectedInvoice && selectedInvoice.service_type_code || '—'"></div>
+          </div>
+          <div class="col-span-2">
+            <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Administradora</div>
+            <div class="font-medium text-gray-700 leading-snug" x-text="selectedInvoice && selectedInvoice.admin_canonical || '—'"></div>
+            <template x-if="selectedInvoice && selectedInvoice.admin_type">
+              <span class="inline-block mt-0.5 px-1.5 py-px rounded text-[10px] font-semibold bg-sky-100 text-sky-700"
+                    x-text="selectedInvoice.admin_type"></span>
+            </template>
+          </div>
+          <div class="col-span-2">
+            <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Contrato</div>
+            <div class="font-medium text-gray-700" x-text="selectedInvoice && selectedInvoice.contract_canonical || '—'"></div>
+          </div>
+        </div>
+
+        <!-- Status change -->
+        <div class="pt-1">
+          <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Estado de la carpeta</div>
+          <select x-model="detailStatusId" @change="updateStatus()"
+                  class="field-select w-full border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-700 font-medium focus:ring-2 focus:ring-teal-500">
+            <template x-for="fs in folderStatuses" :key="fs.id">
+              <option :value="fs.id" x-text="fs.status"></option>
+            </template>
+          </select>
+        </div>
+
+        <!-- Findings -->
+        <div>
+          <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            Hallazgos registrados
+            <span x-show="missingFiles.length > 0"
+                  class="ml-1 inline-block px-1.5 py-px rounded-full bg-red-100 text-red-600"
+                  x-text="missingFiles.length"></span>
+          </div>
+          <div class="space-y-1.5">
+            <template x-for="mf in missingFiles" :key="mf.id">
+              <div class="flex items-center justify-between px-3 py-2 bg-red-50 border border-red-100 rounded-lg">
+                <div class="flex items-center gap-2 min-w-0">
+                  <i class="fa-solid fa-triangle-exclamation text-red-400 text-xs shrink-0"></i>
+                  <span class="text-xs font-medium text-red-800 truncate" x-text="docTypeLabel(mf.doc_type_id)"></span>
+                </div>
+                <button @click="deleteFile(mf.doc_type_id)"
+                        class="shrink-0 w-6 h-6 flex items-center justify-center text-red-300 hover:text-red-600 hover:bg-red-100 rounded transition-colors ml-2">
+                  <i class="fa-solid fa-trash text-[10px]"></i>
+                </button>
+              </div>
+            </template>
+            <template x-if="missingFiles.length === 0">
+              <div class="flex items-center gap-1.5 text-xs text-emerald-600 px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-100">
+                <i class="fa-solid fa-circle-check"></i>Sin hallazgos registrados
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Add finding -->
+        <div class="flex gap-2">
+          <select x-model="newDocTypeId"
+                  class="field-select flex-1 min-w-0 border border-gray-200 rounded-lg px-2.5 py-2 text-xs text-gray-700 focus:ring-2 focus:ring-red-400">
+            <option value="">— Agregar hallazgo —</option>
+            <template x-for="dt in docTypes" :key="dt.id">
+              <option :value="dt.id" x-text="dt.code"></option>
+            </template>
+          </select>
+          <button @click="addFile()" :disabled="!newDocTypeId"
+                  class="shrink-0 px-3 py-2 bg-red-500 text-white text-xs font-semibold rounded-lg hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+            <i class="fa-solid fa-plus"></i>
+          </button>
+        </div>
+
+        <!-- Delete invoice -->
+        <div class="pt-2 border-t border-gray-100">
+          <template x-if="!confirmDeleteInvoice">
+            <button @click="confirmDeleteInvoice = true"
+                    class="w-full py-2 text-xs text-red-400 border border-red-100 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors font-medium">
+              <i class="fa-solid fa-trash mr-1.5"></i>Eliminar esta factura
+            </button>
+          </template>
+          <template x-if="confirmDeleteInvoice">
+            <div class="space-y-2">
+              <p class="text-xs text-red-700 font-medium text-center">¿Eliminar factura y todos sus hallazgos?</p>
+              <div class="flex gap-2">
+                <button @click="deleteInvoice()"
+                        class="flex-1 py-2 text-xs bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors">
+                  Confirmar
+                </button>
+                <button @click="confirmDeleteInvoice = false"
+                        class="flex-1 py-2 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+    <!-- ── /Detail panel ── -->
+
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       BATCH ACTION BAR — fixed bottom, slides up on selection
+       ════════════════════════════════════════════════════ -->
+  <div class="batch-bar fixed bottom-0 left-64 right-0 z-50 px-6 pb-4"
+       :class="selectedIds.size > 0 ? 'batch-bar-visible' : 'batch-bar-hidden'">
+    <div class="bg-slate-900 text-white rounded-2xl shadow-2xl border border-white/10 px-5 py-3.5 flex items-center gap-4 flex-wrap"
+         style="box-shadow: 0 -4px 32px rgba(0,0,0,.25), 0 8px 24px rgba(0,0,0,.3)">
+
+      <!-- Selection count -->
+      <div class="flex items-center gap-3 mr-2">
+        <div class="w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center">
+          <i class="fa-solid fa-square-check text-teal-400 text-sm"></i>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Seleccionadas</div>
+          <div class="stat-num text-xl text-white leading-none" x-text="selectedIds.size"></div>
+        </div>
+        <div class="w-px h-8 bg-white/10 mx-1"></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center gap-2 flex-1 flex-wrap">
+
+        <!-- Change status -->
+        <div class="flex items-center gap-1.5">
+          <select x-model="batchStatusId"
+                  class="field-select-dark border border-white/20 text-white text-xs rounded-lg px-2.5 py-2 focus:ring-2 focus:ring-teal-500 focus:border-teal-400">
+            <option value="" class="bg-slate-800">— Cambiar estado —</option>
+            <template x-for="fs in folderStatuses" :key="fs.id">
+              <option :value="fs.id" x-text="fs.status" class="bg-slate-800"></option>
+            </template>
+          </select>
+          <button @click="applyBatchStatus()" :disabled="!batchStatusId"
+                  class="px-3 py-2 bg-teal-500 text-white text-xs font-semibold rounded-lg hover:bg-teal-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
+            <i class="fa-solid fa-check mr-1"></i>Aplicar
+          </button>
+        </div>
+
+        <!-- Divider -->
+        <div class="w-px h-6 bg-white/10"></div>
+
+        <!-- Delete findings -->
+        <template x-if="!confirmBatchDelete">
+          <button @click="confirmBatchDelete = true"
+                  class="px-3 py-2 text-xs font-semibold text-red-300 border border-red-400/30 rounded-lg hover:bg-red-500/20 hover:text-red-200 transition-colors whitespace-nowrap">
+            <i class="fa-solid fa-trash mr-1.5"></i>Borrar hallazgos
+          </button>
+        </template>
+        <template x-if="confirmBatchDelete">
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs text-red-300 font-medium">¿Borrar hallazgos de <strong x-text="selectedIds.size"></strong> facturas?</span>
+            <button @click="doBatchDeleteFindings()"
+                    class="px-3 py-2 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-500 transition-colors whitespace-nowrap">
+              Confirmar
+            </button>
+            <button @click="confirmBatchDelete = false"
+                    class="px-2.5 py-2 text-xs text-slate-400 border border-white/10 rounded-lg hover:bg-white/10 transition-colors">
+              No
+            </button>
+          </div>
+        </template>
+      </div>
+
+      <!-- Clear selection -->
+      <button @click="clearSelection()"
+              class="ml-auto shrink-0 w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:bg-white/10 hover:text-white transition-colors" title="Cancelar selección">
+        <i class="fa-solid fa-xmark text-sm"></i>
+      </button>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
@@ -270,27 +622,85 @@
 <script>
 function auditApp() {
   return {
+    // --- Reference data ---
     folderStatuses: [],
     docTypes: [],
     admins: [],
     contracts: [],
     serviceTypes: [],
+
+    // --- Filters ---
+    filtersOpen: false,
     filterStatusId: '',
     filterAdminType: '',
     filterAdminCanonical: '',
     filterContractCanonical: '',
     filterServiceTypeId: '',
     searchQuery: '',
+
+    // --- Table state ---
     invoices: [],
     total: 0,
     page: 1,
     pageSize: 50,
+
+    // --- Stats ---
+    stats: { total: null, by_status: {}, total_findings: null },
+
+    // --- Selection ---
+    selectedIds: new Set(),
+    allFilterSelected: false,   // true when "select all N" was clicked
+    batchStatusId: '',
+    confirmBatchDelete: false,
+
+    // --- Detail panel ---
     selectedInvoice: null,
     detailStatusId: '',
     missingFiles: [],
     newDocTypeId: '',
     confirmDeleteInvoice: false,
 
+    // ── Computed ──────────────────────────────────────
+    get hasActiveFilters() {
+      return !!(this.filterStatusId || this.filterAdminType || this.filterAdminCanonical ||
+                this.filterContractCanonical || this.filterServiceTypeId || this.searchQuery);
+    },
+    get pageAllSelected() {
+      return this.invoices.length > 0 && this.invoices.every(i => this.selectedIds.has(i.id));
+    },
+    get somethingSelected() {
+      return this.invoices.some(i => this.selectedIds.has(i.id));
+    },
+    get statCards() {
+      const cfg = {
+        PENDIENTE: { activeBg:'bg-amber-50',   activeBorder:'border-amber-300',  activeRing:'ring-amber-300',  activeLabel:'text-amber-600', activeCount:'text-amber-700', activeSub:'text-amber-500' },
+        PRESENTE:  { activeBg:'bg-emerald-50', activeBorder:'border-emerald-300',activeRing:'ring-emerald-300',activeLabel:'text-emerald-600',activeCount:'text-emerald-700',activeSub:'text-emerald-500'},
+        FALTANTE:  { activeBg:'bg-red-50',     activeBorder:'border-red-300',    activeRing:'ring-red-300',    activeLabel:'text-red-600',   activeCount:'text-red-700',   activeSub:'text-red-500'   },
+        AUDITADA:  { activeBg:'bg-indigo-50',  activeBorder:'border-indigo-300', activeRing:'ring-indigo-300', activeLabel:'text-indigo-600',activeCount:'text-indigo-700',activeSub:'text-indigo-500'},
+      };
+      return this.folderStatuses.map(fs => ({
+        ...fs,
+        ...(cfg[fs.status] || { activeBg:'bg-sky-50', activeBorder:'border-sky-300', activeRing:'ring-sky-300', activeLabel:'text-sky-600', activeCount:'text-sky-700', activeSub:'text-sky-500' }),
+      }));
+    },
+    get uniqueAdminTypes() {
+      const seen = new Set();
+      return this.admins.map(a => a.type).filter(t => t && !seen.has(t) && seen.add(t)).sort();
+    },
+    get filteredAdmins() {
+      const seen = new Set();
+      return this.admins
+        .filter(a => a.canonical_admin && (!this.filterAdminType || a.type === this.filterAdminType))
+        .map(a => a.canonical_admin)
+        .filter(n => !seen.has(n) && seen.add(n))
+        .sort();
+    },
+    get uniqueContracts() {
+      const seen = new Set();
+      return this.contracts.map(c => c.canonical_contract).filter(n => n && !seen.has(n) && seen.add(n)).sort();
+    },
+
+    // ── Init ──────────────────────────────────────────
     async init() {
       const [fsRes, dtRes, stRes] = await Promise.all([
         fetch('/api/settings/folder-statuses'),
@@ -302,82 +712,142 @@ function auditApp() {
       this.serviceTypes   = await stRes.json();
 
       if (this.$store.ctx.institutionId) await this.loadFilterOptions();
-      if (this.$store.ctx.periodId) this.loadInvoices();
+      if (this.$store.ctx.periodId) { this.loadInvoices(); this.loadStats(); }
 
-      this.$watch('$store.ctx.periodId', (val) => {
+      this.$watch('$store.ctx.periodId', val => {
         this.invoices = []; this.total = 0; this.selectedInvoice = null; this.page = 1;
-        if (val) this.loadInvoices();
+        this.stats = { total: null, by_status: {}, total_findings: null };
+        this.clearSelection();
+        if (val) { this.loadInvoices(); this.loadStats(); }
       });
-
-      this.$watch('$store.ctx.institutionId', async (val) => {
+      this.$watch('$store.ctx.institutionId', async val => {
         this.admins = []; this.contracts = [];
         this.filterAdminType = ''; this.filterAdminCanonical = ''; this.filterContractCanonical = '';
         if (val) await this.loadFilterOptions();
       });
     },
 
-    get uniqueAdminTypes() {
-      const seen = new Set();
-      return this.admins
-        .map(a => a.type)
-        .filter(t => t && !seen.has(t) && seen.add(t))
-        .sort();
-    },
-
-    get uniqueAdmins() {
-      const seen = new Set();
-      return this.admins
-        .filter(a => a.canonical_admin && (!this.filterAdminType || a.type === this.filterAdminType))
-        .map(a => a.canonical_admin)
-        .filter(name => !seen.has(name) && seen.add(name))
-        .sort();
-    },
-
-    get filteredAdmins() { return this.uniqueAdmins; },
-
-    get uniqueContracts() {
-      const seen = new Set();
-      return this.contracts
-        .map(c => c.canonical_contract)
-        .filter(name => name && !seen.has(name) && seen.add(name))
-        .sort();
-    },
-
+    // ── Data loaders ──────────────────────────────────
     async loadFilterOptions() {
-      const instId = this.$store.ctx.institutionId;
-      if (!instId) return;
-      const [admRes, ctrRes] = await Promise.all([
-        fetch(`/api/institutions/${instId}/admins`),
-        fetch(`/api/institutions/${instId}/contracts`),
+      const id = this.$store.ctx.institutionId;
+      if (!id) return;
+      const [a, c] = await Promise.all([
+        fetch(`/api/institutions/${id}/admins`),
+        fetch(`/api/institutions/${id}/contracts`),
       ]);
-      this.admins    = await admRes.json();
-      this.contracts = await ctrRes.json();
+      this.admins    = await a.json();
+      this.contracts = await c.json();
+    },
+
+    async loadStats() {
+      const pid = this.$store.ctx.periodId;
+      if (!pid) return;
+      const res = await fetch(`/api/invoices/stats?period_id=${pid}`);
+      this.stats = await res.json();
     },
 
     async loadInvoices() {
-      const periodId = this.$store.ctx.periodId;
-      if (!periodId) return;
-      let url = `/api/invoices?period_id=${encodeURIComponent(periodId)}&page=${this.page}&page_size=${this.pageSize}`;
-      if (this.filterStatusId)          url += `&folder_status_id=${encodeURIComponent(this.filterStatusId)}`;
+      const pid = this.$store.ctx.periodId;
+      if (!pid) return;
+      let url = `/api/invoices?period_id=${pid}&page=${this.page}&page_size=${this.pageSize}`;
+      if (this.filterStatusId)          url += `&folder_status_id=${this.filterStatusId}`;
       if (this.filterAdminType)         url += `&admin_type=${encodeURIComponent(this.filterAdminType)}`;
       if (this.filterAdminCanonical)    url += `&admin_canonical=${encodeURIComponent(this.filterAdminCanonical)}`;
       if (this.filterContractCanonical) url += `&contract_canonical=${encodeURIComponent(this.filterContractCanonical)}`;
-      if (this.filterServiceTypeId)     url += `&service_type_id=${encodeURIComponent(this.filterServiceTypeId)}`;
-      if (this.searchQuery)         url += `&search=${encodeURIComponent(this.searchQuery)}`;
+      if (this.filterServiceTypeId)     url += `&service_type_id=${this.filterServiceTypeId}`;
+      if (this.searchQuery)             url += `&search=${encodeURIComponent(this.searchQuery)}`;
       const res  = await fetch(url);
       const data = await res.json();
       this.invoices = data.items;
       this.total    = data.total;
+      // If allFilterSelected, check if newly loaded page is still in set
+      // (it would be if user navigated pages while all-filter is active)
     },
 
     clearFilters() {
-      this.filterStatusId = ''; this.filterAdminType = ''; this.filterAdminCanonical = ''; this.filterContractCanonical = '';
-      this.filterServiceTypeId = ''; this.searchQuery = ''; this.page = 1;
+      this.filterStatusId = ''; this.filterAdminType = ''; this.filterAdminCanonical = '';
+      this.filterContractCanonical = ''; this.filterServiceTypeId = ''; this.searchQuery = '';
+      this.page = 1;
+      this.allFilterSelected = false;
       this.loadInvoices();
     },
     prevPage() { if (this.page > 1) { this.page--; this.loadInvoices(); } },
     nextPage() { if (this.page * this.pageSize < this.total) { this.page++; this.loadInvoices(); } },
 
+    // ── Selection ─────────────────────────────────────
+    toggleSelection(id) {
+      const next = new Set(this.selectedIds);
+      if (next.has(id)) { next.delete(id); this.allFilterSelected = false; }
+      else next.add(id);
+      this.selectedIds = next;
+      this.confirmBatchDelete = false;
+    },
+
+    togglePageSelection(event) {
+      const next = new Set(this.selectedIds);
+      if (event.target.checked) {
+        this.invoices.forEach(i => next.add(i.id));
+      } else {
+        this.invoices.forEach(i => next.delete(i.id));
+        this.allFilterSelected = false;
+      }
+      this.selectedIds = next;
+      this.confirmBatchDelete = false;
+    },
+
+    async selectAllFilter() {
+      // Fetch all IDs matching current filter
+      const pid = this.$store.ctx.periodId;
+      if (!pid) return;
+      let url = `/api/invoices/ids?period_id=${pid}`;
+      if (this.filterStatusId)          url += `&folder_status_id=${this.filterStatusId}`;
+      if (this.filterAdminType)         url += `&admin_type=${encodeURIComponent(this.filterAdminType)}`;
+      if (this.filterAdminCanonical)    url += `&admin_canonical=${encodeURIComponent(this.filterAdminCanonical)}`;
+      if (this.filterContractCanonical) url += `&contract_canonical=${encodeURIComponent(this.filterContractCanonical)}`;
+      if (this.filterServiceTypeId)     url += `&service_type_id=${this.filterServiceTypeId}`;
+      if (this.searchQuery)             url += `&search=${encodeURIComponent(this.searchQuery)}`;
+      const res  = await fetch(url);
+      const ids  = await res.json();
+      this.selectedIds = new Set(ids);
+      this.allFilterSelected = true;
+    },
+
+    clearSelection() {
+      this.selectedIds = new Set();
+      this.batchStatusId = '';
+      this.confirmBatchDelete = false;
+      this.allFilterSelected = false;
+    },
+
+    // ── Batch operations ──────────────────────────────
+    async applyBatchStatus() {
+      if (!this.batchStatusId || this.selectedIds.size === 0) return;
+      await fetch('/api/invoices/batch-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_ids: [...this.selectedIds], folder_status_id: parseInt(this.batchStatusId) }),
+      });
+      this.batchStatusId = '';
+      this.clearSelection();
+      await Promise.all([this.loadInvoices(), this.loadStats()]);
+    },
+
+    async doBatchDeleteFindings() {
+      if (this.selectedIds.size === 0) return;
+      await fetch('/api/missing-files/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_ids: [...this.selectedIds] }),
+      });
+      this.clearSelection();
+      await Promise.all([this.loadInvoices(), this.loadStats()]);
+      if (this.selectedInvoice) {
+        const res = await fetch(`/api/missing-files/${this.selectedInvoice.id}`);
+        this.missingFiles = await res.json();
+      }
+    },
+
+    // ── Detail panel ──────────────────────────────────
     async selectInvoice(inv) {
       this.selectedInvoice = { ...inv };
       this.detailStatusId  = inv.folder_status_id;
@@ -385,10 +855,6 @@ function auditApp() {
       this.confirmDeleteInvoice = false;
       const res = await fetch(`/api/missing-files/${inv.id}`);
       this.missingFiles = await res.json();
-      this.$nextTick(() => {
-        const panel = document.getElementById('detail-panel');
-        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
     },
 
     async updateStatus() {
@@ -398,7 +864,7 @@ function auditApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folder_status_id: parseInt(this.detailStatusId) }),
       });
-      await this.loadInvoices();
+      await Promise.all([this.loadInvoices(), this.loadStats()]);
     },
 
     async addFile() {
@@ -406,22 +872,18 @@ function auditApp() {
       await fetch('/api/missing-files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          invoice_id:    this.selectedInvoice.id,
-          doc_type_id:   parseInt(this.newDocTypeId),
-          expected_path: '',
-        }),
+        body: JSON.stringify({ invoice_id: this.selectedInvoice.id, doc_type_id: parseInt(this.newDocTypeId), expected_path: '' }),
       });
       this.newDocTypeId = '';
       await this.selectInvoice(this.selectedInvoice);
-      await this.loadInvoices();
+      await Promise.all([this.loadInvoices(), this.loadStats()]);
     },
 
     async deleteFile(docTypeId) {
       if (!this.selectedInvoice) return;
       await fetch(`/api/missing-files/${this.selectedInvoice.id}/${docTypeId}`, { method: 'DELETE' });
       await this.selectInvoice(this.selectedInvoice);
-      await this.loadInvoices();
+      await Promise.all([this.loadInvoices(), this.loadStats()]);
     },
 
     async deleteInvoice() {
@@ -430,23 +892,23 @@ function auditApp() {
       if (res.ok || res.status === 204) {
         this.selectedInvoice = null;
         this.confirmDeleteInvoice = false;
-        await this.loadInvoices();
+        await Promise.all([this.loadInvoices(), this.loadStats()]);
       }
     },
 
+    // ── Helpers ───────────────────────────────────────
     docTypeLabel(docTypeId) {
       const dt = this.docTypes.find(d => d.id === docTypeId);
-      return dt ? `${dt.code} — ${dt.description}` : `Doc #${docTypeId}`;
+      return dt ? dt.code : `Doc #${docTypeId}`;
     },
 
-    statusBadge(status) {
-      const map = {
-        PRESENTE:  'bg-green-100 text-green-700',
-        PENDIENTE: 'bg-yellow-100 text-yellow-700',
-        FALTANTE:  'bg-red-100 text-red-700',
-        AUDITADA:  'bg-blue-100 text-blue-700',
-      };
-      return map[status] || 'bg-gray-100 text-gray-600';
+    statusBadgeClass(status) {
+      return {
+        PRESENTE:  'bg-emerald-100 text-emerald-700',
+        PENDIENTE: 'bg-amber-100   text-amber-700',
+        FALTANTE:  'bg-red-100     text-red-700',
+        AUDITADA:  'bg-indigo-100  text-indigo-700',
+      }[status] || 'bg-gray-100 text-gray-600';
     },
   };
 }

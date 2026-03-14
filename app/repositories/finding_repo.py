@@ -111,3 +111,13 @@ class MissingFileRepo:
     async def delete_all_findings_for_invoice(self, invoice_id: int) -> None:
         """Alias for delete_all_for_invoice."""
         await self.delete_all_for_invoice(invoice_id)
+
+    async def delete_all_for_invoices(self, invoice_ids: list[int]) -> int:
+        """Delete all findings for multiple invoices at once. Returns rows deleted."""
+        if not invoice_ids:
+            return 0
+        result = await self.db.execute(
+            delete(MissingFile).where(MissingFile.invoice_id.in_(invoice_ids))
+        )
+        await self.db.flush()
+        return result.rowcount

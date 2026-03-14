@@ -16,6 +16,35 @@ from app.schemas.invoice import (
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
 
+@router.get("/ids", response_model=list[int])
+async def get_invoice_ids(
+    period_id: int,
+    folder_status_id: int | None = None,
+    service_type_id: int | None = None,
+    admin_canonical: str | None = None,
+    admin_type: str | None = None,
+    contract_canonical: str | None = None,
+    search: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    repo = InvoiceRepo(db)
+    return await repo.get_invoice_ids(
+        audit_period_id=period_id,
+        folder_status_id=folder_status_id,
+        service_type_id=service_type_id,
+        admin_canonical=admin_canonical,
+        admin_type=admin_type,
+        contract_canonical=contract_canonical,
+        search=search,
+    )
+
+
+@router.get("/stats", response_model=dict)
+async def get_stats(period_id: int, db: AsyncSession = Depends(get_db)):
+    repo = InvoiceRepo(db)
+    return await repo.get_stats(period_id)
+
+
 @router.get("", response_model=dict)
 async def list_invoices(
     period_id: int,
