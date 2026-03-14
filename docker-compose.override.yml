@@ -8,8 +8,6 @@ services:
       # Hot-reload: monta el código fuente directamente
       - ./app:/app/app
       - ./core:/app/core
-      # Logos bind-mount: drop a new .avif here and nginx serves it instantly
-      - ./app/static/logos:/app/static_serve/logos
 
   adminer:
     profiles: []   # En dev el perfil no es necesario; levanta siempre

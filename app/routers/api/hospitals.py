@@ -1,16 +1,12 @@
 """API router for institutions CRUD (mounted at /api/institutions)."""
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-_LOGOS_DIR = Path(__file__).parent.parent.parent / "static" / "logos"
-# Volume persistente de nginx (producción y dev con Docker).
-# En dev, el bind-mount del override apunta este path a ./app/static/logos/ del host.
-_STATIC_SERVE_LOGOS_DIR = Path("/app/static_serve/logos")
-_LOGO_EXTS = (".avif", ".webp", ".png", ".jpg", ".jpeg")
+_ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp", "image/avif", "image/gif"}
 
 from app import crypto
 from app.database import get_db
@@ -53,18 +49,6 @@ def _encrypt_sensitive(data: dict) -> dict:
 # Institutions
 # ------------------------------------------------------------------
 
-def _logo_url(institution_name: str) -> str | None:
-    slug = institution_name.lower()
-    for ext in _LOGO_EXTS:
-        # Primero el volume persistente (producción y dev con Docker)
-        if (_STATIC_SERVE_LOGOS_DIR / f"{slug}{ext}").exists():
-            return f"/static/logos/{slug}{ext}"
-        # Fallback: directorio fuente (desarrollo sin Docker)
-        if (_LOGOS_DIR / f"{slug}{ext}").exists():
-            return f"/static/logos/{slug}{ext}"
-    return None
-
-
 @router.get("", response_model=list[InstitutionOut])
 async def list_institutions(db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
@@ -72,9 +56,25 @@ async def list_institutions(db: AsyncSession = Depends(get_db)):
     out = []
     for inst in institutions:
         item = InstitutionOut.model_validate(inst)
-        item.logo_url = _logo_url(inst.name)
+        item.logo_url = f"/api/institutions/{inst.id}/logo" if inst.logo_content_type else None
         out.append(item)
     return out
+
+
+@router.get("/{institution_id}/logo")
+async def serve_logo(institution_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Institution.logo_bytes, Institution.logo_content_type)
+        .where(Institution.id == institution_id)
+    )
+    row = result.first()
+    if not row or not row.logo_bytes:
+        raise HTTPException(status_code=404, detail="Sin logo")
+    return Response(
+        content=row.logo_bytes,
+        media_type=row.logo_content_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @router.post("/{institution_id}/logo")
@@ -87,18 +87,15 @@ async def upload_logo(
     if institution is None:
         raise HTTPException(status_code=404, detail="Institution not found")
 
-    suffix = Path(file.filename).suffix.lower()
-    if suffix not in _LOGO_EXTS:
-        raise HTTPException(status_code=422, detail=f"Formato no soportado: {suffix}")
+    content_type = (file.content_type or "").split(";")[0].strip()
+    if content_type not in _ALLOWED_MIME:
+        raise HTTPException(status_code=422, detail=f"Tipo no soportado: {content_type}")
 
-    slug = institution.name.lower()
-    data_bytes = await file.read()
+    institution.logo_bytes = await file.read()
+    institution.logo_content_type = content_type
+    await db.commit()
 
-    dest_dir = _STATIC_SERVE_LOGOS_DIR if _STATIC_SERVE_LOGOS_DIR.exists() else _LOGOS_DIR
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    (dest_dir / f"{slug}{suffix}").write_bytes(data_bytes)
-
-    return {"logo_url": _logo_url(institution.name)}
+    return {"logo_url": f"/api/institutions/{institution_id}/logo"}
 
 
 @router.post("", response_model=InstitutionOut, status_code=201)

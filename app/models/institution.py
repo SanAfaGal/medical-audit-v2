@@ -1,8 +1,8 @@
 """ORM models for institutions, admins, contracts, services, and service-type-document mappings."""
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import ForeignKey, Integer, LargeBinary, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -21,6 +21,8 @@ class Institution(Base):
     sihos_password: Mapped[str | None] = mapped_column(String(200))  # store encrypted via crypto.py
     base_path: Mapped[str | None] = mapped_column(String(500))
     drive_credentials_enc: Mapped[str | None] = mapped_column(String(10000))  # JSON encrypted via crypto.py
+    logo_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True, default=None)
+    logo_content_type: Mapped[str | None] = mapped_column(String(50), default=None)
 
     admins: Mapped[list[Admin]] = relationship(back_populates="institution", cascade="all, delete-orphan")
     contracts: Mapped[list[Contract]] = relationship(back_populates="institution", cascade="all, delete-orphan")
