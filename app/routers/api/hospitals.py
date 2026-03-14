@@ -3,14 +3,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 _LOGOS_DIR = Path(__file__).parent.parent.parent / "static" / "logos"
+# Volume persistente de nginx (producción y dev con Docker).
+# En dev, el bind-mount del override apunta este path a ./app/static/logos/ del host.
+_STATIC_SERVE_LOGOS_DIR = Path("/app/static_serve/logos")
+_LOGO_EXTS = (".avif", ".webp", ".png", ".jpg", ".jpeg")
 
 from app import crypto
 from app.database import get_db
-from app.models.institution import Admin, Contract, Service
+from app.models.institution import Admin, Contract, Institution, Service
 from app.repositories.institution_repo import InstitutionRepo
 from app.schemas.institution import (
     AdminCreate,
@@ -51,8 +55,13 @@ def _encrypt_sensitive(data: dict) -> dict:
 
 def _logo_url(institution_name: str) -> str | None:
     slug = institution_name.lower()
-    if (_LOGOS_DIR / f"{slug}.avif").exists():
-        return f"/static/logos/{slug}.avif"
+    for ext in _LOGO_EXTS:
+        # Primero el volume persistente (producción y dev con Docker)
+        if (_STATIC_SERVE_LOGOS_DIR / f"{slug}{ext}").exists():
+            return f"/static/logos/{slug}{ext}"
+        # Fallback: directorio fuente (desarrollo sin Docker)
+        if (_LOGOS_DIR / f"{slug}{ext}").exists():
+            return f"/static/logos/{slug}{ext}"
     return None
 
 
@@ -66,6 +75,30 @@ async def list_institutions(db: AsyncSession = Depends(get_db)):
         item.logo_url = _logo_url(inst.name)
         out.append(item)
     return out
+
+
+@router.post("/{institution_id}/logo")
+async def upload_logo(
+    institution_id: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    institution = await db.get(Institution, institution_id)
+    if institution is None:
+        raise HTTPException(status_code=404, detail="Institution not found")
+
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in _LOGO_EXTS:
+        raise HTTPException(status_code=422, detail=f"Formato no soportado: {suffix}")
+
+    slug = institution.name.lower()
+    data_bytes = await file.read()
+
+    dest_dir = _STATIC_SERVE_LOGOS_DIR if _STATIC_SERVE_LOGOS_DIR.exists() else _LOGOS_DIR
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    (dest_dir / f"{slug}{suffix}").write_bytes(data_bytes)
+
+    return {"logo_url": _logo_url(institution.name)}
 
 
 @router.post("", response_model=InstitutionOut, status_code=201)

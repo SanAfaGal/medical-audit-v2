@@ -117,16 +117,32 @@
         </h3>
       </div>
       <div class="divide-y divide-gray-100">
+        <!-- Shared hidden file input for logo uploads -->
+        <input type="file" accept="image/*" x-ref="logoFileInput" class="hidden"
+               @change="uploadLogo(uploadingLogoFor, $event.target.files[0]); $event.target.value=''">
         <template x-for="h in institutions" :key="h.id">
           <div class="flex items-center justify-between px-5 py-3 hover:bg-gray-50">
-            <div>
-              <div class="text-sm font-semibold text-gray-800" x-text="h.display_name"></div>
-              <div class="text-xs text-gray-500 mt-0.5 space-x-2">
-                <span>NIT: <span x-text="h.nit"></span></span>
-                <span class="text-gray-300">|</span>
-                <span class="font-mono" x-text="h.name"></span>
-                <span class="text-gray-300">|</span>
-                <span>Prefijo: <span class="font-mono" x-text="h.invoice_id_prefix"></span></span>
+            <div class="flex items-center gap-3">
+              <!-- Logo thumbnail / upload trigger -->
+              <button @click="uploadingLogoFor = h.id; $refs.logoFileInput.click()"
+                      title="Cambiar logo"
+                      class="w-8 h-8 rounded flex items-center justify-center border border-gray-200 bg-gray-50 hover:border-blue-400 hover:bg-blue-50 transition-colors flex-shrink-0 overflow-hidden">
+                <template x-if="h.logo_url">
+                  <img :src="h.logo_url" class="w-full h-full object-contain" :alt="h.display_name">
+                </template>
+                <template x-if="!h.logo_url">
+                  <i class="fa-solid fa-image text-gray-300 text-xs"></i>
+                </template>
+              </button>
+              <div>
+                <div class="text-sm font-semibold text-gray-800" x-text="h.display_name"></div>
+                <div class="text-xs text-gray-500 mt-0.5 space-x-2">
+                  <span>NIT: <span x-text="h.nit"></span></span>
+                  <span class="text-gray-300">|</span>
+                  <span class="font-mono" x-text="h.name"></span>
+                  <span class="text-gray-300">|</span>
+                  <span>Prefijo: <span class="font-mono" x-text="h.invoice_id_prefix"></span></span>
+                </div>
               </div>
             </div>
             <div class="flex items-center gap-2">
@@ -1139,6 +1155,7 @@ function settingsApp() {
     editingId: null,
     editingName: '',
     confirmDeleteInstId: null,
+    uploadingLogoFor: null,
     form: { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'', base_path:'', drive_credentials_json:'' },
 
     // Mapeos
@@ -1257,6 +1274,23 @@ function settingsApp() {
         this.confirmDeleteInstId = null;
         this.showToast(err.detail || 'No se pudo eliminar.', 'error');
       }
+    },
+
+    async uploadLogo(id, file) {
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`/api/institutions/${id}/logo`, { method: 'POST', body: fd });
+      if (res.ok) {
+        const { logo_url } = await res.json();
+        const inst = this.institutions.find(i => i.id === id);
+        if (inst) inst.logo_url = logo_url + '?t=' + Date.now();
+        this.showToast('Logo actualizado', 'success');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        this.showToast(err.detail || 'Error subiendo logo', 'error');
+      }
+      this.uploadingLogoFor = null;
     },
 
     // ---- MAPEOS ----
