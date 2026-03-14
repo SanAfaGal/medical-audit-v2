@@ -65,6 +65,15 @@
   /* Select-all banner animation */
   .select-banner { animation: bannerIn 0.15s ease; }
   @keyframes bannerIn { from { opacity:0; transform: translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+
+  /* Findings summary */
+  .finding-row { transition: background .12s, box-shadow .12s; }
+  .finding-row:hover { background: #fef2f2; }
+  .finding-row.active { background: #f0fdfa; box-shadow: inset 3px 0 0 #0D9488; }
+  .finding-bar-track { background: #fee2e2; border-radius: 2px; overflow: hidden; }
+  .finding-bar-fill  { background: linear-gradient(90deg, #ef4444, #f87171); border-radius: 2px;
+    transition: width .4s cubic-bezier(.4,0,.2,1); }
+  .finding-bar-fill.rank-low { background: linear-gradient(90deg, #fca5a5, #fecaca); }
 </style>
 
 <div x-data="auditApp()" class="audit-root flex flex-col gap-4 pb-20">
@@ -124,6 +133,86 @@
     </div>
   </section>
 
+  <!-- ── Findings by type ── -->
+  <section x-show="$store.ctx.periodId && (findingsSummary.length > 0 || stats.total_findings === 0)" x-cloak
+           class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+
+    <div class="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i class="fa-solid fa-triangle-exclamation text-red-400 text-xs"></i>
+        <span class="text-xs font-semibold text-gray-600 uppercase tracking-wider">Hallazgos por tipo</span>
+        <template x-if="findingsSummary.length > 0">
+          <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-600"
+                x-text="findingsSummary.length + ' tipos'"></span>
+        </template>
+      </div>
+      <template x-if="filterFindingDocTypeId">
+        <span class="text-[10px] text-teal-600 font-semibold flex items-center gap-1">
+          <i class="fa-solid fa-filter"></i>
+          Filtrando por tipo —
+          <button @click="filterFindingDocTypeId=null; page=1; loadInvoices()"
+                  class="underline underline-offset-2 hover:text-teal-800 ml-0.5">quitar</button>
+        </span>
+      </template>
+    </div>
+
+    <!-- Empty: all good -->
+    <template x-if="findingsSummary.length === 0 && stats.total_findings === 0">
+      <div class="px-4 py-4 flex items-center gap-2.5 text-sm text-emerald-600">
+        <i class="fa-solid fa-circle-check text-lg"></i>
+        <span class="font-medium">Sin hallazgos pendientes en este período.</span>
+      </div>
+    </template>
+
+    <!-- Ranked list -->
+    <template x-if="findingsSummary.length > 0">
+      <div class="divide-y divide-gray-50">
+        <template x-for="(item, idx) in findingsSummary" :key="item.doc_type_id">
+          <button
+            class="finding-row w-full px-4 py-2.5 grid items-center gap-3 text-left focus:outline-none"
+            style="grid-template-columns: 1.25rem 1fr 8rem 4.5rem 1.25rem;"
+            :class="filterFindingDocTypeId === item.doc_type_id ? 'active' : ''"
+            @click="toggleFindingFilter(item.doc_type_id)">
+
+            <!-- Rank -->
+            <span class="stat-num text-sm leading-none text-right"
+                  :class="idx === 0 ? 'text-red-500' : idx === 1 ? 'text-orange-400' : 'text-gray-300'"
+                  x-text="idx + 1"></span>
+
+            <!-- Code -->
+            <span class="font-mono font-semibold text-sm truncate overflow-hidden"
+                  :class="filterFindingDocTypeId === item.doc_type_id ? 'text-teal-700' : 'text-gray-800'"
+                  x-text="item.code"></span>
+
+            <!-- Bar -->
+            <div class="finding-bar-track h-2 w-full">
+              <div class="finding-bar-fill h-2"
+                   :class="idx >= 3 ? 'rank-low' : ''"
+                   :style="`width: ${findingsSummary[0] ? Math.round(item.count / findingsSummary[0].count * 100) : 0}%`">
+              </div>
+            </div>
+
+            <!-- Count -->
+            <div class="text-right">
+              <span class="stat-num text-base leading-none"
+                    :class="filterFindingDocTypeId === item.doc_type_id ? 'text-teal-700' : 'text-gray-700'"
+                    x-text="item.count"></span>
+              <span class="text-[10px] text-gray-400 ml-0.5">fact.</span>
+            </div>
+
+            <!-- Filter indicator -->
+            <i class="fa-solid text-[10px] transition-colors justify-self-center"
+               :class="filterFindingDocTypeId === item.doc_type_id
+                 ? 'fa-xmark text-teal-500'
+                 : 'fa-filter text-gray-200'"></i>
+
+          </button>
+        </template>
+      </div>
+    </template>
+
+  </section>
+
   <!-- ── Filters ── -->
   <section x-show="$store.ctx.periodId" x-cloak
            class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -170,6 +259,12 @@
           <span class="filter-chip">
             Buscar: <strong x-text="searchQuery"></strong>
             <button @click.stop="searchQuery=''; page=1; loadInvoices()"><i class="fa-solid fa-xmark text-xs"></i></button>
+          </span>
+        </template>
+        <template x-if="filterFindingDocTypeId">
+          <span class="filter-chip" style="background:#f0fdfa;color:#0f766e;border-color:#99f6e4">
+            Hallazgo: <strong x-text="findingsSummary.find(f=>f.doc_type_id===filterFindingDocTypeId)?.code"></strong>
+            <button @click.stop="filterFindingDocTypeId=null; page=1; loadInvoices()"><i class="fa-solid fa-xmark text-xs"></i></button>
           </span>
         </template>
       </div>
@@ -646,6 +741,8 @@ function auditApp() {
 
     // --- Stats ---
     stats: { total: null, by_status: {}, total_findings: null },
+    findingsSummary: [],
+    filterFindingDocTypeId: null,
 
     // --- Selection ---
     selectedIds: new Set(),
@@ -663,7 +760,8 @@ function auditApp() {
     // ── Computed ──────────────────────────────────────
     get hasActiveFilters() {
       return !!(this.filterStatusId || this.filterAdminType || this.filterAdminCanonical ||
-                this.filterContractCanonical || this.filterServiceTypeId || this.searchQuery);
+                this.filterContractCanonical || this.filterServiceTypeId || this.searchQuery ||
+                this.filterFindingDocTypeId);
     },
     get pageAllSelected() {
       return this.invoices.length > 0 && this.invoices.every(i => this.selectedIds.has(i.id));
@@ -712,13 +810,14 @@ function auditApp() {
       this.serviceTypes   = await stRes.json();
 
       if (this.$store.ctx.institutionId) await this.loadFilterOptions();
-      if (this.$store.ctx.periodId) { this.loadInvoices(); this.loadStats(); }
+      if (this.$store.ctx.periodId) { this.loadInvoices(); this.loadStats(); this.loadFindingsSummary(); }
 
       this.$watch('$store.ctx.periodId', val => {
         this.invoices = []; this.total = 0; this.selectedInvoice = null; this.page = 1;
         this.stats = { total: null, by_status: {}, total_findings: null };
+        this.findingsSummary = []; this.filterFindingDocTypeId = null;
         this.clearSelection();
-        if (val) { this.loadInvoices(); this.loadStats(); }
+        if (val) { this.loadInvoices(); this.loadStats(); this.loadFindingsSummary(); }
       });
       this.$watch('$store.ctx.institutionId', async val => {
         this.admins = []; this.contracts = [];
@@ -746,6 +845,19 @@ function auditApp() {
       this.stats = await res.json();
     },
 
+    async loadFindingsSummary() {
+      const pid = this.$store.ctx.periodId;
+      if (!pid) return;
+      const res = await fetch(`/api/invoices/findings-summary?period_id=${pid}`);
+      this.findingsSummary = await res.json();
+    },
+
+    toggleFindingFilter(docTypeId) {
+      this.filterFindingDocTypeId = this.filterFindingDocTypeId === docTypeId ? null : docTypeId;
+      this.page = 1;
+      this.loadInvoices();
+    },
+
     async loadInvoices() {
       const pid = this.$store.ctx.periodId;
       if (!pid) return;
@@ -754,8 +866,9 @@ function auditApp() {
       if (this.filterAdminType)         url += `&admin_type=${encodeURIComponent(this.filterAdminType)}`;
       if (this.filterAdminCanonical)    url += `&admin_canonical=${encodeURIComponent(this.filterAdminCanonical)}`;
       if (this.filterContractCanonical) url += `&contract_canonical=${encodeURIComponent(this.filterContractCanonical)}`;
-      if (this.filterServiceTypeId)     url += `&service_type_id=${this.filterServiceTypeId}`;
-      if (this.searchQuery)             url += `&search=${encodeURIComponent(this.searchQuery)}`;
+      if (this.filterServiceTypeId)       url += `&service_type_id=${this.filterServiceTypeId}`;
+      if (this.searchQuery)               url += `&search=${encodeURIComponent(this.searchQuery)}`;
+      if (this.filterFindingDocTypeId)    url += `&has_finding_doc_type_id=${this.filterFindingDocTypeId}`;
       const res  = await fetch(url);
       const data = await res.json();
       this.invoices = data.items;
@@ -767,6 +880,7 @@ function auditApp() {
     clearFilters() {
       this.filterStatusId = ''; this.filterAdminType = ''; this.filterAdminCanonical = '';
       this.filterContractCanonical = ''; this.filterServiceTypeId = ''; this.searchQuery = '';
+      this.filterFindingDocTypeId = null;
       this.page = 1;
       this.allFilterSelected = false;
       this.loadInvoices();
@@ -804,8 +918,9 @@ function auditApp() {
       if (this.filterAdminType)         url += `&admin_type=${encodeURIComponent(this.filterAdminType)}`;
       if (this.filterAdminCanonical)    url += `&admin_canonical=${encodeURIComponent(this.filterAdminCanonical)}`;
       if (this.filterContractCanonical) url += `&contract_canonical=${encodeURIComponent(this.filterContractCanonical)}`;
-      if (this.filterServiceTypeId)     url += `&service_type_id=${this.filterServiceTypeId}`;
-      if (this.searchQuery)             url += `&search=${encodeURIComponent(this.searchQuery)}`;
+      if (this.filterServiceTypeId)       url += `&service_type_id=${this.filterServiceTypeId}`;
+      if (this.searchQuery)               url += `&search=${encodeURIComponent(this.searchQuery)}`;
+      if (this.filterFindingDocTypeId)    url += `&has_finding_doc_type_id=${this.filterFindingDocTypeId}`;
       const res  = await fetch(url);
       const ids  = await res.json();
       this.selectedIds = new Set(ids);
@@ -829,7 +944,7 @@ function auditApp() {
       });
       this.batchStatusId = '';
       this.clearSelection();
-      await Promise.all([this.loadInvoices(), this.loadStats()]);
+      await Promise.all([this.loadInvoices(), this.loadStats(), this.loadFindingsSummary()]);
     },
 
     async doBatchDeleteFindings() {
@@ -840,7 +955,7 @@ function auditApp() {
         body: JSON.stringify({ invoice_ids: [...this.selectedIds] }),
       });
       this.clearSelection();
-      await Promise.all([this.loadInvoices(), this.loadStats()]);
+      await Promise.all([this.loadInvoices(), this.loadStats(), this.loadFindingsSummary()]);
       if (this.selectedInvoice) {
         const res = await fetch(`/api/missing-files/${this.selectedInvoice.id}`);
         this.missingFiles = await res.json();
@@ -864,7 +979,7 @@ function auditApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folder_status_id: parseInt(this.detailStatusId) }),
       });
-      await Promise.all([this.loadInvoices(), this.loadStats()]);
+      await Promise.all([this.loadInvoices(), this.loadStats(), this.loadFindingsSummary()]);
     },
 
     async addFile() {
@@ -876,14 +991,14 @@ function auditApp() {
       });
       this.newDocTypeId = '';
       await this.selectInvoice(this.selectedInvoice);
-      await Promise.all([this.loadInvoices(), this.loadStats()]);
+      await Promise.all([this.loadInvoices(), this.loadStats(), this.loadFindingsSummary()]);
     },
 
     async deleteFile(docTypeId) {
       if (!this.selectedInvoice) return;
       await fetch(`/api/missing-files/${this.selectedInvoice.id}/${docTypeId}`, { method: 'DELETE' });
       await this.selectInvoice(this.selectedInvoice);
-      await Promise.all([this.loadInvoices(), this.loadStats()]);
+      await Promise.all([this.loadInvoices(), this.loadStats(), this.loadFindingsSummary()]);
     },
 
     async deleteInvoice() {
@@ -892,7 +1007,7 @@ function auditApp() {
       if (res.ok || res.status === 204) {
         this.selectedInvoice = null;
         this.confirmDeleteInvoice = false;
-        await Promise.all([this.loadInvoices(), this.loadStats()]);
+        await Promise.all([this.loadInvoices(), this.loadStats(), this.loadFindingsSummary()]);
       }
     },
 

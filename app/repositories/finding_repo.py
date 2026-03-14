@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -111,6 +111,23 @@ class MissingFileRepo:
     async def delete_all_findings_for_invoice(self, invoice_id: int) -> None:
         """Alias for delete_all_for_invoice."""
         await self.delete_all_for_invoice(invoice_id)
+
+    async def get_findings_summary(self, period_id: int) -> list[dict]:
+        """Return unresolved finding counts per doc type for a period, sorted descending."""
+        from app.models.rules import DocType
+        q = (
+            select(DocType.id, DocType.code, func.count(MissingFile.invoice_id.distinct()).label("cnt"))
+            .join(MissingFile, MissingFile.doc_type_id == DocType.id)
+            .join(Invoice, MissingFile.invoice_id == Invoice.id)
+            .where(
+                Invoice.audit_period_id == period_id,
+                MissingFile.resolved_at.is_(None),
+            )
+            .group_by(DocType.id, DocType.code)
+            .order_by(func.count(MissingFile.invoice_id.distinct()).desc())
+        )
+        result = await self.db.execute(q)
+        return [{"doc_type_id": row[0], "code": row[1], "count": row[2]} for row in result.all()]
 
     async def delete_all_for_invoices(self, invoice_ids: list[int]) -> int:
         """Delete all findings for multiple invoices at once. Returns rows deleted."""

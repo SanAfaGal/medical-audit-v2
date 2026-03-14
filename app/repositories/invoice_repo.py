@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -113,6 +113,7 @@ class InvoiceRepo:
         admin_type: str | None = None,
         contract_canonical: str | None = None,
         search: str | None = None,
+        has_finding_doc_type_id: int | None = None,
         page: int = 1,
         page_size: int = 50,
     ) -> tuple[list[Invoice], int]:
@@ -139,6 +140,16 @@ class InvoiceRepo:
                 Invoice.invoice_number.ilike(pattern)
                 | Invoice.patient_name.ilike(pattern)
             )
+        if has_finding_doc_type_id is not None:
+            subq = (
+                select(MissingFile.id)
+                .where(
+                    MissingFile.invoice_id == Invoice.id,
+                    MissingFile.doc_type_id == has_finding_doc_type_id,
+                    MissingFile.resolved_at.is_(None),
+                )
+            )
+            q = q.where(exists(subq))
 
         count_q = select(func.count()).select_from(q.subquery())
         total_result = await self.db.execute(count_q)
@@ -280,6 +291,7 @@ class InvoiceRepo:
         admin_type: str | None = None,
         contract_canonical: str | None = None,
         search: str | None = None,
+        has_finding_doc_type_id: int | None = None,
     ) -> list[int]:
         """Return all invoice IDs matching the given filters (no pagination)."""
         q = select(Invoice.id).where(Invoice.audit_period_id == audit_period_id)
@@ -300,6 +312,16 @@ class InvoiceRepo:
         if search:
             pattern = f"%{search.upper()}%"
             q = q.where(Invoice.invoice_number.ilike(pattern) | Invoice.patient_name.ilike(pattern))
+        if has_finding_doc_type_id is not None:
+            subq = (
+                select(MissingFile.id)
+                .where(
+                    MissingFile.invoice_id == Invoice.id,
+                    MissingFile.doc_type_id == has_finding_doc_type_id,
+                    MissingFile.resolved_at.is_(None),
+                )
+            )
+            q = q.where(exists(subq))
         result = await self.db.execute(q.order_by(Invoice.invoice_number))
         return list(result.scalars().all())
 

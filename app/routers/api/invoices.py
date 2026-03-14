@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.repositories.finding_repo import MissingFileRepo
 from app.repositories.invoice_repo import InvoiceRepo
 from app.schemas.invoice import (
     BatchStatusUpdate,
@@ -25,6 +26,7 @@ async def get_invoice_ids(
     admin_type: str | None = None,
     contract_canonical: str | None = None,
     search: str | None = None,
+    has_finding_doc_type_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     repo = InvoiceRepo(db)
@@ -36,6 +38,7 @@ async def get_invoice_ids(
         admin_type=admin_type,
         contract_canonical=contract_canonical,
         search=search,
+        has_finding_doc_type_id=has_finding_doc_type_id,
     )
 
 
@@ -43,6 +46,12 @@ async def get_invoice_ids(
 async def get_stats(period_id: int, db: AsyncSession = Depends(get_db)):
     repo = InvoiceRepo(db)
     return await repo.get_stats(period_id)
+
+
+@router.get("/findings-summary", response_model=list[dict])
+async def get_findings_summary(period_id: int, db: AsyncSession = Depends(get_db)):
+    repo = MissingFileRepo(db)
+    return await repo.get_findings_summary(period_id)
 
 
 @router.get("", response_model=dict)
@@ -54,6 +63,7 @@ async def list_invoices(
     admin_type: str | None = None,
     contract_canonical: str | None = None,
     search: str | None = None,
+    has_finding_doc_type_id: int | None = None,
     page: int = 1,
     page_size: int = 50,
     db: AsyncSession = Depends(get_db),
@@ -67,6 +77,7 @@ async def list_invoices(
         admin_type=admin_type,
         contract_canonical=contract_canonical,
         search=search,
+        has_finding_doc_type_id=has_finding_doc_type_id,
         page=page,
         page_size=page_size,
     )
