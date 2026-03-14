@@ -254,7 +254,7 @@ class InvoiceRepo:
         return result.rowcount
 
     async def get_organizable_invoices(self, period_id: int) -> list[Invoice]:
-        """Return PRESENTE invoices with no unresolved missing files."""
+        """Return PRESENTE invoices with no unresolved missing files, with admin+contract loaded."""
         q = (
             select(Invoice)
             .join(FolderStatus, Invoice.folder_status_id == FolderStatus.id)
@@ -267,6 +267,10 @@ class InvoiceRepo:
                 Invoice.audit_period_id == period_id,
                 FolderStatus.status == "PRESENTE",
                 MissingFile.id.is_(None),
+            )
+            .options(
+                selectinload(Invoice.admin),
+                selectinload(Invoice.contract),
             )
         )
         result = await self.db.execute(q)

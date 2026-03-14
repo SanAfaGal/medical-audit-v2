@@ -7,7 +7,6 @@ import logging
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
-import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.institution import Institution
@@ -701,14 +700,15 @@ async def _verify_cufe(ctx: dict) -> AsyncGenerator[str, None]:
 
 @_stage("ORGANIZE")
 async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
-    """Move eligible invoices (PRESENTE + no findings) to the AUDIT directory."""
-    from core.organizer import InvoiceOrganizer
+    """Move eligible invoices (PRESENTE + no findings) to AUDIT/ADMIN[/CONTRACT]/FOLDER."""
+    from core.helpers import safe_move
 
     from app.repositories.invoice_repo import InvoiceRepo
 
     executor = _get_executor()
     stage_path: Path = ctx["stage_path"]
     audit_path: Path = ctx["audit_path"]
+    institution = ctx["institution"]
     period = ctx["period"]
     db = ctx["db"]
 
@@ -724,23 +724,66 @@ async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
         yield "[INFO] Nada que organizar."
         return
 
-    df = pd.DataFrame(
-        {"Ruta": [inv.invoice_number for inv in organizable]},
-        index=[inv.invoice_number for inv in organizable],
-    )
+    # Index staging folders once (case-insensitive) for fast lookup
+    def _build_staging_index(stage: Path) -> dict[str, Path]:
+        return {p.name.upper(): p for p in stage.iterdir() if p.is_dir()}
 
-    audit_path.mkdir(parents=True, exist_ok=True)
-    organizer = InvoiceOrganizer(df=df, staging_dir=stage_path, archive_dir=audit_path)
-    result = await executor(organizer.organize, False)
-    yield f"[INFO] Movidas a AUDIT: {result.moved}, no encontradas: {result.not_found}, fallidas: {result.failed}"
+    staging_index = await executor(_build_staging_index, stage_path)
+    id_prefix = (institution.invoice_id_prefix or "").upper()
 
-    if result.moved_ids:
-        updated = await inv_repo.batch_update_to_auditada(period.id, result.moved_ids)
+    moved_numbers: list[str] = []
+    not_found = 0
+    failed = 0
+
+    for inv in organizable:
+        # Folder on disk: PREFIX + invoice_number (e.g. HSL359918)
+        folder_name = (institution.invoice_id_prefix or "") + inv.invoice_number
+
+        # Find source — exact match first, then prefix-stripped fallback
+        source = staging_index.get(folder_name.upper())
+        if source is None:
+            # Fallback: folder name ends with the invoice number (handles edge cases)
+            source = next(
+                (p for name, p in staging_index.items() if name.endswith(inv.invoice_number.upper())),
+                None,
+            )
+
+        if source is None:
+            yield f"[WARN] Carpeta no encontrada en STAGE: {folder_name}"
+            not_found += 1
+            continue
+
+        # Build destination: AUDIT / ADMIN / [CONTRACT /] folder_name
+        admin_name = (
+            inv.admin.canonical_admin
+            if inv.admin and inv.admin.canonical_admin
+            else "SIN ADMINISTRADORA"
+        )
+        contract_name = (
+            inv.contract.canonical_contract
+            if inv.contract and inv.contract.canonical_contract
+            else None
+        )
+
+        if contract_name:
+            dest = audit_path / admin_name / contract_name / source.name
+        else:
+            dest = audit_path / admin_name / source.name
+
+        ok = await executor(safe_move, source, dest)
+        if ok:
+            moved_numbers.append(inv.invoice_number)
+            yield f"[INFO] Movida: {source.name} → {dest.relative_to(audit_path)}"
+        else:
+            failed += 1
+            yield f"[WARN] Error al mover: {source.name}"
+
+    yield f"[INFO] Movidas: {len(moved_numbers)}, no encontradas: {not_found}, fallidas: {failed}"
+
+    if moved_numbers:
+        updated = await inv_repo.batch_update_to_auditada(period.id, moved_numbers)
         await db.commit()
         yield f"[INFO] Facturas marcadas AUDITADA: {updated}"
-
-    for err in result.errors:
-        yield f"[WARN] {err}"
 
 
 @_stage("DOWNLOAD_DRIVE")
