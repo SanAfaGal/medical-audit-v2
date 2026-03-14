@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.institution import Institution
 from app.models.period import AuditPeriod
+from app.paths import to_container_path
+from app.repositories.rules_repo import RulesRepo
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +43,8 @@ _StageHandler = "async def f(ctx: dict) -> AsyncGenerator[str, None]"
 # Context builder
 # ---------------------------------------------------------------------------
 
-def _build_context(institution: Institution, period: AuditPeriod, db: AsyncSession, extra: dict) -> dict:
-    base = Path(institution.base_path or "") / period.period_label
+def _build_context(institution: Institution, period: AuditPeriod, db: AsyncSession, extra: dict, audit_data_root: str) -> dict:
+    base = to_container_path(audit_data_root) / institution.name / period.period_label
     return {
         "institution": institution,
         "period":      period,
@@ -81,7 +83,9 @@ async def execute(
     extra: dict | None = None,
 ) -> AsyncGenerator[str, None]:
     """Yield log lines as a pipeline stage executes."""
-    ctx = _build_context(institution, period, db, extra or {})
+    sys_settings = await RulesRepo(db).get_system_settings()
+    audit_data_root = sys_settings.audit_data_root if sys_settings and sys_settings.audit_data_root else ""
+    ctx = _build_context(institution, period, db, extra or {}, audit_data_root)
     handler_fn = _STAGE_HANDLERS.get(stage)
 
     if handler_fn is None:

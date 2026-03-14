@@ -27,6 +27,11 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER must be set in .env}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/${POSTGRES_DB:?POSTGRES_DB must be set in .env}
       DOCS_ENABLED: ${DOCS_ENABLED:-false}
+    volumes:
+      # Discos del host accesibles dentro del contenedor como /mnt/c, /mnt/d, etc.
+      # Esto permite que el usuario configure la carpeta de auditorías directamente
+      # desde la UI usando la ruta normal del Explorador de archivos (ej. C:\Users\...).
+      - "C:/:/mnt/c"
     depends_on:
       db:
         condition: service_healthy

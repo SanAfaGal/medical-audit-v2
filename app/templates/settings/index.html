@@ -17,7 +17,7 @@
 
   <!-- Tabs -->
   <div class="flex gap-0.5 border-b border-gray-200 mb-5">
-    <template x-for="t in [{id:'instituciones',icon:'fa-hospital',label:'Instituciones'},{id:'mapeos',icon:'fa-arrows-left-right',label:'Mapeos'},{id:'periodos',icon:'fa-calendar-days',label:'Períodos'},{id:'reglas',icon:'fa-sliders',label:'Reglas'},{id:'prefijos',icon:'fa-tag',label:'Prefijos'}]" :key="t.id">
+    <template x-for="t in [{id:'instituciones',icon:'fa-hospital',label:'Instituciones'},{id:'mapeos',icon:'fa-arrows-left-right',label:'Mapeos'},{id:'periodos',icon:'fa-calendar-days',label:'Períodos'},{id:'reglas',icon:'fa-sliders',label:'Reglas'},{id:'prefijos',icon:'fa-tag',label:'Prefijos'},{id:'sistema',icon:'fa-gear',label:'Sistema'}]" :key="t.id">
       <button @click="switchTab(t.id)"
               :class="tab === t.id ? 'border-sky-600 text-sky-700 bg-sky-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'"
               class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-md">
@@ -82,11 +82,6 @@
                  placeholder="Dejar vacío para no cambiar"
                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
           <p class="text-xs text-gray-400 mt-0.5">Se cifra con Fernet antes de guardarse en la BD</p>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Ruta base local</label>
-          <input type="text" x-model="form.base_path" placeholder="C:/Auditorias/SANTA_LUCIA"
-                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Credenciales Google Drive (JSON)</label>
@@ -1141,6 +1136,73 @@
 
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════════
+       TAB: SISTEMA
+  ════════════════════════════════════════════════════════════════ -->
+  <div x-show="tab === 'sistema'" class="space-y-5">
+
+    <!-- Estado actual -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <div class="flex items-start gap-4 mb-5">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+             :class="systemSettings.audit_data_root ? 'bg-green-100' : 'bg-amber-100'">
+          <i class="fa-solid fa-folder-open text-lg"
+             :class="systemSettings.audit_data_root ? 'text-green-600' : 'text-amber-500'"></i>
+        </div>
+        <div>
+          <h2 class="text-sm font-semibold text-gray-800 mb-0.5">Carpeta principal de auditorías</h2>
+          <p class="text-xs leading-relaxed"
+             :class="systemSettings.audit_data_root ? 'text-green-700' : 'text-amber-600'">
+            <template x-if="systemSettings.audit_data_root">
+              <span><i class="fa-solid fa-circle-check mr-1"></i>Configurada correctamente.</span>
+            </template>
+            <template x-if="!systemSettings.audit_data_root">
+              <span><i class="fa-solid fa-triangle-exclamation mr-1"></i>No configurada — el pipeline no podrá acceder a los archivos.</span>
+            </template>
+          </p>
+        </div>
+      </div>
+
+      <!-- Explicación visual -->
+      <div class="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-5">
+        <p class="text-xs font-semibold text-gray-600 mb-2">¿Cómo deben estar organizadas las carpetas?</p>
+        <div class="font-mono text-xs text-gray-700 leading-6 space-y-0.5">
+          <div><i class="fa-solid fa-folder text-amber-400 mr-1"></i><span class="font-semibold">Carpeta compartida</span> <span class="text-gray-400">← esta es la que configuras aquí</span></div>
+          <div class="ml-4"><i class="fa-solid fa-folder text-amber-400 mr-1"></i>CAJAMARCA <span class="text-gray-400">← nombre de la institución</span></div>
+          <div class="ml-8"><i class="fa-solid fa-folder text-amber-400 mr-1"></i>01-08-MARZO <span class="text-gray-400">← período</span></div>
+          <div class="ml-12"><i class="fa-solid fa-folder text-sky-400 mr-1"></i>DRIVE</div>
+          <div class="ml-12"><i class="fa-solid fa-folder text-sky-400 mr-1"></i>STAGE</div>
+          <div class="ml-12"><i class="fa-solid fa-folder text-sky-400 mr-1"></i>AUDIT</div>
+          <div class="ml-4"><i class="fa-solid fa-folder text-amber-400 mr-1"></i>OTRO_HOSPITAL</div>
+          <div class="ml-8 text-gray-400">…</div>
+        </div>
+      </div>
+
+      <!-- Campo de configuración -->
+      <div class="max-w-lg">
+        <label class="block text-xs font-semibold text-gray-700 mb-1">
+          Ubicación de la carpeta principal
+        </label>
+        <p class="text-xs text-gray-500 mb-2.5 leading-relaxed">
+          Copia y pega aquí la ruta de la carpeta tal como aparece en el Explorador de archivos de Windows.<br>
+          Puedes obtenerla haciendo clic en la barra de direcciones del Explorador de archivos.
+        </p>
+        <div class="flex gap-2">
+          <input type="text" x-model="systemSettings.audit_data_root"
+                 placeholder="C:\Users\tu_usuario\Desktop\Carpeta compartida"
+                 class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
+          <button @click="saveSystemSettings()"
+                  :disabled="savingSystem"
+                  class="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
+            <span x-show="!savingSystem"><i class="fa-solid fa-floppy-disk mr-1"></i>Guardar</span>
+            <span x-show="savingSystem"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Guardando…</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
 </div>
 {% endblock %}
 
@@ -1156,7 +1218,7 @@ function settingsApp() {
     editingName: '',
     confirmDeleteInstId: null,
     uploadingLogoFor: null,
-    form: { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'', base_path:'', drive_credentials_json:'' },
+    form: { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'', drive_credentials_json:'' },
 
     // Mapeos
     mapInstId: '',
@@ -1176,6 +1238,10 @@ function settingsApp() {
     periods: [],
     confirmDeletePeriodId: null,
     newPeriod: { period_label:'', date_from:'', date_to:'' },
+
+    // Sistema
+    systemSettings: { audit_data_root: '' },
+    savingSystem: false,
 
     // Reglas
     serviceTypes: [], docTypes: [], folderStatuses: [],
@@ -1197,18 +1263,21 @@ function settingsApp() {
     toast: { msg:'', type:'success' },
 
     async init() {
-      const [instRes, stRes, dtRes, fsRes, pcRes] = await Promise.all([
+      const [instRes, stRes, dtRes, fsRes, pcRes, sysRes] = await Promise.all([
         fetch('/api/institutions'),
         fetch('/api/settings/service-types'),
         fetch('/api/settings/doc-types'),
         fetch('/api/settings/folder-statuses'),
         fetch('/api/settings/prefix-corrections'),
+        fetch('/api/settings/system'),
       ]);
       this.institutions       = await instRes.json();
       this.serviceTypes       = await stRes.json();
       this.docTypes           = await dtRes.json();
       this.folderStatuses     = await fsRes.json();
       this.prefixCorrections  = await pcRes.json();
+      const sys = await sysRes.json();
+      this.systemSettings = { audit_data_root: sys.audit_data_root || '' };
     },
 
     showToast(msg, type = 'success') {
@@ -1238,13 +1307,13 @@ function settingsApp() {
     // ---- INSTITUCIONES ----
     resetInstForm() {
       this.editingId = null; this.editingName = '';
-      this.form = { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'', base_path:'', drive_credentials_json:'' };
+      this.form = { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'', drive_credentials_json:'' };
     },
 
     editInstitution(h) {
       this.editingId = h.id;
       this.editingName = h.display_name;
-      this.form = { name:h.name, display_name:h.display_name, nit:h.nit, invoice_id_prefix:h.invoice_id_prefix, sihos_base_url:h.sihos_base_url||'', sihos_doc_code:h.sihos_doc_code||'', sihos_user:h.sihos_user||'', sihos_password:'', base_path:h.base_path||'', drive_credentials_json:'' };
+      this.form = { name:h.name, display_name:h.display_name, nit:h.nit, invoice_id_prefix:h.invoice_id_prefix, sihos_base_url:h.sihos_base_url||'', sihos_doc_code:h.sihos_doc_code||'', sihos_user:h.sihos_user||'', sihos_password:'', drive_credentials_json:'' };
       window.scrollTo({ top: 0, behavior: 'smooth' });
     },
 
@@ -1511,6 +1580,22 @@ function settingsApp() {
         this.confirmDeletePCId = null;
         this.showToast('Corrección eliminada.');
       } else { this.confirmDeletePCId = null; this.showToast('No se pudo eliminar.','error'); }
+    },
+
+    // ---- SISTEMA ----
+    async saveSystemSettings() {
+      this.savingSystem = true;
+      const res = await fetch('/api/settings/system', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audit_data_root: this.systemSettings.audit_data_root || null }),
+      });
+      this.savingSystem = false;
+      if (res.ok) {
+        this.showToast('Configuración guardada.');
+      } else {
+        this.showToast('Error al guardar.', 'error');
+      }
     },
   };
 }

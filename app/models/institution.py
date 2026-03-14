@@ -19,7 +19,6 @@ class Institution(Base):
     sihos_doc_code: Mapped[str | None] = mapped_column(String(20))
     sihos_user: Mapped[str | None] = mapped_column(String(200))
     sihos_password: Mapped[str | None] = mapped_column(String(200))  # store encrypted via crypto.py
-    base_path: Mapped[str | None] = mapped_column(String(500))
     drive_credentials_enc: Mapped[str | None] = mapped_column(String(10000))  # JSON encrypted via crypto.py
     logo_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True, default=None)
     logo_content_type: Mapped[str | None] = mapped_column(String(50), default=None)

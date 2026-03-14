@@ -46,3 +46,11 @@ class PrefixCorrection(Base):
     wrong_prefix: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     correct_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
     notes: Mapped[str | None] = mapped_column(String(200))
+
+
+class SystemSettings(Base):
+    """Single-row global configuration (id is always 1)."""
+    __tablename__ = "system_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    audit_data_root: Mapped[str | None] = mapped_column(String(500))

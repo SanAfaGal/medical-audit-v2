@@ -9,8 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.paths import to_container_path
 from app.repositories.institution_repo import InstitutionRepo
 from app.repositories.invoice_repo import InvoiceRepo
+from app.repositories.rules_repo import RulesRepo
 from app.schemas.invoice import PeriodCreate, PeriodOut
 
 router = APIRouter(prefix="/institutions", tags=["periods"])
@@ -59,10 +61,13 @@ async def create_period(
     )
     await db.commit()
 
-    if institution.base_path:
+    sys_settings = await RulesRepo(db).get_system_settings()
+    audit_data_root = sys_settings.audit_data_root if sys_settings and sys_settings.audit_data_root else None
+    if audit_data_root:
+        inst_root = str(to_container_path(audit_data_root) / institution.name)
         try:
             created = await asyncio.to_thread(
-                _create_period_dirs, institution.base_path, data.period_label
+                _create_period_dirs, inst_root, data.period_label
             )
             for path in created:
                 logger.info("Carpeta creada: %s", path)
@@ -74,8 +79,7 @@ async def create_period(
             )
     else:
         logger.warning(
-            "Institución %s no tiene base_path configurado; carpetas no creadas.",
-            institution.name,
+            "audit_data_root no configurado; carpetas del período no creadas.",
         )
 
     return period

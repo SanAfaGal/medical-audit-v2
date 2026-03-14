@@ -19,6 +19,8 @@ from app.schemas.rules import (
     ServiceTypeCreate,
     ServiceTypeOut,
     ServiceTypeUpdate,
+    SystemSettingsOut,
+    SystemSettingsUpdate,
 )
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -205,3 +207,24 @@ async def delete_prefix_correction(correction_id: int, db: AsyncSession = Depend
     if not deleted:
         raise HTTPException(404, "Corrección no encontrada")
     await db.commit()
+
+
+# ------------------------------------------------------------------
+# System settings
+# ------------------------------------------------------------------
+
+@router.get("/system", response_model=SystemSettingsOut)
+async def get_system_settings(db: AsyncSession = Depends(get_db)):
+    obj = await RulesRepo(db).get_system_settings()
+    if not obj:
+        return SystemSettingsOut(audit_data_root=None)
+    return obj
+
+
+@router.patch("/system", response_model=SystemSettingsOut)
+async def update_system_settings(data: SystemSettingsUpdate, db: AsyncSession = Depends(get_db)):
+    obj = await RulesRepo(db).save_system_settings(
+        {k: v for k, v in data.model_dump().items() if v is not None}
+    )
+    await db.commit()
+    return obj

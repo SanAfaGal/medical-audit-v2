@@ -11,7 +11,6 @@ class InstitutionCreate(BaseModel):
     sihos_doc_code: str | None = None
     sihos_user: str | None = None
     sihos_password: str | None = None   # plaintext — encrypted before DB insert
-    base_path: str | None = None
     drive_credentials_json: str | None = None   # plaintext JSON — encrypted before DB insert
 
 
@@ -24,7 +23,6 @@ class InstitutionUpdate(BaseModel):
     sihos_doc_code: str | None = None
     sihos_user: str | None = None
     sihos_password: str | None = None   # plaintext — encrypted before DB insert
-    base_path: str | None = None
     drive_credentials_json: str | None = None   # plaintext JSON — encrypted before DB insert
 
 
@@ -39,7 +37,6 @@ class InstitutionOut(BaseModel):
     sihos_base_url: str | None
     sihos_doc_code: str | None
     sihos_user: str | None
-    base_path: str | None
     logo_url: str | None = None
     # NOTE: sihos_password and drive_credentials_enc are never exposed
 
