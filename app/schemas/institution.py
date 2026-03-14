@@ -6,7 +6,7 @@ class InstitutionCreate(BaseModel):
     name: str                           # internal unique key, e.g. "SANTA_LUCIA"
     display_name: str                   # human-readable, e.g. "Hospital Santa Lucia"
     nit: str
-    invoice_id_prefix: str
+    invoice_id_prefix: str | None = None
     sihos_base_url: str | None = None
     sihos_doc_code: str | None = None
     sihos_user: str | None = None
@@ -33,7 +33,7 @@ class InstitutionOut(BaseModel):
     name: str
     display_name: str
     nit: str
-    invoice_id_prefix: str
+    invoice_id_prefix: str | None
     sihos_base_url: str | None
     sihos_doc_code: str | None
     sihos_user: str | None

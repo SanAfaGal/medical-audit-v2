@@ -14,7 +14,7 @@ class Institution(Base):
     name: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     nit: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
-    invoice_id_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
+    invoice_id_prefix: Mapped[str | None] = mapped_column(String(20), nullable=True)
     sihos_base_url: Mapped[str | None] = mapped_column(String(500))
     sihos_doc_code: Mapped[str | None] = mapped_column(String(20))
     sihos_user: Mapped[str | None] = mapped_column(String(200))

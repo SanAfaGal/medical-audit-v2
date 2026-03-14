@@ -23,9 +23,9 @@ class FolderInspector:
         # When there is no prefix the separator token is meaningless — omitting it
         # prevents the wildcard from consuming the first digit of a numeric-only ID.
         _sep = r"[^a-zA-Z]?" if id_prefix else ""
-        self._re_dir_name      = re.compile(rf"^{_esc}\d+$",        re.IGNORECASE)
-        self._re_dir_pattern   = re.compile(rf"{_esc}{_sep}\d+",     re.IGNORECASE)
-        self._re_folder_suffix = re.compile(rf"({_esc}{_sep}\d+)$",  re.IGNORECASE)
+        self._re_dir_name      = re.compile(rf"^{_esc}\d+$",           re.IGNORECASE)
+        self._re_dir_pattern   = re.compile(rf"{_esc}{_sep}(\d+)",    re.IGNORECASE)
+        self._re_folder_suffix = re.compile(rf"({_esc}{_sep}\d+)$",   re.IGNORECASE)
 
     def find_malformed_dirs(
         self, skip: list[Path] | None = None
@@ -76,7 +76,7 @@ class FolderInspector:
             if path.is_dir():
                 match = self._re_dir_pattern.search(path.name)
                 if match:
-                    on_disk.add(match.group())
+                    on_disk.add(match.group(1))  # group(1) = digits only, strips prefix
         return [name for name in expected_dirs if name not in on_disk]
 
     def find_void_dirs(self) -> list[Path]:

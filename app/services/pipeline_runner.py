@@ -266,7 +266,7 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
 
     scanner = DocumentScanner(stage_path)
     invalid = await executor(
-        scanner.find_invalid_names, prefixes, institution.invoice_id_prefix, institution.nit
+        scanner.find_invalid_names, prefixes, institution.invoice_id_prefix or "", institution.nit
     )
     yield f"[INFO] Archivos con nombre inválido: {len(invalid)}"
 
@@ -274,7 +274,7 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
         standardizer = FilenameStandardizer(
             nit=institution.nit,
             valid_prefixes=prefixes,
-            suffix_const=institution.invoice_id_prefix,
+            suffix_const=institution.invoice_id_prefix or "",
         )
         results = await executor(standardizer.run, invalid)
 
@@ -339,7 +339,7 @@ async def _list_unreadable_pdfs(ctx: dict) -> AsyncGenerator[str, None]:
 
     rules_repo = RulesRepo(db)
     invoice_doc = await rules_repo.get_doc_type_by_code("FACTURA")
-    invoice_prefix = invoice_doc.prefix if invoice_doc and invoice_doc.prefix else institution.invoice_id_prefix
+    invoice_prefix = invoice_doc.prefix if invoice_doc and invoice_doc.prefix else (institution.invoice_id_prefix or "")
 
     scanner = DocumentScanner(stage_path)
     invoices = await executor(scanner.find_by_prefix, invoice_prefix)
@@ -370,7 +370,7 @@ async def _delete_unreadable_pdfs(ctx: dict) -> AsyncGenerator[str, None]:
 
     rules_repo = RulesRepo(db)
     invoice_doc = await rules_repo.get_doc_type_by_code("FACTURA")
-    invoice_prefix = invoice_doc.prefix if invoice_doc and invoice_doc.prefix else institution.invoice_id_prefix
+    invoice_prefix = invoice_doc.prefix if invoice_doc and invoice_doc.prefix else (institution.invoice_id_prefix or "")
 
     scanner = DocumentScanner(stage_path)
     invoices = await executor(scanner.find_by_prefix, invoice_prefix)
@@ -425,7 +425,7 @@ async def _download_invoices_from_sihos(ctx: dict) -> AsyncGenerator[str, None]:
         base_url=institution.sihos_base_url or "",
         hospital_nit=institution.nit,
         invoice_prefix=invoice_prefix,
-        invoice_id_prefix=institution.invoice_id_prefix,
+        invoice_id_prefix=institution.invoice_id_prefix or "",
         invoice_doc_code=institution.sihos_doc_code or "",
         output_dir=stage_path,
     )
@@ -455,7 +455,7 @@ async def _check_invoices(ctx: dict) -> AsyncGenerator[str, None]:
 
     rules_repo = RulesRepo(db)
     invoice_doc = await rules_repo.get_doc_type_by_code("FACTURA")
-    invoice_prefix = invoice_doc.prefix if invoice_doc and invoice_doc.prefix else institution.invoice_id_prefix
+    invoice_prefix = invoice_doc.prefix if invoice_doc and invoice_doc.prefix else (institution.invoice_id_prefix or "")
 
     scanner = DocumentScanner(stage_path)
     invoices = await executor(scanner.find_by_prefix, invoice_prefix)
@@ -488,12 +488,12 @@ async def _verify_invoice_code(ctx: dict) -> AsyncGenerator[str, None]:
 
     rules_repo = RulesRepo(db)
     invoice_doc = await rules_repo.get_doc_type_by_code("FACTURA")
-    invoice_prefix = invoice_doc.prefix if invoice_doc and invoice_doc.prefix else institution.invoice_id_prefix
+    invoice_prefix = invoice_doc.prefix if invoice_doc and invoice_doc.prefix else (institution.invoice_id_prefix or "")
 
     scanner = DocumentScanner(stage_path)
     invoices = await executor(scanner.find_by_prefix, invoice_prefix)
 
-    validator = InvoiceValidator(stage_path, institution.invoice_id_prefix)
+    validator = InvoiceValidator(stage_path, institution.invoice_id_prefix or "")
     missing_code, _ = await executor(validator.validate_invoice_files, invoices)
     for f in missing_code:
         yield f"[WARN] Sin número de factura en PDF: {f.name}"
@@ -513,7 +513,7 @@ async def _check_invoice_number_on_files(ctx: dict) -> AsyncGenerator[str, None]
         yield f"[WARN] Directorio STAGE no existe: {stage_path}"
         return
 
-    inspector = FolderInspector(stage_path, institution.invoice_id_prefix)
+    inspector = FolderInspector(stage_path, institution.invoice_id_prefix or "")
     mismatched = await executor(inspector.find_mismatched_files)
     for f in mismatched:
         yield f"[WARN] Archivo desajustado: {f.name} (en carpeta {f.parent.name})"
@@ -533,7 +533,7 @@ async def _check_folders_with_extra_text(ctx: dict) -> AsyncGenerator[str, None]
         yield f"[WARN] Directorio STAGE no existe: {stage_path}"
         return
 
-    inspector = FolderInspector(stage_path, institution.invoice_id_prefix)
+    inspector = FolderInspector(stage_path, institution.invoice_id_prefix or "")
     malformed = await executor(inspector.find_malformed_dirs)
     for d in malformed:
         yield f"[WARN] Carpeta con texto extra: {d.name}"
@@ -554,12 +554,12 @@ async def _normalize_dir_names(ctx: dict) -> AsyncGenerator[str, None]:
         yield f"[WARN] Directorio STAGE no existe: {stage_path}"
         return
 
-    inspector = FolderInspector(stage_path, institution.invoice_id_prefix)
+    inspector = FolderInspector(stage_path, institution.invoice_id_prefix or "")
     malformed = await executor(inspector.find_malformed_dirs)
     yield f"[INFO] Carpetas malformadas encontradas: {len(malformed)}"
 
     if malformed:
-        ops = DocumentOps(stage_path, institution.invoice_id_prefix)
+        ops = DocumentOps(stage_path, institution.invoice_id_prefix or "")
         renamed = await executor(ops.standardize_dir_names, malformed)
         yield f"[INFO] Carpetas renombradas: {renamed}"
 
@@ -585,7 +585,7 @@ async def _check_dirs(ctx: dict) -> AsyncGenerator[str, None]:
     presente_numbers = await inv_repo.get_invoice_numbers_by_status(period.id, "PRESENTE")
     yield f"[INFO] Facturas PRESENTE en BD: {len(presente_numbers)}"
 
-    inspector = FolderInspector(stage_path, institution.invoice_id_prefix)
+    inspector = FolderInspector(stage_path, institution.invoice_id_prefix or "")
     missing = await executor(inspector.find_missing_dirs, presente_numbers)
     yield f"[INFO] Facturas sin carpeta en disco: {len(missing)}"
 
@@ -626,7 +626,7 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
     presente_invoices = await inv_repo.get_invoices_by_status_code(period.id, "PRESENTE")
     yield f"[INFO] Facturas PRESENTE a verificar: {len(presente_invoices)}"
 
-    inspector = FolderInspector(stage_path, institution.invoice_id_prefix)
+    inspector = FolderInspector(stage_path, institution.invoice_id_prefix or "")
     total_findings = 0
     invoices_with_findings: list[str] = []
 
@@ -681,19 +681,19 @@ async def _verify_cufe(ctx: dict) -> AsyncGenerator[str, None]:
 
     rules_repo = RulesRepo(db)
     invoice_doc = await rules_repo.get_doc_type_by_code("FACTURA")
-    invoice_prefix = invoice_doc.prefix if invoice_doc and invoice_doc.prefix else institution.invoice_id_prefix
+    invoice_prefix = invoice_doc.prefix if invoice_doc and invoice_doc.prefix else (institution.invoice_id_prefix or "")
 
     scanner = DocumentScanner(stage_path)
     invoices = await executor(scanner.find_by_prefix, invoice_prefix)
 
-    validator = InvoiceValidator(stage_path, institution.invoice_id_prefix)
+    validator = InvoiceValidator(stage_path, institution.invoice_id_prefix or "")
     _, missing_cufe = await executor(validator.validate_invoice_files, invoices)
     for f in missing_cufe:
         yield f"[WARN] Sin CUFE: {f.name}"
     yield f"[INFO] Facturas sin CUFE: {len(missing_cufe)}"
 
     if missing_cufe:
-        ops = DocumentOps(stage_path, institution.invoice_id_prefix)
+        ops = DocumentOps(stage_path, institution.invoice_id_prefix or "")
         marked = await executor(ops.tag_dirs_missing_cufe, missing_cufe)
         yield f"[INFO] Carpetas marcadas sin CUFE: {marked}"
 
