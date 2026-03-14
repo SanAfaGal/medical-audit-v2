@@ -1,0 +1,13 @@
+# Sobreescrituras para desarrollo local.
+# Docker Compose lo aplica automáticamente encima de docker-compose.yml
+services:
+  backend:
+    environment:
+      DOCS_ENABLED: "true"   # Habilita Swagger UI en dev
+    volumes:
+      # Hot-reload: monta el código fuente directamente
+      - ./app:/app/app
+      - ./core:/app/core
+
+  adminer:
+    profiles: []   # En dev el perfil no es necesario; levanta siempre
