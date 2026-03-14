@@ -119,6 +119,7 @@ medical-audit-v2/
 ├── docker-compose.yml          # Production services
 ├── docker-compose.override.yml # Dev overrides (auto-applied locally)
 ├── .env.example                # Production environment template
+├── dev.sh                      # Developer convenience script (./dev.sh help)
 └── pyproject.toml              # Dependencies and tooling config
 ```
 
@@ -158,7 +159,7 @@ DOCS_ENABLED=true
 **2. Start services**
 
 ```bash
-docker compose up -d
+./dev.sh up
 ```
 
 `docker-compose.override.yml` is applied automatically, which:
@@ -169,7 +170,7 @@ docker compose up -d
 **3. Run migrations**
 
 ```bash
-docker compose exec backend alembic upgrade head
+./dev.sh migrate
 ```
 
 **4. Access the application**
@@ -205,6 +206,7 @@ docker compose exec backend alembic upgrade head
 ```
 
 > `docker-compose.override.yml` is only applied when it exists on the machine. On a production server where you don't copy it, only `docker-compose.yml` runs — Swagger is disabled, Adminer does not start.
+> `dev.sh` is a local development convenience only — do not run it on the production server.
 
 **3. Verify**
 
@@ -240,15 +242,13 @@ This project uses [Alembic](https://alembic.sqlalchemy.org/) for schema migratio
 
 ```bash
 # Apply all pending migrations
-docker compose exec backend alembic upgrade head
+./dev.sh migrate
 
 # Create a new migration (auto-generate from model changes)
-docker compose exec backend alembic revision --autogenerate -m "describe your change"
+./dev.sh migration "describe your change"
 
-# Check current revision
+# Check current revision / downgrade (raw commands)
 docker compose exec backend alembic current
-
-# Downgrade one step
 docker compose exec backend alembic downgrade -1
 ```
 
@@ -392,22 +392,35 @@ The pipeline is composed of 18 sequential stages. Each stage is triggered indivi
 
 ## Development
 
+### Developer script
+
+`dev.sh` wraps the most common commands so you don't have to type long `docker compose` lines:
+
+```bash
+./dev.sh help          # list all commands
+./dev.sh up            # start services
+./dev.sh logs backend  # follow backend logs
+./dev.sh migrate       # apply pending migrations
+./dev.sh test          # run pytest inside the container
+./dev.sh lint          # ruff check + format check
+./dev.sh shell         # interactive shell inside backend container
+./dev.sh nuke          # destroy all volumes (asks confirmation)
+```
+
 ### Running tests
 
 ```bash
-# Inside Docker
-docker compose exec backend pytest
-
-# Locally with uv
-uv run pytest
+./dev.sh test
+# or with extra pytest args:
+./dev.sh test -k test_invoice -v
 ```
 
-### Linting and type checking
+### Linting and formatting
 
 ```bash
-uv run ruff check .
-uv run ruff format .
-uv run mypy app/
+./dev.sh lint      # check only (CI-safe)
+./dev.sh format    # auto-fix formatting
+uv run mypy app/   # type checking (no dev.sh wrapper)
 ```
 
 ### Validating Docker Compose config
