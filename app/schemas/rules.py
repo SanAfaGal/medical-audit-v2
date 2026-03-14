@@ -97,3 +97,13 @@ class PrefixCorrectionUpdate(BaseModel):
     notes: str | None = None
 
 
+class SystemSettingsOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    audit_data_root: str | None
+
+
+class SystemSettingsUpdate(BaseModel):
+    audit_data_root: str | None = None
+
+

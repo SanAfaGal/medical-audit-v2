@@ -62,22 +62,23 @@ The application runs an 18-stage pipeline that ingests invoices, normalizes fold
 ## Architecture
 
 ```
-                        ┌──────────────────────────────────┐
-                        │          Docker Network           │
-                        │                                   │
-  Browser ──── :80 ───► │  nginx  ──► /api  ──► backend    │
-                        │         └─► /     ──► backend    │
-                        │                    │              │
-                        │              PostgreSQL 16        │
-                        │                                   │
-                        └──────────────────────────────────┘
+  LAN devices ─── :8000 ──► uvicorn / FastAPI (native on host)
+                                    │
+                                    ├──► audit files (native Windows filesystem)
+                                    │
+                                    └──► localhost:5432
+                                              │
+                                         ┌────────────┐
+                                         │   Docker   │
+                                         │ PostgreSQL │
+                                         └────────────┘
 ```
 
-- **nginx** is the only publicly exposed service (port 80). It handles rate limiting (30 req/s), gzip compression, and proxies all traffic to FastAPI — including static assets and institution logos.
-- **backend** (FastAPI + Uvicorn) handles all API and page requests, never exposed directly to the internet.
-- **db** (PostgreSQL) is only reachable from within the Docker network.
+- **backend** (FastAPI + Uvicorn) runs natively on the host machine. It accesses audit files directly from the Windows filesystem at native speed, with no virtualisation overhead.
+- **db** (PostgreSQL) runs in Docker with port 5432 exposed to `localhost`. Only the database is containerised.
 - **Institution logos** are stored in the database as `BYTEA` and served via `GET /api/institutions/{id}/logo` — no shared volumes required.
 - **adminer** is available in development only (via `docker-compose.override.yml`).
+- The app listens on `0.0.0.0:8000`, so any device on the same LAN can reach it at `http://<host-ip>:8000`.
 
 ---
 
@@ -160,16 +161,13 @@ DOCS_ENABLED=true
 
 > `.env` is listed in `.gitignore` and must never be committed. All three `POSTGRES_*` variables are **required** — Docker Compose will refuse to start if any are missing.
 
-**2. Start services**
+**2. Start the database**
 
 ```bash
-./dev.sh up
+./dev.sh db
 ```
 
-`docker-compose.override.yml` is applied automatically, which:
-- Sets `DOCS_ENABLED=true` (enables Swagger UI at `/docs`)
-- Mounts `./app` and `./core` for hot-reload
-- Starts Adminer (database UI at `http://localhost:8080`)
+`docker-compose.override.yml` is applied automatically, which starts Adminer (database UI at `http://localhost:8080`).
 
 **3. Run migrations**
 
@@ -177,48 +175,26 @@ DOCS_ENABLED=true
 ./dev.sh migrate
 ```
 
-**4. Access the application**
+**4. Start the backend**
+
+```bash
+./dev.sh serve
+```
+
+Uvicorn starts with hot-reload on `0.0.0.0:8000`. Any device on your local network can access the app at `http://<your-ip>:8000`.
+
+**5. Configure the audit folder**
+
+Go to `http://localhost:8000` → **Configuración → Sistema** and set the path to the folder where your audit subfolders live (e.g. `C:\Users\tu_usuario\Desktop\Carpeta compartida`).
+
+**6. Access the application**
 
 | URL | Description |
 |---|---|
-| `http://localhost` | Main application |
-| `http://localhost/docs` | Swagger UI (dev only) |
+| `http://localhost:8000` | Main application |
+| `http://<your-lan-ip>:8000` | Access from other devices on the network |
+| `http://localhost:8000/docs` | Swagger UI (dev only, `DOCS_ENABLED=true`) |
 | `http://localhost:8080` | Adminer database UI (dev only) |
-
-### Production Deployment
-
-**1. Set up environment on the server**
-
-```bash
-git clone <repo-url>
-cd medical-audit-v2
-cp .env.example .env
-nano .env   # Fill in real passwords and SECRET_KEY
-```
-
-Generate a secure `SECRET_KEY`:
-
-```bash
-python -c "import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
-```
-
-**2. Deploy**
-
-```bash
-docker compose up -d
-docker compose exec backend alembic upgrade head
-```
-
-> `docker-compose.override.yml` is only applied when it exists on the machine. On a production server where you don't copy it, only `docker-compose.yml` runs — Swagger is disabled, Adminer does not start.
-> `dev.sh` is a local development convenience only — do not run it on the production server.
-
-**3. Verify**
-
-```bash
-curl http://localhost/health
-docker compose ps
-docker compose logs backend --tail 50
-```
 
 ---
 
@@ -228,14 +204,15 @@ All variables are read by `app/config.py` via pydantic-settings.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DATABASE_URL` | Yes | — | Full asyncpg connection string. Host must be `db` in Docker. |
+| `DATABASE_URL` | Yes | — | Full asyncpg connection string. Use `localhost:5432` since the backend runs natively. |
 | `SECRET_KEY` | Yes | — | 32-byte base64-encoded key for AES encryption of stored credentials. |
-| `POSTGRES_USER` | Yes | — | PostgreSQL username (used by the `db` service). |
+| `POSTGRES_USER` | Yes | — | PostgreSQL username (used by the `db` Docker service). |
 | `POSTGRES_PASSWORD` | Yes | — | PostgreSQL password. |
 | `POSTGRES_DB` | Yes | — | PostgreSQL database name. |
-| `AUDIT_HOST_PATH` | No | `./audit_data` | Host folder mounted at `/audit_data` inside the container. Use forward slashes. Change here and restart with `docker compose up -d backend` to point to a different folder. |
 | `LOG_LEVEL` | No | `INFO` | Structlog level: `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 | `DOCS_ENABLED` | No | `false` | Set `true` to enable `/docs` and `/redoc`. Never enable in production. |
+
+> The audit folder path is configured from the UI (**Configuración → Sistema**) and stored in the database — not in `.env`.
 
 Copy `.env.example` as your starting point — it contains all variables with production-safe placeholder values.
 
@@ -253,8 +230,8 @@ This project uses [Alembic](https://alembic.sqlalchemy.org/) for schema migratio
 ./dev.sh migration "describe your change"
 
 # Check current revision / downgrade (raw commands)
-docker compose exec backend alembic current
-docker compose exec backend alembic downgrade -1
+uv run alembic current
+uv run alembic downgrade -1
 ```
 
 ---
@@ -452,27 +429,28 @@ The pipeline is composed of 18 sequential stages. Each stage is triggered indivi
 
 ### Developer script
 
-`dev.sh` wraps the most common commands so you don't have to type long `docker compose` lines:
+`dev.sh` wraps the most common commands:
 
 ```bash
 ./dev.sh help                          # list all commands
-./dev.sh up                            # start services
-./dev.sh down                          # stop services
-./dev.sh build                         # build images (with cache) and restart
-./dev.sh rebuild                       # build images (no cache) and restart
-./dev.sh logs backend                  # follow backend logs
-./dev.sh migrate                       # apply pending migrations
-./dev.sh migration "describe change"   # generate new migration
-./dev.sh seed                          # run database seed script
-./dev.sh test                          # run pytest inside the container
-./dev.sh lint                          # ruff check + format check
-./dev.sh format                        # auto-fix formatting
-./dev.sh shell                         # interactive shell inside backend container
+
+# Database (Docker)
+./dev.sh db                            # start PostgreSQL container
+./dev.sh db-down                       # stop PostgreSQL container
 ./dev.sh psql                          # connect to PostgreSQL via psql
-./dev.sh health                        # check /health endpoint
 ./dev.sh backup [nombre]               # snapshot config tables → backups/<nombre>_TIMESTAMP.sql
 ./dev.sh restore <archivo.sql>         # restore config tables from snapshot
 ./dev.sh nuke                          # destroy all volumes (asks confirmation)
+
+# Backend (native)
+./dev.sh serve                         # start uvicorn with hot-reload on 0.0.0.0:8000
+./dev.sh migrate                       # apply pending Alembic migrations
+./dev.sh migration "describe change"   # generate new migration
+./dev.sh seed                          # run database seed script
+./dev.sh test                          # run pytest
+./dev.sh lint                          # ruff check + format check
+./dev.sh format                        # auto-fix formatting
+./dev.sh health                        # check /health endpoint (localhost:8000)
 ```
 
 ### Running tests
@@ -481,6 +459,8 @@ The pipeline is composed of 18 sequential stages. Each stage is triggered indivi
 ./dev.sh test
 # or with extra pytest args:
 ./dev.sh test -k test_invoice -v
+# or directly:
+uv run pytest
 ```
 
 ### Linting and formatting
@@ -504,5 +484,5 @@ docker compose -f docker-compose.yml config
 ### Confirming settings are loaded correctly
 
 ```bash
-docker compose run --rm backend python -c "from app.config import settings; print(settings.model_dump())"
+uv run python -c "from app.config import settings; print(settings.model_dump())"
 ```

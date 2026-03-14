@@ -1,8 +1,13 @@
-"""Path utilities: container mount point for audit data.
-
-The host audit folder is mounted at /audit_data via docker-compose
-using the AUDIT_HOST_PATH variable defined in .env.
-"""
+"""Path utilities: resolve audit data root to a filesystem path."""
 from pathlib import Path
 
-AUDIT_DATA_MOUNT = Path("/audit_data")
+
+def to_container_path(path_str: str) -> Path:
+    """Return the filesystem Path for the given audit data root.
+
+    The backend runs natively on the host, so Windows paths are used as-is.
+    Raises ValueError if path_str is empty (audit_data_root not configured).
+    """
+    if not path_str:
+        raise ValueError("audit_data_root no está configurado")
+    return Path(path_str)

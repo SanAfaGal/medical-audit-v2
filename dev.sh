@@ -13,44 +13,24 @@ CMD="${1:-help}"
 shift || true  # remaining args available as "$@"
 
 case "$CMD" in
-  up)
-    echo -e "${GREEN}Starting services...${NC}"
+  db)
+    echo -e "${GREEN}Starting database...${NC}"
     docker compose up -d
     ;;
 
-  down)
-    echo -e "${YELLOW}Stopping services...${NC}"
+  db-down)
+    echo -e "${YELLOW}Stopping database...${NC}"
     docker compose down
     ;;
 
-  restart)
-    echo -e "${YELLOW}Restarting services...${NC}"
-    docker compose restart "$@"
-    ;;
-
-  build)
-    echo -e "${YELLOW}Building images (with cache)...${NC}"
-    docker compose build && docker compose up -d
-    echo -e "${GREEN}Build complete.${NC}"
-    ;;
-
-  rebuild)
-    echo -e "${YELLOW}Rebuilding images (no cache)...${NC}"
-    docker compose build --no-cache && docker compose up -d
-    echo -e "${GREEN}Rebuild complete.${NC}"
-    ;;
-
-  logs)
-    docker compose logs -f --tail=100 "${1:-}"
-    ;;
-
-  status)
-    docker compose ps
+  serve)
+    echo -e "${GREEN}Starting backend (native)...${NC}"
+    uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ;;
 
   migrate)
     echo -e "${CYAN}Running migrations...${NC}"
-    docker compose exec backend alembic upgrade head
+    uv run alembic upgrade head
     echo -e "${GREEN}Migrations applied.${NC}"
     ;;
 
@@ -60,18 +40,18 @@ case "$CMD" in
       exit 1
     fi
     echo -e "${CYAN}Generating migration: $1${NC}"
-    docker compose exec backend alembic revision --autogenerate -m "$1"
+    uv run alembic revision --autogenerate -m "$1"
     ;;
 
   seed)
     echo -e "${CYAN}Seeding database...${NC}"
-    docker compose exec backend python seeds/seed_data.py
+    uv run python seeds/seed_data.py
     echo -e "${GREEN}Seed complete.${NC}"
     ;;
 
   test)
     echo -e "${CYAN}Running tests...${NC}"
-    docker compose exec backend pytest "$@"
+    uv run pytest "$@"
     ;;
 
   lint)
@@ -86,11 +66,6 @@ case "$CMD" in
     echo -e "${GREEN}Format complete.${NC}"
     ;;
 
-  shell)
-    echo -e "${CYAN}Opening shell in backend container...${NC}"
-    docker compose exec backend sh
-    ;;
-
   psql)
     # shellcheck disable=SC1091
     source .env 2>/dev/null || true
@@ -100,7 +75,7 @@ case "$CMD" in
 
   health)
     echo -e "${CYAN}Checking health...${NC}"
-    curl -s http://localhost/health | python3 -m json.tool
+    curl -s http://localhost:8000/health | python3 -m json.tool
     ;;
 
   backup)
@@ -148,27 +123,23 @@ case "$CMD" in
   help|*)
     echo -e "${BOLD}Usage:${NC} ./dev.sh <command> [args]"
     echo ""
-    echo -e "${BOLD}Available commands:${NC}"
-    echo -e "  ${GREEN}up${NC}                   Start all services (docker compose up -d)"
-    echo -e "  ${GREEN}down${NC}                 Stop all services"
-    echo -e "  ${GREEN}restart${NC} [service]    Restart all or a specific service"
-    echo -e "  ${GREEN}build${NC}                Build images (with cache) and restart"
-  echo -e "  ${GREEN}rebuild${NC}              Rebuild images (no cache) and restart"
-    echo -e "  ${GREEN}logs${NC} [service]       Follow logs (all services or one)"
-    echo -e "  ${GREEN}status${NC}               Show container status"
-    echo -e "  ${GREEN}migrate${NC}              Apply pending Alembic migrations"
-    echo -e "  ${GREEN}migration${NC} <msg>      Generate a new Alembic migration"
-    echo -e "  ${GREEN}seed${NC}                 Run database seed script"
-    echo -e "  ${GREEN}test${NC} [args]          Run pytest (pass extra args if needed)"
-    echo -e "  ${GREEN}lint${NC}                 Run ruff check + format check"
-    echo -e "  ${GREEN}format${NC}               Auto-format code with ruff"
-    echo -e "  ${GREEN}shell${NC}                Open an interactive shell in backend container"
+    echo -e "${BOLD}Database (Docker):${NC}"
+    echo -e "  ${GREEN}db${NC}                   Start PostgreSQL container"
+    echo -e "  ${GREEN}db-down${NC}              Stop PostgreSQL container"
     echo -e "  ${GREEN}psql${NC}                 Connect to PostgreSQL via psql"
-    echo -e "  ${GREEN}health${NC}               Check /health endpoint"
     echo -e "  ${GREEN}backup${NC} [nombre]      Snapshot de tablas base → backups/<nombre>_TIMESTAMP.sql"
     echo -e "  ${GREEN}restore${NC} <archivo>    Restaurar tablas desde un snapshot SQL"
     echo -e "  ${RED}nuke${NC}                 Destroy all volumes (asks confirmation)"
-    echo -e "  ${GREEN}help${NC}                 Show this help message"
+    echo ""
+    echo -e "${BOLD}Backend (native):${NC}"
+    echo -e "  ${GREEN}serve${NC}                Start uvicorn with hot-reload (0.0.0.0:8000)"
+    echo -e "  ${GREEN}migrate${NC}              Apply pending Alembic migrations"
+    echo -e "  ${GREEN}migration${NC} <msg>      Generate a new Alembic migration"
+    echo -e "  ${GREEN}seed${NC}                 Run database seed script"
+    echo -e "  ${GREEN}test${NC} [args]          Run pytest"
+    echo -e "  ${GREEN}lint${NC}                 Run ruff check + format check"
+    echo -e "  ${GREEN}format${NC}               Auto-format code with ruff"
+    echo -e "  ${GREEN}health${NC}               Check /health endpoint (localhost:8000)"
     echo ""
     if [[ "$CMD" != "help" ]]; then
       echo -e "${RED}[error] Unknown command: $CMD${NC}" >&2

@@ -10,40 +10,13 @@ services:
       POSTGRES_DB:       ${POSTGRES_DB:?POSTGRES_DB must be set in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"    # Exposed to host so the native backend can connect
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:?POSTGRES_USER must be set in .env} -d ${POSTGRES_DB:?POSTGRES_DB must be set in .env}"]
       interval: 10s
       timeout: 5s
       retries: 5
-    # NOT exposed to the host — only accessible inside the Docker network
-
-  # ── FastAPI backend ───────────────────────────────────────────────────────
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER must be set in .env}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/${POSTGRES_DB:?POSTGRES_DB must be set in .env}
-      DOCS_ENABLED: ${DOCS_ENABLED:-false}
-    depends_on:
-      db:
-        condition: service_healthy
-    volumes:
-      - "${AUDIT_HOST_PATH}:/audit_data"
-    # NOT exposed to the host — nginx is the only entry point
-
-  # ── Nginx reverse proxy / frontend ───────────────────────────────────────
-  nginx:
-    image: nginx:1.27-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"        # Public HTTP (frontend + API through same domain)
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - backend
 
 volumes:
   pgdata:
