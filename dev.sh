@@ -103,6 +103,37 @@ case "$CMD" in
     curl -s http://localhost/health | python3 -m json.tool
     ;;
 
+  backup)
+    # shellcheck disable=SC1091
+    source .env 2>/dev/null || true
+    mkdir -p backups
+    STAMP=$(date +%Y%m%d_%H%M%S)
+    LABEL="${1:-seeds}"
+    FILE="backups/${LABEL}_${STAMP}.sql"
+    echo -e "${CYAN}Creando snapshot → $FILE${NC}"
+    docker compose exec -T db pg_dump \
+      -U "${POSTGRES_USER}" \
+      --data-only \
+      -t institutions \
+      -t service_types -t doc_types -t folder_statuses \
+      -t prefix_corrections \
+      -t admins -t contracts -t services -t service_type_documents \
+      "${POSTGRES_DB}" > "$FILE"
+    echo -e "${GREEN}Snapshot guardado: $FILE${NC}"
+    ;;
+
+  restore)
+    if [[ -z "${1:-}" ]]; then
+      echo -e "${RED}[error] Uso: ./dev.sh restore <archivo.sql>${NC}" >&2
+      exit 1
+    fi
+    # shellcheck disable=SC1091
+    source .env 2>/dev/null || true
+    echo -e "${YELLOW}Restaurando desde $1 ...${NC}"
+    docker compose exec -T db psql -U "${POSTGRES_USER}" "${POSTGRES_DB}" < "$1"
+    echo -e "${GREEN}Restauración completa.${NC}"
+    ;;
+
   nuke)
     echo -e "${RED}${BOLD}WARNING: This will destroy ALL volumes including the database.${NC}"
     read -rp "Type 'yes' to confirm: " confirm
@@ -134,6 +165,8 @@ case "$CMD" in
     echo -e "  ${GREEN}shell${NC}                Open an interactive shell in backend container"
     echo -e "  ${GREEN}psql${NC}                 Connect to PostgreSQL via psql"
     echo -e "  ${GREEN}health${NC}               Check /health endpoint"
+    echo -e "  ${GREEN}backup${NC} [nombre]      Snapshot de tablas base → backups/<nombre>_TIMESTAMP.sql"
+    echo -e "  ${GREEN}restore${NC} <archivo>    Restaurar tablas desde un snapshot SQL"
     echo -e "  ${RED}nuke${NC}                 Destroy all volumes (asks confirmation)"
     echo -e "  ${GREEN}help${NC}                 Show this help message"
     echo ""

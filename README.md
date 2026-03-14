@@ -16,6 +16,7 @@ A production-ready web application for automating the document audit process of 
   - [Production Deployment](#production-deployment)
 - [Environment Variables](#environment-variables)
 - [Database Migrations](#database-migrations)
+- [Database Backups](#database-backups)
 - [API Reference](#api-reference)
 - [Audit Pipeline](#audit-pipeline)
 - [Domain Model](#domain-model)
@@ -44,7 +45,7 @@ The application runs an 18-stage pipeline that ingests invoices, normalizes fold
 | Database | PostgreSQL 16 |
 | ORM / Migrations | SQLAlchemy 2.0 (asyncio) + Alembic |
 | Frontend | Jinja2 server-side templates |
-| Web Server | Nginx 1.27 (reverse proxy + static files) |
+| Web Server | Nginx 1.27 (reverse proxy + gzip + rate limiting) |
 | App Server | Uvicorn (2 workers) |
 | Containers | Docker (multi-stage build) + Docker Compose |
 | PDF / OCR | PyMuPDF, pdfplumber, ocrmypdf, Tesseract |
@@ -61,20 +62,21 @@ The application runs an 18-stage pipeline that ingests invoices, normalizes fold
 ## Architecture
 
 ```
-                        ┌─────────────────────────────────┐
-                        │          Docker Network          │
-                        │                                  │
-  Browser ──── :80 ───► │  nginx  ──► /api, /  ──► backend │
-                        │          └─► /static  (volume)  │
-                        │                    │             │
-                        │              PostgreSQL 16       │
-                        │                                  │
-                        └─────────────────────────────────┘
+                        ┌──────────────────────────────────┐
+                        │          Docker Network           │
+                        │                                   │
+  Browser ──── :80 ───► │  nginx  ──► /api  ──► backend    │
+                        │         └─► /     ──► backend    │
+                        │                    │              │
+                        │              PostgreSQL 16        │
+                        │                                   │
+                        └──────────────────────────────────┘
 ```
 
-- **nginx** is the only publicly exposed service (port 80). It handles rate limiting (30 req/s), gzip compression, and serves static files directly from a shared Docker volume — zero-copy, no FastAPI overhead.
+- **nginx** is the only publicly exposed service (port 80). It handles rate limiting (30 req/s), gzip compression, and proxies all traffic to FastAPI — including static assets and institution logos.
 - **backend** (FastAPI + Uvicorn) handles all API and page requests, never exposed directly to the internet.
 - **db** (PostgreSQL) is only reachable from within the Docker network.
+- **Institution logos** are stored in the database as `BYTEA` and served via `GET /api/institutions/{id}/logo` — no shared volumes required.
 - **adminer** is available in development only (via `docker-compose.override.yml`).
 
 ---
@@ -97,8 +99,9 @@ medical-audit-v2/
 │   ├── services/
 │   │   ├── billing.py          # SIHOS Excel ingestion
 │   │   └── pipeline_runner.py  # 18-stage audit pipeline
-│   ├── static/                 # CSS, logos (served by nginx in production)
+│   ├── static/                 # CSS and other static assets (served by FastAPI)
 │   └── templates/              # Jinja2 HTML templates
+├── backups/                    # DB snapshots from ./dev.sh backup (not committed by default)
 ├── core/                       # Domain logic & document processing
 │   ├── scanner.py              # File discovery and validation
 │   ├── reader.py               # PDF text extraction
@@ -254,13 +257,33 @@ docker compose exec backend alembic downgrade -1
 
 ---
 
+## Database Backups
+
+Configuration tables (`institutions`, `service_types`, `doc_types`, `folder_statuses`, `prefix_corrections`, `admins`, `contracts`, `services`, `service_type_documents`) can take significant time to rebuild. The `backup` / `restore` commands let you snapshot and restore them without touching operational data (`audit_periods`, `invoices`, `missing_files`).
+
+```bash
+# Create a snapshot (label defaults to "seeds")
+./dev.sh backup seeds_base
+# → backups/seeds_base_20260314_120000.sql
+
+# List snapshots
+ls -lh backups/
+
+# Restore from a snapshot
+./dev.sh restore backups/seeds_base_20260314_120000.sql
+```
+
+Snapshot files (`backups/*.sql`) are excluded from git by default. Commit individual snapshots manually if you want to version them.
+
+---
+
 ## API Reference
 
 All API endpoints are prefixed with `/api`. Swagger UI is available at `/docs` when `DOCS_ENABLED=true`.
 
 ### Institutions — `/api/institutions`
 
-Manages hospitals and clinics.
+Manages hospitals and clinics, including their mappings (admins, contracts, services) and logos stored in the database.
 
 | Method | Path | Description |
 |---|---|---|
@@ -269,9 +292,23 @@ Manages hospitals and clinics.
 | `GET` | `/api/institutions/{id}` | Get institution by ID |
 | `PUT` | `/api/institutions/{id}` | Update institution |
 | `DELETE` | `/api/institutions/{id}` | Delete institution |
-| `POST` | `/api/institutions/{id}/admins` | Add admin contact |
-| `POST` | `/api/institutions/{id}/contracts` | Add contract |
-| `POST` | `/api/institutions/{id}/services` | Add service mapping |
+| `GET` | `/api/institutions/{id}/logo` | Serve institution logo (from DB) |
+| `POST` | `/api/institutions/{id}/logo` | Upload institution logo (PNG/JPEG/WebP/AVIF/GIF) |
+| `GET` | `/api/institutions/{id}/admins` | List admins (`?pending_only=true` for unmapped) |
+| `POST` | `/api/institutions/{id}/admins` | Create admin mapping |
+| `PATCH` | `/api/institutions/admins/{admin_id}` | Set canonical admin and type |
+| `DELETE` | `/api/institutions/admins/{admin_id}` | Delete admin mapping |
+| `GET` | `/api/institutions/{id}/contracts` | List contracts (`?pending_only=true` for unmapped) |
+| `POST` | `/api/institutions/{id}/contracts` | Create contract mapping |
+| `PATCH` | `/api/institutions/contracts/{contract_id}` | Set canonical contract |
+| `DELETE` | `/api/institutions/contracts/{contract_id}` | Delete contract mapping |
+| `GET` | `/api/institutions/{id}/services` | List service mappings |
+| `POST` | `/api/institutions/{id}/services` | Create service mapping |
+| `PATCH` | `/api/institutions/services/{service_id}` | Set service type |
+| `DELETE` | `/api/institutions/services/{service_id}` | Delete service mapping |
+| `GET` | `/api/institutions/{id}/service-type-documents` | List required docs per service type |
+| `POST` | `/api/institutions/{id}/service-type-documents` | Add required doc to service type |
+| `DELETE` | `/api/institutions/{id}/service-type-documents/{st_id}/{dt_id}` | Remove required doc |
 
 ### Audit Periods — `/api/periods`
 
@@ -316,12 +353,22 @@ Business rules configuration.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET/POST` | `/api/settings/service-types` | List / create service types |
-| `GET/PUT/DELETE` | `/api/settings/service-types/{id}` | Get / update / delete service type |
-| `GET/POST` | `/api/settings/doc-types` | List / create document types |
-| `GET/PUT/DELETE` | `/api/settings/doc-types/{id}` | Get / update / delete document type |
-| `GET/POST` | `/api/settings/folder-statuses` | List / create folder statuses |
-| `GET/POST` | `/api/settings/prefix-corrections` | List / create prefix correction rules |
+| `GET` | `/api/settings/service-types` | List service types |
+| `POST` | `/api/settings/service-types` | Create service type |
+| `PATCH` | `/api/settings/service-types/{id}` | Update service type |
+| `DELETE` | `/api/settings/service-types/{id}` | Delete service type |
+| `GET` | `/api/settings/doc-types` | List document types |
+| `POST` | `/api/settings/doc-types` | Create document type |
+| `PATCH` | `/api/settings/doc-types/{id}` | Update document type |
+| `DELETE` | `/api/settings/doc-types/{id}` | Delete document type |
+| `GET` | `/api/settings/folder-statuses` | List folder statuses |
+| `POST` | `/api/settings/folder-statuses` | Create folder status |
+| `PATCH` | `/api/settings/folder-statuses/{id}` | Update folder status |
+| `DELETE` | `/api/settings/folder-statuses/{id}` | Delete folder status |
+| `GET` | `/api/settings/prefix-corrections` | List prefix correction rules |
+| `POST` | `/api/settings/prefix-corrections` | Create prefix correction rule |
+| `PATCH` | `/api/settings/prefix-corrections/{id}` | Update prefix correction rule |
+| `DELETE` | `/api/settings/prefix-corrections/{id}` | Delete prefix correction rule |
 
 ---
 
@@ -367,13 +414,17 @@ The pipeline is composed of 18 sequential stages. Each stage is triggered indivi
 
 ### Key Entities
 
-- **Institution** — Hospital or clinic; stores NIT, invoice prefix, SIHOS credentials (encrypted), Drive credentials (encrypted), and local base path.
+- **Institution** — Hospital or clinic; stores NIT, invoice prefix, SIHOS credentials (AES-encrypted), Drive credentials (AES-encrypted), local base path, and logo image (`logo_bytes` BYTEA + `logo_content_type`).
 - **AuditPeriod** — Billing period (month/year label) scoping a set of invoices.
 - **Invoice** — Patient billing record imported from SIHOS; linked to an Admin, Contract, and ServiceType.
-- **ServiceType** — Medical service category (e.g., hospitalization, outpatient); defines which document types are required.
+- **Admin** — Maps a raw administrator string from SIHOS to a canonical administrator name and type per institution.
+- **Contract** — Maps a raw contract string from SIHOS to a canonical contract name per institution.
+- **Service** — Maps a raw service string from SIHOS to a ServiceType per institution.
+- **ServiceType** — Medical service category (e.g., hospitalization, outpatient); defines which document types are required via `ServiceTypeDocument`.
 - **DocType** — A required document type with a canonical filename prefix.
+- **ServiceTypeDocument** — Join entity linking a ServiceType to a required DocType for a specific institution.
 - **Finding (MissingFile)** — Records a specific missing required document for an invoice.
-- **PrefixCorrection** — Maps known incorrect filename prefixes to their correct canonical form (used in normalization).
+- **PrefixCorrection** — Maps known incorrect filename prefixes to their correct canonical form (used in the `NORMALIZE_FILES` pipeline stage).
 
 ---
 
@@ -382,6 +433,7 @@ The pipeline is composed of 18 sequential stages. Each stage is triggered indivi
 - **`.env` is never committed** — it is listed in `.gitignore`. Use `.env.example` as a template.
 - **Required variables are enforced** — `docker-compose.yml` uses `:?` syntax for all credential variables (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`). If any are missing, Docker Compose aborts with an explicit error instead of silently falling back to weak defaults.
 - **Secrets are encrypted at rest** — SIHOS passwords and Google Drive credentials are stored in the database using AES encryption via `app/crypto.py`. The encryption key is derived from `SECRET_KEY`.
+- **Logos stored in DB** — Institution logos are stored as `BYTEA` in PostgreSQL and served via the API, eliminating any shared volume with sensitive data leakage risk.
 - **Non-root container** — The Docker image runs as `appuser`, not `root`.
 - **No direct database exposure** — PostgreSQL is only accessible within the Docker network.
 - **Swagger disabled by default** — `DOCS_ENABLED=false` in production prevents API documentation exposure.
@@ -397,14 +449,24 @@ The pipeline is composed of 18 sequential stages. Each stage is triggered indivi
 `dev.sh` wraps the most common commands so you don't have to type long `docker compose` lines:
 
 ```bash
-./dev.sh help          # list all commands
-./dev.sh up            # start services
-./dev.sh logs backend  # follow backend logs
-./dev.sh migrate       # apply pending migrations
-./dev.sh test          # run pytest inside the container
-./dev.sh lint          # ruff check + format check
-./dev.sh shell         # interactive shell inside backend container
-./dev.sh nuke          # destroy all volumes (asks confirmation)
+./dev.sh help                          # list all commands
+./dev.sh up                            # start services
+./dev.sh down                          # stop services
+./dev.sh build                         # build images (with cache) and restart
+./dev.sh rebuild                       # build images (no cache) and restart
+./dev.sh logs backend                  # follow backend logs
+./dev.sh migrate                       # apply pending migrations
+./dev.sh migration "describe change"   # generate new migration
+./dev.sh seed                          # run database seed script
+./dev.sh test                          # run pytest inside the container
+./dev.sh lint                          # ruff check + format check
+./dev.sh format                        # auto-fix formatting
+./dev.sh shell                         # interactive shell inside backend container
+./dev.sh psql                          # connect to PostgreSQL via psql
+./dev.sh health                        # check /health endpoint
+./dev.sh backup [nombre]               # snapshot config tables → backups/<nombre>_TIMESTAMP.sql
+./dev.sh restore <archivo.sql>         # restore config tables from snapshot
+./dev.sh nuke                          # destroy all volumes (asks confirmation)
 ```
 
 ### Running tests

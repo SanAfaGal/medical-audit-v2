@@ -44,3 +44,6 @@ htmlcov/
 
 # uv
 .python-version
+
+# Snapshots de base de datos — comitear manualmente si se desea versionar
+backups/*.sql
