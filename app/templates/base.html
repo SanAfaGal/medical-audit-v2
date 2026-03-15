@@ -32,6 +32,50 @@
       }
     }
   </script>
+  <style>
+    /* ─── Global design tokens ─────────────────────────────────────────── */
+    :root {
+      --bg-page:      #f1f5f9;   /* slate-100  — page background            */
+      --bg-surface:   #ffffff;   /* white      — card / panel surface        */
+      --bg-subtle:    #f8fafc;   /* slate-50   — hover / input background   */
+      --border:       #e2e8f0;   /* slate-200  — default border             */
+      --border-soft:  #f1f5f9;   /* slate-100  — inset / subtle border      */
+
+      --text-1:       #1e293b;   /* slate-800  — primary text               */
+      --text-2:       #475569;   /* slate-600  — secondary text             */
+      --text-3:       #94a3b8;   /* slate-400  — muted / placeholder        */
+
+      /* Accent — sky (primary action) */
+      --sky:          #0284c7;
+      --sky-soft:     #f0f9ff;
+      --sky-border:   #bae6fd;
+
+      /* Accent — emerald (success) */
+      --emerald:      #059669;
+      --emerald-soft: #ecfdf5;
+      --emerald-border:#a7f3d0;
+
+      /* Accent — amber (warning) */
+      --amber:        #b45309;
+      --amber-soft:   #fffbeb;
+      --amber-border: #fde68a;
+
+      /* Accent — red (error) */
+      --red:          #dc2626;
+      --red-soft:     #fef2f2;
+      --red-border:   #fecaca;
+
+      /* Accent — violet */
+      --violet:       #7c3aed;
+      --violet-soft:  #f5f3ff;
+      --violet-border:#ddd6fe;
+
+      /* Accent — indigo */
+      --indigo:       #4338ca;
+      --indigo-soft:  #eef2ff;
+      --indigo-border:#c7d2fe;
+    }
+  </style>
 
   <!-- Global context store — must register before Alpine deferred init -->
   <script>
