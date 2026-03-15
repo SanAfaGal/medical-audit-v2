@@ -608,15 +608,23 @@
                 </button>
               </template>
               <template x-if="confirmDeletePeriodId === p.id">
-                <div class="flex gap-1">
-                  <button @click="deletePeriod(p.id)"
-                          class="text-xs px-2.5 py-1.5 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700">
-                    Eliminar
-                  </button>
-                  <button @click="confirmDeletePeriodId = null"
-                          class="text-xs px-2.5 py-1.5 text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
-                    Cancelar
-                  </button>
+                <div class="flex flex-col gap-2 items-end">
+                  <div class="text-[11px] leading-relaxed rounded-lg px-3 py-2 max-w-xs text-right"
+                       style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);color:#b91c1c">
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+                    <strong>¿Eliminar el período "<span x-text="p.period_label"></span>"?</strong><br>
+                    Se borrarán permanentemente todas las <strong>facturas</strong>, <strong>hallazgos</strong> y <strong>archivos faltantes</strong> asociados. Esta acción no se puede deshacer.
+                  </div>
+                  <div class="flex gap-1">
+                    <button @click="deletePeriod(p.id)"
+                            class="text-xs px-2.5 py-1.5 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700">
+                      Sí, eliminar
+                    </button>
+                    <button @click="confirmDeletePeriodId = null"
+                            class="text-xs px-2.5 py-1.5 text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+                      Cancelar
+                    </button>
+                  </div>
                 </div>
               </template>
             </div>
