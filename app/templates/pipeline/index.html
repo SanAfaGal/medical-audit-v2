@@ -148,6 +148,35 @@
       </div>
     </div>
 
+    <!-- ZIP upload -->
+    <div x-show="selectedStages.includes('LOAD_DRIVE_ZIP')" x-transition
+         class="shrink-0 px-3 pb-2" style="border-top:1px solid var(--border);padding-top:10px">
+      <div @dragover.prevent="zipDragOver=true" @dragleave.prevent="zipDragOver=false"
+           @drop.prevent="handleZipDrop($event)" @click="$refs.zipInput.click()"
+           class="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all"
+           :style="zipDragOver ? 'border:1px dashed var(--sky);background:var(--sky-soft)'
+                 : zipFile ? 'border:1px solid var(--emerald-border);background:var(--emerald-soft)'
+                           : 'border:1px dashed var(--border);background:var(--bg-subtle)'">
+        <input type="file" accept=".zip,.7z,.rar" x-ref="zipInput" @change="setZipFile($event)" class="hidden" />
+        <template x-if="!zipFile">
+          <div class="flex items-center gap-2 w-full">
+            <i class="fa-solid fa-file-zipper text-xs shrink-0" style="color:var(--violet)"></i>
+            <span class="text-[10px]" style="color:var(--text-3)">.zip / .7z / .rar — <span style="color:var(--sky)">selecciona o arrastra</span></span>
+          </div>
+        </template>
+        <template x-if="zipFile">
+          <div class="flex items-center gap-2 w-full">
+            <i class="fa-solid fa-file-zipper text-xs shrink-0" style="color:var(--violet)"></i>
+            <span class="text-[10px] truncate flex-1" style="color:var(--text-1)" x-text="zipFile.name"></span>
+            <button @click.stop="zipFile=null" class="shrink-0" style="color:var(--text-3)"
+                    onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text-3)'">
+              <i class="fa-solid fa-xmark text-[10px]"></i>
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- SIHOS invoice numbers -->
     <div x-show="selectedStages.includes('DOWNLOAD_INVOICES_FROM_SIHOS')" x-transition
          class="shrink-0 px-3 pb-2" style="border-top:1px solid var(--border);padding-top:10px">
@@ -474,6 +503,8 @@ function pipeline() {
     currentStageLabel: '',
     excelFile: null,
     dragOver: false,
+    zipFile: null,
+    zipDragOver: false,
     sihosInvoiceNumbers: '',
     unmappedConfirm: null,
     surplusData: null,
@@ -484,6 +515,7 @@ function pipeline() {
     stageFlow: [
       { type:'phase',  label:'SIHOS',         color:'#0284c7', icon:'fa-solid fa-database' },
       { type:'stage',  id:'LOAD_AND_PROCESS',              label:'Cargar reporte SIHOS',          icon:'fa-solid fa-file-excel',           phaseColor:'#0284c7' },
+      { type:'stage',  id:'LOAD_DRIVE_ZIP',               label:'Cargar archivos comprimidos',   icon:'fa-solid fa-file-zipper',          phaseColor:'#0284c7' },
 
       { type:'phase',  label:'Archivos',       color:'#7c3aed', icon:'fa-solid fa-folder' },
       { type:'stage',  id:'RUN_STAGING',                   label:'Mover BASE → STAGE',            icon:'fa-solid fa-truck-moving',         phaseColor:'#7c3aed' },
@@ -518,6 +550,7 @@ function pipeline() {
 
     stages: [
       { id:'LOAD_AND_PROCESS',        label:'Cargar reporte SIHOS',           description:'Lee el Excel exportado desde SIHOS e inserta las facturas del período en la BD. Registra administradoras, contratos y servicios nuevos en crudo (sin mapeo). Los campos sin mapeo canónico quedan en null. Filas sin fecha válida son omitidas.' },
+      { id:'LOAD_DRIVE_ZIP',          label:'Cargar archivos comprimidos',    description:'Descomprime un archivo .zip, .7z o .rar directamente en la carpeta DRIVE del hospital y período seleccionado. Útil para cargar de una vez las carpetas de facturas descargadas manualmente.' },
       { id:'RUN_STAGING',             label:'Mover BASE → STAGE',             description:'Busca las carpetas hoja (sin subcarpetas) dentro del directorio DRIVE del período y las mueve a STAGE. STAGE es el directorio de trabajo donde se realizan todas las operaciones de auditoría.' },
       { id:'CHECK_NESTED_FOLDERS',   label:'Detectar carpetas anidadas',     description:'Escanea el directorio STAGE y lista las carpetas de factura que contienen subcarpetas anidadas. Los archivos dentro de subcarpetas no son procesados correctamente; deben moverse al nivel raíz de la carpeta de factura.' },
       { id:'REMOVE_NON_PDF',          label:'Eliminar no-PDF y corruptos',    description:'Recorre todas las carpetas en STAGE y elimina: (1) archivos que no son PDF; (2) PDFs corruptos o dañados que no pueden abrirse. Limpia la carpeta antes del procesamiento.' },
@@ -559,6 +592,12 @@ function pipeline() {
       this.dragOver = false;
       const f = ev.dataTransfer.files[0];
       if (f && /\.(xlsx|xls)$/i.test(f.name)) this.excelFile = f;
+    },
+    setZipFile(ev) { this.zipFile = ev.target.files[0] || null; },
+    handleZipDrop(ev) {
+      this.zipDragOver = false;
+      const f = ev.dataTransfer.files[0];
+      if (f && /\.(zip|7z|rar)$/i.test(f.name)) this.zipFile = f;
     },
 
     lineClass(line) {
@@ -641,7 +680,25 @@ function pipeline() {
         this.$nextTick(() => this.scrollLog());
 
         try {
-          if (stageId === 'LOAD_AND_PROCESS' && this.excelFile) {
+          if (stageId === 'LOAD_DRIVE_ZIP' && this.zipFile) {
+            this.logLines.push(`[INFO] Descomprimiendo ${this.zipFile.name}...`);
+            const fd = new FormData();
+            fd.append('institution_id', institutionId);
+            fd.append('period_id', periodId);
+            fd.append('file', this.zipFile);
+            const res = await fetch('/api/pipeline/load-drive-zip', { method:'POST', body:fd });
+            if (!res.ok) {
+              const err = await res.json().catch(()=>({detail:'Error desconocido'}));
+              const msg = `[ERROR] ${err.detail || 'Error desconocido'}`;
+              this.logLines.push(msg); this._markLine(stageId, msg); this.scrollLog(); continue;
+            }
+            const data = await res.json();
+            const okMsg = `[OK] Archivos extraídos en DRIVE: ${data.extracted}`;
+            this.logLines.push(okMsg);
+            this._updateStageResult(stageId, okMsg);
+            this.scrollLog();
+
+          } else if (stageId === 'LOAD_AND_PROCESS' && this.excelFile) {
             const buildForm = (scanOnly) => {
               const fd = new FormData();
               fd.append('institution_id', institutionId);
