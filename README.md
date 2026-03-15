@@ -32,7 +32,7 @@ Medical Audit v2 automates the reconciliation between:
 - **SIHOS billing records** — invoices exported as Excel files from the hospital information system
 - **Physical document folders** — patient folders stored locally or on Google Drive, organized by invoice number
 
-The application runs an 18-stage pipeline that ingests invoices, normalizes folder structures, runs OCR, validates required documents per service type, verifies Colombian e-invoice codes (CUFE), and organizes audited folders — producing a clear audit status for every invoice in a billing period.
+The application runs a 20-stage pipeline that ingests invoices, normalizes folder structures, runs OCR, validates required documents per service type, verifies Colombian e-invoice codes (CUFE), and organizes audited folders — producing a clear audit status for every invoice in a billing period.
 
 ---
 
@@ -303,11 +303,17 @@ Manages hospitals and clinics, including their mappings (admins, contracts, serv
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/invoices` | List invoices (filterable by period, status, institution) |
-| `PATCH` | `/api/invoices/{id}` | Update invoice status |
-| `POST` | `/api/invoices/batch-update` | Batch update statuses |
+| `GET` | `/api/invoices` | List invoices (filterable by period, status, admin, contract, service, search) |
+| `GET` | `/api/invoices/ids` | Get invoice IDs matching current filters |
+| `GET` | `/api/invoices/stats` | Invoice counts by status and total findings |
+| `GET` | `/api/invoices/findings-summary` | Unresolved finding counts per document type |
+| `GET` | `/api/invoices/export` | Export all invoices for a period to Excel (`.xlsx`) |
+| `PATCH` | `/api/invoices/{id}/status` | Update single invoice status |
+| `POST` | `/api/invoices/batch-status` | Batch update statuses |
 | `DELETE` | `/api/invoices/{id}` | Delete invoice |
 | `POST` | `/api/invoices/ingest` | Ingest SIHOS Excel file (multipart) |
+| `POST` | `/api/invoices/{id}/rename-surplus` | Rename a surplus file to the correct doc-type prefix and resolve its finding |
+| `POST` | `/api/invoices/{id}/delete-surplus` | Delete a surplus file from disk |
 
 ### Findings — `/api/missing-files`
 
@@ -355,28 +361,30 @@ Business rules configuration.
 
 ## Audit Pipeline
 
-The pipeline is composed of 18 sequential stages. Each stage is triggered individually via `GET /api/pipeline/run/{STAGE_NAME}` and streams log lines as Server-Sent Events (`[INFO]`, `[WARN]`, `[ERROR]`).
+The pipeline is composed of 20 sequential stages. Each stage is triggered individually via `GET /api/pipeline/run/{STAGE_NAME}` and streams log lines as Server-Sent Events (`[INFO]`, `[WARN]`, `[ERROR]`).
 
 | # | Stage Name | Description |
 |---|---|---|
-| 1 | `LOAD_AND_PROCESS` | Ingest SIHOS Excel export → upsert invoices into the database |
-| 2 | `RUN_STAGING` | Move leaf folders from Google Drive → local staging area |
-| 3 | `REMOVE_NON_PDF` | Delete non-PDF files and corrupt PDFs from staging |
-| 4 | `NORMALIZE_FILES` | Apply PrefixCorrection rules + filename standardization |
-| 5 | `LIST_UNREADABLE_PDFS` | Report invoice PDFs without a text layer (OCR candidates) |
-| 6 | `DELETE_UNREADABLE_PDFS` | Remove invoice PDFs that cannot be read even after OCR |
-| 7 | `DOWNLOAD_INVOICES_FROM_SIHOS` | Download specific invoices from SIHOS via Playwright automation |
-| 8 | `CHECK_INVOICES` | Apply OCR (`ocrmypdf`, batch size 8) to scanned PDFs |
-| 9 | `VERIFY_INVOICE_CODE` | Confirm each invoice PDF contains its own invoice number in extracted text |
-| 10 | `CHECK_INVOICE_NUMBER_ON_FILES` | Verify files inside each folder match the folder's invoice number |
-| 11 | `CHECK_FOLDERS_WITH_EXTRA_TEXT` | Detect folders with extraneous text appended to the canonical name |
-| 12 | `NORMALIZE_DIR_NAMES` | Rename malformed folder names to canonical invoice IDs |
-| 13 | `CHECK_DIRS` | Reconcile DB invoices vs. disk folders; mark missing folders as `FALTANTE` |
-| 14 | `CHECK_REQUIRED_DOCS` | Validate required documents per service type; record findings; mark `PENDIENTE` |
-| 15 | `VERIFY_CUFE` | Verify the Colombian e-invoice code (CUFE) in PDFs; flag folders with missing CUFE |
-| 16 | `ORGANIZE` | Move eligible invoices (`PRESENTE`, no findings) to the audit destination; mark `AUDITADA` |
-| 17 | `DOWNLOAD_DRIVE` | Download `FALTANTE` folders from Google Drive; update status to `PRESENTE` |
-| 18 | `DOWNLOAD_MISSING_DOCS` | Download specific missing documents from Drive for invoices with open findings |
+| 1 | `LOAD_AND_PROCESS` | Ingest SIHOS Excel export → upsert invoices into the database. When multiple rows exist for the same invoice with different services, the service type with the **highest configured priority** is used. |
+| 2 | `RUN_STAGING` | Move leaf folders (folders that directly contain files) from the BASE directory to STAGE. |
+| 3 | `CHECK_NESTED_FOLDERS` | Scan STAGE and list invoice folders that contain nested subdirectories — these require manual flattening before the remaining stages can process their files correctly. |
+| 4 | `REMOVE_NON_PDF` | Delete non-PDF files and corrupt PDFs from STAGE. |
+| 5 | `NORMALIZE_FILES` | Apply PrefixCorrection rules + filename standardization. |
+| 6 | `LIST_UNREADABLE_PDFS` | Report invoice PDFs without a text layer (OCR candidates). |
+| 7 | `DELETE_UNREADABLE_PDFS` | Remove invoice PDFs that cannot be read even after OCR. |
+| 8 | `DOWNLOAD_INVOICES_FROM_SIHOS` | Download specific invoices from SIHOS via Playwright automation. |
+| 9 | `CHECK_INVOICES` | Apply OCR (`ocrmypdf`, batch size 8) to scanned PDFs. |
+| 10 | `VERIFY_INVOICE_CODE` | Confirm each invoice PDF contains its own invoice number in extracted text. |
+| 11 | `CHECK_INVOICE_NUMBER_ON_FILES` | Verify files inside each folder match the folder's invoice number. |
+| 12 | `CHECK_FOLDERS_WITH_EXTRA_TEXT` | Detect folders with extraneous text appended to the canonical name. |
+| 13 | `NORMALIZE_DIR_NAMES` | Rename malformed folder names to canonical invoice IDs. |
+| 14 | `CHECK_DIRS` | Reconcile DB invoices vs. disk folders; mark missing folders as `FALTANTE`. |
+| 15 | `CHECK_REQUIRED_DOCS` | Validate required documents per service type; record findings; mark `PENDIENTE`. |
+| 16 | `REVISAR_SOBRANTES` | Identify files whose names don't match any required prefix. For each surplus file, suggests the most likely missing document type (1:1 → high confidence; N:M via `difflib` similarity → low confidence). The pipeline UI presents an interactive panel where the auditor can confirm or correct the suggestion to rename the file on disk and resolve the finding, or delete the file entirely. |
+| 17 | `VERIFY_CUFE` | Verify the Colombian e-invoice code (CUFE) in PDFs; flag folders with missing CUFE. |
+| 18 | `ORGANIZE` | Move eligible invoices (`PRESENTE`, no findings) to the audit destination; mark `AUDITADA`. |
+| 19 | `DOWNLOAD_DRIVE` | Download `FALTANTE` folders from Google Drive; update status to `PRESENTE`. |
+| 20 | `DOWNLOAD_MISSING_DOCS` | Download specific missing documents from Drive for invoices with open findings. |
 
 ---
 
