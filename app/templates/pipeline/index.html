@@ -487,6 +487,7 @@ function pipeline() {
 
       { type:'phase',  label:'Archivos',       color:'#7c3aed', icon:'fa-solid fa-folder' },
       { type:'stage',  id:'RUN_STAGING',                   label:'Mover BASE → STAGE',            icon:'fa-solid fa-truck-moving',         phaseColor:'#7c3aed' },
+      { type:'stage',  id:'CHECK_NESTED_FOLDERS',          label:'Detectar carpetas anidadas',    icon:'fa-solid fa-folder-tree',          phaseColor:'#7c3aed' },
       { type:'stage',  id:'REMOVE_NON_PDF',                label:'Eliminar no-PDF y corruptos',   icon:'fa-solid fa-file-circle-xmark',    phaseColor:'#7c3aed' },
       { type:'stage',  id:'NORMALIZE_FILES',               label:'Renombrar archivos',            icon:'fa-solid fa-tag',                  phaseColor:'#7c3aed' },
 
@@ -518,6 +519,7 @@ function pipeline() {
     stages: [
       { id:'LOAD_AND_PROCESS',        label:'Cargar reporte SIHOS',           description:'Lee el Excel exportado desde SIHOS e inserta las facturas del período en la BD. Registra administradoras, contratos y servicios nuevos en crudo (sin mapeo). Los campos sin mapeo canónico quedan en null. Filas sin fecha válida son omitidas.' },
       { id:'RUN_STAGING',             label:'Mover BASE → STAGE',             description:'Busca las carpetas hoja (sin subcarpetas) dentro del directorio DRIVE del período y las mueve a STAGE. STAGE es el directorio de trabajo donde se realizan todas las operaciones de auditoría.' },
+      { id:'CHECK_NESTED_FOLDERS',   label:'Detectar carpetas anidadas',     description:'Escanea el directorio DRIVE y lista las carpetas de factura que aún contienen subcarpetas anidadas. Estas deben aplanarse manualmente antes de volver a ejecutar RUN_STAGING para que los archivos lleguen correctamente a STAGE.' },
       { id:'REMOVE_NON_PDF',          label:'Eliminar no-PDF y corruptos',    description:'Recorre todas las carpetas en STAGE y elimina: (1) archivos que no son PDF; (2) PDFs corruptos o dañados que no pueden abrirse. Limpia la carpeta antes del procesamiento.' },
       { id:'NORMALIZE_FILES',         label:'Renombrar archivos',             description:'Paso 1: aplica correcciones de prefijo configuradas (ej. FVE→FEV). Paso 2: detecta archivos con nombre inválido y los renombra extrayendo NIT y número de factura. Reporta los que no se pueden renombrar.' },
       { id:'LIST_UNREADABLE_PDFS',    label:'Listar PDFs sin texto',          description:'Busca los PDFs de factura en STAGE y verifica cuáles no tienen capa de texto extraíble (escaneados sin OCR). Lista cada archivo con [WARN] pero NO los elimina ni modifica.' },
