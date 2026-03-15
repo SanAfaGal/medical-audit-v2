@@ -740,12 +740,20 @@ async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
         # Folder on disk: PREFIX + invoice_number (e.g. HSL359918)
         folder_name = (institution.invoice_id_prefix or "") + inv.invoice_number
 
-        # Find source — exact match first, then prefix-stripped fallback
+        # Find source — exact match first, then prefix-aware fallback
         source = staging_index.get(folder_name.upper())
         if source is None:
-            # Fallback: folder name ends with the invoice number (handles edge cases)
+            # Fallback: folder name starts with expected name (covers _SINCUFE, extra text, etc.)
+            # e.g. "HSL359919_SINCUFE" or "HSL359919 CUFE" both match folder_name "HSL359919"
+            key = folder_name.upper()
             source = next(
-                (p for name, p in staging_index.items() if name.endswith(inv.invoice_number.upper())),
+                (
+                    p for name, p in staging_index.items()
+                    if name == key
+                    or name.startswith(key + "_")
+                    or name.startswith(key + " ")
+                    or (id_prefix and name.endswith(inv.invoice_number.upper()))
+                ),
                 None,
             )
 
