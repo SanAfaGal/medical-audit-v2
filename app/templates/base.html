@@ -108,6 +108,7 @@
         pageOrder: [],
         reorderDragIdx: null,
         toast: null,
+        confirmingDelete: null,
         panelWidth: 560,
         _resizing: false,
         _resizeStartX: 0,
@@ -308,6 +309,28 @@
           const data = await res.json();
           this.showToast(data.ok, data.message);
           if (data.ok) this.pdfMode = 'none';
+        },
+
+        async deleteEntry(entry) {
+          const res = await fetch('/api/explorer/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              institution_id: this.institutionId,
+              period_id: this.periodId,
+              path: entry.path,
+            }),
+          });
+          const data = await res.json();
+          this.confirmingDelete = null;
+          this.showToast(data.ok, data.message);
+          if (data.ok) {
+            if (this.selectedEntry?.path === entry.path) {
+              this.selectedEntry = null;
+              this.previewUrl = null;
+            }
+            this.load();
+          }
         },
 
         startResize(event) {

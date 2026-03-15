@@ -17,6 +17,7 @@ from app.models.institution import Institution
 from app.models.period import AuditPeriod
 from app.models.rules import SystemSettings
 from app.schemas.explorer import (
+    DeleteRequest,
     FileNode,
     ListResponse,
     MergeRequest,
@@ -366,6 +367,36 @@ async def reorder_pages(body: ReorderRequest, db: AsyncSession = Depends(get_db)
         raise HTTPException(400, str(e))
 
     return OperationResult(ok=True, message="Páginas reordenadas correctamente")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Eliminar archivo o carpeta
+# ──────────────────────────────────────────────────────────────────────────────
+
+@router.post("/delete", response_model=OperationResult)
+async def delete_entry(body: DeleteRequest, db: AsyncSession = Depends(get_db)):
+    """Elimina un archivo o carpeta (con todo su contenido si es carpeta)."""
+    import shutil
+
+    sandbox = await _resolve_sandbox(body.institution_id, body.period_id, db)
+    target = _safe_resolve(sandbox, body.path)
+
+    if not target.exists():
+        raise HTTPException(404, "Archivo o carpeta no encontrado")
+
+    # Impedir borrar la raíz del sandbox
+    if target == sandbox:
+        raise HTTPException(400, "No se puede eliminar la raíz del período")
+
+    try:
+        if target.is_file():
+            target.unlink()
+            return OperationResult(ok=True, message=f'"{target.name}" eliminado')
+        else:
+            shutil.rmtree(target)
+            return OperationResult(ok=True, message=f'Carpeta "{target.name}" eliminada')
+    except OSError as e:
+        raise HTTPException(500, f"Error al eliminar: {e}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────

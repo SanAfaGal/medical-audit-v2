@@ -51,6 +51,12 @@ class ReorderRequest(BaseModel):
     page_order: list[int]     # índices 0-based en el nuevo orden
 
 
+class DeleteRequest(BaseModel):
+    institution_id: int
+    period_id: int
+    path: str
+
+
 class OperationResult(BaseModel):
     ok: bool
     message: str

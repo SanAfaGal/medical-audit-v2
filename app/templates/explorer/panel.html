@@ -62,8 +62,8 @@
       <!-- ── Body: lista + preview ─────────────────────────────────────── -->
       <div class="flex flex-1 min-h-0">
 
-        <!-- Lista de entradas (200px) -->
-        <div class="w-[200px] shrink-0 border-r border-slate-100 flex flex-col min-h-0">
+        <!-- Lista de entradas -->
+        <div class="w-2/5 min-w-[190px] max-w-[280px] shrink-0 border-r border-slate-100 flex flex-col min-h-0">
           <div class="flex-1 overflow-y-auto py-1">
             <template x-if="entries.length === 0">
               <div class="px-3 py-4 text-xs text-slate-400 italic text-center">Carpeta vacía</div>
@@ -71,9 +71,34 @@
 
             <template x-for="entry in filteredEntries()" :key="entry.path">
               <div class="group relative">
-                <!-- Nombre / rename inline -->
+
+                <!-- ── Modo renombrar ── -->
+                <template x-if="renamingPath === entry.path">
+                  <div class="flex items-center gap-1 px-2 py-1.5">
+                    <i :class="entry.is_dir ? 'fa-solid fa-folder text-amber-400' : 'fa-solid fa-file-pdf text-red-400'"
+                       class="w-3.5 text-center shrink-0 text-xs"></i>
+                    <input x-ref="renameInput"
+                           x-model="renameValue"
+                           @keydown.enter="commitRename(entry)"
+                           @keydown.escape="renamingPath = null"
+                           class="flex-1 text-xs border border-sky-400 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-sky-400 min-w-0">
+                    <!-- mousedown.prevent evita que el blur cancele antes del click -->
+                    <button @mousedown.prevent="commitRename(entry)"
+                            class="shrink-0 p-0.5 rounded text-sky-600 hover:bg-sky-50 hover:text-sky-800"
+                            title="Confirmar">
+                      <i class="fa-solid fa-check text-[10px]"></i>
+                    </button>
+                    <button @mousedown.prevent="renamingPath = null"
+                            class="shrink-0 p-0.5 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                            title="Cancelar">
+                      <i class="fa-solid fa-xmark text-[10px]"></i>
+                    </button>
+                  </div>
+                </template>
+
+                <!-- ── Modo normal ── -->
                 <template x-if="renamingPath !== entry.path">
-                  <div @click="selectEntry(entry)"
+                  <div @click="selectEntry(entry); confirmingDelete = null"
                        @dblclick="entry.is_dir && navigateTo(entry.path)"
                        :draggable="!entry.is_dir"
                        @dragstart="onDragStart($event, entry)"
@@ -82,36 +107,54 @@
                        :class="selectedEntry && selectedEntry.path === entry.path
                          ? 'bg-sky-50 text-sky-700'
                          : 'hover:bg-slate-50 text-slate-700'"
-                       class="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer select-none text-xs transition-colors">
+                       class="relative flex items-center gap-2 px-2.5 py-1.5 cursor-pointer select-none text-xs transition-colors">
+
                     <i :class="entry.is_dir ? 'fa-solid fa-folder text-amber-400' : 'fa-solid fa-file-pdf text-red-400'"
                        class="w-3.5 text-center shrink-0"></i>
-                    <span class="truncate flex-1" x-text="entry.name"></span>
-                    <!-- Botones de acción (hover) -->
-                    <div class="hidden group-hover:flex items-center gap-0.5 ml-auto shrink-0">
-                      <button @click.stop="startRename(entry)"
-                              class="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600"
-                              title="Renombrar">
-                        <i class="fa-solid fa-pencil text-[10px]"></i>
-                      </button>
-                    </div>
+
+                    <!-- Confirmar eliminación inline -->
+                    <template x-if="confirmingDelete === entry.path">
+                      <div class="flex items-center gap-1 flex-1 min-w-0" @click.stop>
+                        <span class="text-red-500 font-medium truncate">¿Eliminar?</span>
+                        <button @click.stop="deleteEntry(entry)"
+                                class="shrink-0 px-1.5 py-0.5 rounded bg-red-500 text-white text-[10px] font-semibold hover:bg-red-600">
+                          Sí
+                        </button>
+                        <button @click.stop="confirmingDelete = null"
+                                class="shrink-0 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] hover:bg-slate-200">
+                          No
+                        </button>
+                      </div>
+                    </template>
+
+                    <!-- Nombre con tooltip -->
+                    <template x-if="confirmingDelete !== entry.path">
+                      <span class="truncate flex-1 min-w-0 pr-1"
+                            x-text="entry.name"
+                            :title="entry.name"></span>
+                    </template>
+
+                    <!-- Botones de acción flotantes (hover) — absolutos para no empujar el nombre -->
+                    <template x-if="confirmingDelete !== entry.path">
+                      <div class="absolute right-1 top-1/2 -translate-y-1/2
+                                  hidden group-hover:flex items-center gap-0.5
+                                  bg-white/95 border border-slate-100 rounded-md shadow-sm px-0.5">
+                        <button @click.stop="startRename(entry)"
+                                class="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                                title="Renombrar">
+                          <i class="fa-solid fa-pencil text-[9px]"></i>
+                        </button>
+                        <button @click.stop="confirmingDelete = entry.path"
+                                class="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
+                                title="Eliminar">
+                          <i class="fa-solid fa-trash text-[9px]"></i>
+                        </button>
+                      </div>
+                    </template>
+
                   </div>
                 </template>
 
-                <!-- Input de rename inline -->
-                <template x-if="renamingPath === entry.path">
-                  <div class="flex items-center gap-1 px-2 py-1">
-                    <input x-ref="renameInput"
-                           x-model="renameValue"
-                           @keydown.enter="commitRename(entry)"
-                           @keydown.escape="renamingPath = null"
-                           @blur="renamingPath = null"
-                           class="flex-1 text-xs border border-sky-400 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-sky-400 min-w-0">
-                    <button @click="commitRename(entry)"
-                            class="shrink-0 text-sky-600 hover:text-sky-800 text-[10px]">
-                      <i class="fa-solid fa-check"></i>
-                    </button>
-                  </div>
-                </template>
               </div>
             </template>
           </div>
