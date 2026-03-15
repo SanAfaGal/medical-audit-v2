@@ -349,7 +349,7 @@
         <div class="px-4 py-3 flex items-center justify-between border-b"
              style="border-color:var(--border);background:var(--bg-subtle)">
           <div class="flex items-center gap-2">
-            <i class="fa-solid fa-file-magnifying-glass text-sm" style="color:var(--amber)"></i>
+            <i class="fa-solid fa-file-circle-exclamation text-sm" style="color:var(--amber)"></i>
             <span class="text-sm font-semibold" style="color:var(--text-1)">Archivos sobrantes pendientes de revisión</span>
             <span class="text-xs px-2 py-0.5 rounded-full font-semibold"
                   style="background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber-border)"
@@ -505,7 +505,7 @@ function pipeline() {
       { type:'stage',  id:'NORMALIZE_DIR_NAMES',           label:'Normalizar carpetas',           icon:'fa-solid fa-folder',               phaseColor:'#b45309' },
       { type:'stage',  id:'CHECK_DIRS',                    label:'Detectar directorios faltantes',icon:'fa-solid fa-folder-minus',         phaseColor:'#b45309' },
       { type:'stage',  id:'CHECK_REQUIRED_DOCS',           label:'Verificar docs requeridos',     icon:'fa-solid fa-file-circle-question', phaseColor:'#b45309' },
-      { type:'stage',  id:'REVISAR_SOBRANTES',             label:'Revisar sobrantes',             icon:'fa-solid fa-file-magnifying-glass',phaseColor:'#b45309' },
+      { type:'stage',  id:'REVISAR_SOBRANTES',             label:'Revisar sobrantes',           icon:'fa-solid fa-file-circle-exclamation',phaseColor:'#b45309' },
       { type:'stage',  id:'VERIFY_CUFE',                   label:'Verificar y etiquetar CUFE',    icon:'fa-solid fa-qrcode',               phaseColor:'#b45309' },
 
       { type:'phase',  label:'Organización',   color:'#059669', icon:'fa-solid fa-box-archive' },
@@ -530,7 +530,7 @@ function pipeline() {
       { id:'NORMALIZE_DIR_NAMES',     label:'Normalizar carpetas',            description:'Renombra las carpetas malformadas en STAGE eliminando el texto adicional. Si tiene _SINCUFE se renombra igual (el CUFE se verifica en etapa posterior).' },
       { id:'CHECK_DIRS',              label:'Detectar directorios faltantes', description:'Consulta todas las facturas PRESENTE en la BD y verifica que cada una tenga su carpeta en STAGE. Las que no tienen carpeta se marcan como FALTANTE para recuperarlas desde Drive.' },
       { id:'CHECK_REQUIRED_DOCS',     label:'Verificar docs requeridos',      description:'Para cada factura PRESENTE, verifica que su carpeta en STAGE contenga todos los documentos exigidos según el tipo de servicio. Registra un hallazgo por cada documento faltante y cambia el estado a PENDIENTE.' },
-      { id:'REVISAR_SOBRANTES',       label:'Revisar sobrantes',              description:'Detecta archivos cuyo nombre no coincide con ningún prefijo requerido y sugiere renombrarlos al tipo de documento faltante. Permite confirmar o corregir la sugerencia antes de renombrar el archivo en disco.' },
+      { id:'REVISAR_SOBRANTES',       label:'Revisar sobrantes',           description:'Detecta archivos cuyo nombre no coincide con ningún prefijo requerido y sugiere renombrarlos al tipo de documento faltante. Permite confirmar o corregir la sugerencia antes de renombrar el archivo en disco.' },
       { id:'VERIFY_CUFE',             label:'Verificar y etiquetar CUFE',     description:'Lee el texto de cada PDF de factura y valida que contenga un código CUFE válido. Las carpetas sin CUFE son renombradas añadiendo el sufijo _SINCUFE.' },
       { id:'ORGANIZE',                label:'Organizar en AUDIT',             description:'Mueve de STAGE a AUDIT las carpetas de facturas PRESENTE sin hallazgos pendientes: AUDIT/ADMINISTRADORA/[CONTRATO]/carpeta. Actualiza su estado a AUDITADA en la BD.' },
       { id:'DOWNLOAD_DRIVE',          label:'Descargar carpetas desde Drive', description:'Consulta las facturas FALTANTE en la BD y las busca en Google Drive. Las carpetas encontradas se descargan a STAGE y se actualizan a PRESENTE.' },

@@ -158,6 +158,20 @@ async def _run_staging(ctx: dict) -> AsyncGenerator[str, None]:
     else:
         yield "[WARN] No se encontraron carpetas hoja en DRIVE."
 
+    # Detect invoice-level folders in DRIVE that still have nested subdirectories
+    # (their leaf children were moved but the parent skeleton may remain, or they
+    # were skipped entirely because they only contained subfolders)
+    nested = [
+        d for d in sorted(drive_path.iterdir())
+        if d.is_dir() and any(sub.is_dir() for sub in d.iterdir())
+    ]
+    if nested:
+        yield f"[WARN] {len(nested)} carpeta(s) con subcarpetas anidadas detectadas en DRIVE:"
+        for d in nested:
+            sub_names = [s.name for s in d.iterdir() if s.is_dir()]
+            yield f"[WARN]   {d.name} → subcarpetas: {', '.join(sub_names)}"
+        yield "[WARN] Estas carpetas requieren revisión manual antes de volver a ejecutar RUN_STAGING."
+
 
 @_stage("REMOVE_NON_PDF")
 async def _remove_non_pdf(ctx: dict) -> AsyncGenerator[str, None]:
