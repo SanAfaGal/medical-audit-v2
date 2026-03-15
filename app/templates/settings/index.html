@@ -546,7 +546,7 @@
           </table>
           <div class="flex gap-2 pt-2" style="border-top:1px solid var(--border-soft)">
             <input type="text" x-model="newService.raw_service" placeholder="Servicio raw" class="cfg-input flex-1" />
-            <select x-model="newService.service_type_id" class="cfg-input" style="min-width:10rem">
+            <select x-model="newService.service_type_id" class="cfg-input" style="flex:0 0 12rem;width:12rem">
               <option value="">Tipo de servicio</option>
               <template x-for="st in serviceTypes" :key="st.id">
                 <option :value="st.id" x-text="st.display_name"></option>
@@ -778,10 +778,12 @@
           </tbody>
         </table>
         <div class="flex gap-2 px-4 py-3" style="border-top:1px solid var(--border);background:var(--bg-subtle)">
-          <input type="text" x-model="newST.code" placeholder="Código" class="cfg-input w-28 font-mono uppercase"
+          <input type="text" x-model="newST.code" placeholder="Código" class="cfg-input font-mono uppercase"
+                 style="flex:0 0 7rem;width:7rem"
                  @input="newST.code = newST.code.toUpperCase()" />
           <input type="text" x-model="newST.display_name" placeholder="Nombre" class="cfg-input flex-1" />
-          <input type="number" x-model="newST.priority" placeholder="Prioridad" class="cfg-input w-24" />
+          <input type="number" x-model="newST.priority" placeholder="Prioridad" class="cfg-input"
+                 style="flex:0 0 6rem;width:6rem" />
           <button @click="addServiceType()" :disabled="!newST.code.trim() || !newST.display_name.trim()" class="cfg-btn-primary">
             <i class="fa-solid fa-plus"></i>
           </button>
@@ -851,10 +853,12 @@
           </tbody>
         </table>
         <div class="flex gap-2 px-4 py-3" style="border-top:1px solid var(--border);background:var(--bg-subtle)">
-          <input type="text" x-model="newDT.code" placeholder="Código" class="cfg-input w-28 font-mono uppercase"
+          <input type="text" x-model="newDT.code" placeholder="Código" class="cfg-input font-mono uppercase"
+                 style="flex:0 0 7rem;width:7rem"
                  @input="newDT.code = newDT.code.toUpperCase()" />
           <input type="text" x-model="newDT.description" placeholder="Descripción" class="cfg-input flex-1" />
-          <input type="text" x-model="newDT.prefix" placeholder="Prefijo" class="cfg-input w-24 font-mono" />
+          <input type="text" x-model="newDT.prefix" placeholder="Prefijo" class="cfg-input font-mono"
+                 style="flex:0 0 6rem;width:6rem" />
           <button @click="addDocType()" :disabled="!newDT.code.trim() || !newDT.description.trim()" class="cfg-btn-primary">
             <i class="fa-solid fa-plus"></i>
           </button>
