@@ -66,14 +66,27 @@
   .select-banner { animation: bannerIn 0.15s ease; }
   @keyframes bannerIn { from { opacity:0; transform: translateY(-4px); } to { opacity:1; transform:translateY(0); } }
 
-  /* Findings summary */
-  .finding-row { transition: background .12s, box-shadow .12s; }
-  .finding-row:hover { background: #fef2f2; }
-  .finding-row.active { background: #f0fdfa; box-shadow: inset 3px 0 0 #0D9488; }
-  .finding-bar-track { background: #fee2e2; border-radius: 2px; overflow: hidden; }
-  .finding-bar-fill  { background: linear-gradient(90deg, #ef4444, #f87171); border-radius: 2px;
-    transition: width .4s cubic-bezier(.4,0,.2,1); }
-  .finding-bar-fill.rank-low { background: linear-gradient(90deg, #fca5a5, #fecaca); }
+  /* Stats strip */
+  .stat-pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px;
+    border-radius:8px; border:1px solid var(--border); background:var(--bg-subtle);
+    cursor:pointer; transition:all .12s; white-space:nowrap; }
+  .stat-pill:hover { border-color:var(--sky-border); background:var(--sky-soft); }
+  .stat-pill.active { border-color:var(--sky-border); background:var(--sky-soft); }
+  .stat-pill .snum { font-family:'Outfit',sans-serif; font-weight:700; font-size:15px; line-height:1; }
+  .stat-pill .slbl { font-size:9.5px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--text-3); }
+
+  /* Finding chips */
+  .fchip { display:inline-flex; align-items:center; gap:5px; padding:3px 8px 3px 7px;
+    border-radius:6px; border:1px solid var(--border); background:var(--bg-subtle);
+    font-size:10.5px; font-weight:600; cursor:pointer; transition:all .12s;
+    color:var(--text-2); white-space:nowrap; }
+  .fchip:hover { border-color:#fca5a5; background:#fef2f2; color:#dc2626; }
+  .fchip.active { border-color:#fca5a5; background:#fee2e2; color:#dc2626; }
+  .fchip .badge { font-family:'Outfit',sans-serif; font-size:11px; font-weight:700;
+    background:#fee2e2; color:#dc2626; border-radius:4px; padding:0 4px; min-width:18px;
+    text-align:center; }
+  .fchip.active .badge { background:#fecaca; }
 </style>
 
 <div x-data="auditApp()" class="audit-root flex flex-col gap-4 pb-20">
@@ -90,126 +103,100 @@
     </div>
   </div>
 
-  <!-- ── Stats bar ── -->
-  <section x-show="$store.ctx.periodId" x-cloak>
-    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2">
+  <!-- ── Stats + findings compact strip ── -->
+  <section x-show="$store.ctx.periodId" x-cloak
+           class="bg-white rounded-xl border border-gray-200 shadow-sm">
 
-      <!-- Total -->
-      <div class="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-col gap-0.5 shadow-sm">
-        <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Total</div>
-        <div class="stat-num text-3xl text-gray-800 leading-none" x-text="stats.total ?? '—'"></div>
-        <div class="text-xs text-gray-400 mt-0.5">facturas</div>
+    <!-- Stats row -->
+    <div class="px-3 py-2.5 flex items-center gap-1.5 flex-wrap"
+         style="border-bottom:1px solid var(--border-soft)">
+
+      <!-- Total (non-clickable) -->
+      <div class="stat-pill" style="cursor:default;pointer-events:none">
+        <span class="slbl">Total</span>
+        <span class="snum" style="color:var(--text-1)" x-text="stats.total ?? '—'"></span>
       </div>
 
-      <!-- Per-status -->
+      <div class="w-px self-stretch mx-1" style="background:var(--border)"></div>
+
+      <!-- Per-status pills (clickable filters) -->
       <template x-for="s in statCards" :key="s.status">
-        <button class="stat-card rounded-xl border px-4 py-3 flex flex-col gap-0.5 text-left shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1"
-          :class="filterStatusId == s.id
-            ? [s.activeBg, s.activeBorder, 'ring-2 ring-offset-1', s.activeRing]
-            : 'bg-white border-gray-200 hover:border-gray-300'"
-          @click="filterStatusId = (filterStatusId == s.id ? '' : s.id); page=1; loadInvoices()">
-          <div class="text-[10px] font-semibold uppercase tracking-widest"
-               :class="filterStatusId == s.id ? s.activeLabel : 'text-gray-400'"
-               x-text="s.status"></div>
-          <div class="stat-num text-3xl leading-none"
-               :class="filterStatusId == s.id ? s.activeCount : 'text-gray-800'"
-               x-text="(stats.by_status && stats.by_status[s.status] !== undefined) ? stats.by_status[s.status] : 0"></div>
-          <div class="text-xs mt-0.5"
-               :class="filterStatusId == s.id ? s.activeSub : 'text-gray-400'"
-               x-text="filterStatusId == s.id ? 'activo' : 'facturas'"></div>
+        <button class="stat-pill"
+                :class="filterStatusId == s.id ? 'active' : ''"
+                :style="filterStatusId == s.id
+                  ? `border-color:${s.rawColor};background:${s.rawBg};`
+                  : ''"
+                @click="filterStatusId = (filterStatusId == s.id ? '' : s.id); page=1; loadInvoices()">
+          <span class="slbl" :style="filterStatusId==s.id ? `color:${s.rawColor}` : ''" x-text="s.status"></span>
+          <span class="snum"
+                :style="`color:${filterStatusId==s.id ? s.rawColor : 'var(--text-1)'}`"
+                x-text="(stats.by_status && stats.by_status[s.status] !== undefined) ? stats.by_status[s.status] : 0"></span>
+          <i class="fa-solid fa-xmark text-[8px] ml-0.5" x-show="filterStatusId == s.id"
+             :style="`color:${s.rawColor}`"></i>
         </button>
       </template>
 
-      <!-- Hallazgos -->
-      <div class="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-col gap-0.5 shadow-sm">
-        <div class="text-[10px] font-semibold uppercase tracking-widest"
-             :class="(stats.total_findings||0) > 0 ? 'text-red-400' : 'text-gray-400'">Hallazgos</div>
-        <div class="stat-num text-3xl leading-none"
-             :class="(stats.total_findings||0) > 0 ? 'text-red-600' : 'text-emerald-600'"
-             x-text="stats.total_findings ?? 0"></div>
-        <div class="text-xs text-gray-400 mt-0.5">sin resolver</div>
-      </div>
+      <div class="w-px self-stretch mx-1" style="background:var(--border)"></div>
 
+      <!-- Hallazgos total (non-clickable) -->
+      <div class="stat-pill" style="cursor:default;pointer-events:none"
+           :style="(stats.total_findings||0)>0
+             ? 'border-color:var(--red-border);background:var(--red-soft)'
+             : 'border-color:var(--emerald-border);background:var(--emerald-soft)'">
+        <i class="fa-solid text-[9px]"
+           :class="(stats.total_findings||0)>0 ? 'fa-triangle-exclamation' : 'fa-circle-check'"
+           :style="(stats.total_findings||0)>0 ? 'color:var(--red)' : 'color:var(--emerald)'"></i>
+        <span class="slbl"
+              :style="(stats.total_findings||0)>0 ? 'color:var(--red)' : 'color:var(--emerald)'">Hallazgos</span>
+        <span class="snum"
+              :style="(stats.total_findings||0)>0 ? 'color:var(--red)' : 'color:var(--emerald)'"
+              x-text="stats.total_findings ?? 0"></span>
+      </div>
     </div>
-  </section>
 
-  <!-- ── Findings by type ── -->
-  <section x-show="$store.ctx.periodId && (findingsSummary.length > 0 || stats.total_findings === 0)" x-cloak
-           class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <!-- Findings chips row -->
+    <div class="px-3 py-2 flex items-center gap-1.5 flex-wrap min-h-[36px]">
 
-    <div class="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <i class="fa-solid fa-triangle-exclamation text-red-400 text-xs"></i>
-        <span class="text-xs font-semibold text-gray-600 uppercase tracking-wider">Hallazgos por tipo</span>
-        <template x-if="findingsSummary.length > 0">
-          <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-600"
-                x-text="findingsSummary.length + ' tipos'"></span>
-        </template>
-      </div>
-      <template x-if="filterFindingDocTypeId">
-        <span class="text-[10px] text-teal-600 font-semibold flex items-center gap-1">
-          <i class="fa-solid fa-filter"></i>
-          Filtrando por tipo —
-          <button @click="filterFindingDocTypeId=null; page=1; loadInvoices()"
-                  class="underline underline-offset-2 hover:text-teal-800 ml-0.5">quitar</button>
+      <!-- All-good state -->
+      <template x-if="findingsSummary.length === 0 && stats.total_findings === 0">
+        <span class="text-[10.5px] font-medium flex items-center gap-1.5" style="color:var(--emerald)">
+          <i class="fa-solid fa-circle-check text-xs"></i>Sin hallazgos pendientes
         </span>
       </template>
+
+      <!-- Loading / empty -->
+      <template x-if="findingsSummary.length === 0 && stats.total_findings > 0">
+        <span class="text-[10.5px]" style="color:var(--text-3)">Cargando hallazgos…</span>
+      </template>
+
+      <!-- Label -->
+      <template x-if="findingsSummary.length > 0">
+        <span class="text-[9.5px] font-bold uppercase tracking-wider shrink-0 mr-0.5"
+              style="color:var(--text-3)">Por tipo:</span>
+      </template>
+
+      <!-- One chip per finding type -->
+      <template x-for="(item, idx) in findingsSummary" :key="item.doc_type_id">
+        <button class="fchip"
+                :class="filterFindingDocTypeId === item.doc_type_id ? 'active' : ''"
+                @click="toggleFindingFilter(item.doc_type_id)">
+          <span class="font-mono" x-text="item.code"></span>
+          <span class="badge" x-text="item.count"></span>
+          <i class="fa-solid fa-xmark text-[8px] ml-0.5 opacity-60"
+             x-show="filterFindingDocTypeId === item.doc_type_id"></i>
+        </button>
+      </template>
+
+      <!-- Clear filter link -->
+      <template x-if="filterFindingDocTypeId">
+        <button @click="filterFindingDocTypeId=null; page=1; loadInvoices()"
+                class="text-[10px] font-medium ml-1 transition-colors"
+                style="color:var(--text-3)"
+                onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text-3)'">
+          Quitar filtro
+        </button>
+      </template>
     </div>
-
-    <!-- Empty: all good -->
-    <template x-if="findingsSummary.length === 0 && stats.total_findings === 0">
-      <div class="px-4 py-4 flex items-center gap-2.5 text-sm text-emerald-600">
-        <i class="fa-solid fa-circle-check text-lg"></i>
-        <span class="font-medium">Sin hallazgos pendientes en este período.</span>
-      </div>
-    </template>
-
-    <!-- Ranked list -->
-    <template x-if="findingsSummary.length > 0">
-      <div class="divide-y divide-gray-50">
-        <template x-for="(item, idx) in findingsSummary" :key="item.doc_type_id">
-          <button
-            class="finding-row w-full px-4 py-2.5 grid items-center gap-3 text-left focus:outline-none"
-            style="grid-template-columns: 1.25rem 1fr 8rem 4.5rem 1.25rem;"
-            :class="filterFindingDocTypeId === item.doc_type_id ? 'active' : ''"
-            @click="toggleFindingFilter(item.doc_type_id)">
-
-            <!-- Rank -->
-            <span class="stat-num text-sm leading-none text-right"
-                  :class="idx === 0 ? 'text-red-500' : idx === 1 ? 'text-orange-400' : 'text-gray-300'"
-                  x-text="idx + 1"></span>
-
-            <!-- Code -->
-            <span class="font-mono font-semibold text-sm truncate overflow-hidden"
-                  :class="filterFindingDocTypeId === item.doc_type_id ? 'text-teal-700' : 'text-gray-800'"
-                  x-text="item.code"></span>
-
-            <!-- Bar -->
-            <div class="finding-bar-track h-2 w-full">
-              <div class="finding-bar-fill h-2"
-                   :class="idx >= 3 ? 'rank-low' : ''"
-                   :style="`width: ${findingsSummary[0] ? Math.round(item.count / findingsSummary[0].count * 100) : 0}%`">
-              </div>
-            </div>
-
-            <!-- Count -->
-            <div class="text-right">
-              <span class="stat-num text-base leading-none"
-                    :class="filterFindingDocTypeId === item.doc_type_id ? 'text-teal-700' : 'text-gray-700'"
-                    x-text="item.count"></span>
-              <span class="text-[10px] text-gray-400 ml-0.5">fact.</span>
-            </div>
-
-            <!-- Filter indicator -->
-            <i class="fa-solid text-[10px] transition-colors justify-self-center"
-               :class="filterFindingDocTypeId === item.doc_type_id
-                 ? 'fa-xmark text-teal-500'
-                 : 'fa-filter text-gray-200'"></i>
-
-          </button>
-        </template>
-      </div>
-    </template>
 
   </section>
 
@@ -780,14 +767,14 @@ function auditApp() {
     },
     get statCards() {
       const cfg = {
-        PENDIENTE: { activeBg:'bg-amber-50',   activeBorder:'border-amber-300',  activeRing:'ring-amber-300',  activeLabel:'text-amber-600', activeCount:'text-amber-700', activeSub:'text-amber-500' },
-        PRESENTE:  { activeBg:'bg-emerald-50', activeBorder:'border-emerald-300',activeRing:'ring-emerald-300',activeLabel:'text-emerald-600',activeCount:'text-emerald-700',activeSub:'text-emerald-500'},
-        FALTANTE:  { activeBg:'bg-red-50',     activeBorder:'border-red-300',    activeRing:'ring-red-300',    activeLabel:'text-red-600',   activeCount:'text-red-700',   activeSub:'text-red-500'   },
-        AUDITADA:  { activeBg:'bg-indigo-50',  activeBorder:'border-indigo-300', activeRing:'ring-indigo-300', activeLabel:'text-indigo-600',activeCount:'text-indigo-700',activeSub:'text-indigo-500'},
+        PENDIENTE: { activeBg:'bg-amber-50',   activeBorder:'border-amber-300',  activeRing:'ring-amber-300',  activeLabel:'text-amber-600', activeCount:'text-amber-700', activeSub:'text-amber-500',  rawColor:'#b45309', rawBg:'#fffbeb' },
+        PRESENTE:  { activeBg:'bg-emerald-50', activeBorder:'border-emerald-300',activeRing:'ring-emerald-300',activeLabel:'text-emerald-600',activeCount:'text-emerald-700',activeSub:'text-emerald-500',rawColor:'#059669', rawBg:'#ecfdf5' },
+        FALTANTE:  { activeBg:'bg-red-50',     activeBorder:'border-red-300',    activeRing:'ring-red-300',    activeLabel:'text-red-600',   activeCount:'text-red-700',   activeSub:'text-red-500',    rawColor:'#dc2626', rawBg:'#fef2f2' },
+        AUDITADA:  { activeBg:'bg-indigo-50',  activeBorder:'border-indigo-300', activeRing:'ring-indigo-300', activeLabel:'text-indigo-600',activeCount:'text-indigo-700',activeSub:'text-indigo-500', rawColor:'#4338ca', rawBg:'#eef2ff' },
       };
       return this.folderStatuses.map(fs => ({
         ...fs,
-        ...(cfg[fs.status] || { activeBg:'bg-sky-50', activeBorder:'border-sky-300', activeRing:'ring-sky-300', activeLabel:'text-sky-600', activeCount:'text-sky-700', activeSub:'text-sky-500' }),
+        ...(cfg[fs.status] || { activeBg:'bg-sky-50', activeBorder:'border-sky-300', activeRing:'ring-sky-300', activeLabel:'text-sky-600', activeCount:'text-sky-700', activeSub:'text-sky-500', rawColor:'#0284c7', rawBg:'#f0f9ff' }),
       }));
     },
     get uniqueAdminTypes() {
