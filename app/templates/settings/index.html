@@ -225,8 +225,23 @@
           <div>
             <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">Contraseña SIHOS</label>
             <input type="password" x-model="form.sihos_password" autocomplete="new-password"
-                   placeholder="Dejar vacío para no cambiar" class="cfg-input" />
-            <p class="text-[11px] mt-1" style="color:var(--text-3)">Se cifra con Fernet antes de guardarse.</p>
+                   :placeholder="editingId && currentInstHasSihosPassword ? 'Dejar vacío para conservar la actual' : 'Contraseña'"
+                   class="cfg-input" />
+            <div class="flex items-center gap-2 mt-1">
+              <template x-if="editingId && currentInstHasSihosPassword && !form.sihos_password">
+                <span class="flex items-center gap-1 text-[11px] font-medium" style="color:var(--emerald)">
+                  <i class="fa-solid fa-circle-check"></i> Contraseña almacenada
+                </span>
+              </template>
+              <template x-if="editingId && currentInstHasSihosPassword && form.sihos_password">
+                <span class="flex items-center gap-1 text-[11px] font-medium" style="color:var(--amber)">
+                  <i class="fa-solid fa-pen"></i> Se reemplazará al guardar
+                </span>
+              </template>
+              <template x-if="!editingId || !currentInstHasSihosPassword">
+                <p class="text-[11px]" style="color:var(--text-3)">Se cifra con Fernet antes de guardarse.</p>
+              </template>
+            </div>
           </div>
           <!-- Drive credentials -->
           <div>
@@ -1113,6 +1128,7 @@ function settingsApp() {
     confirmDeleteInstId: null,
     uploadingLogoFor: null,
     currentInstHasDriveCreds: false,
+    currentInstHasSihosPassword: false,
     driveCredsStatus: '',
     driveCredsError: '',
     form: { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'' },
@@ -1213,6 +1229,7 @@ function settingsApp() {
     resetInstForm() {
       this.editingId = null; this.editingName = '';
       this.currentInstHasDriveCreds = false;
+      this.currentInstHasSihosPassword = false;
       this.driveCredsStatus = ''; this.driveCredsError = '';
       this.form = { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'' };
     },
@@ -1221,6 +1238,7 @@ function settingsApp() {
       this.editingId = h.id;
       this.editingName = h.display_name;
       this.currentInstHasDriveCreds = h.has_drive_credentials || false;
+      this.currentInstHasSihosPassword = h.has_sihos_password || false;
       this.driveCredsStatus = ''; this.driveCredsError = '';
       this.form = { name:h.name, display_name:h.display_name, nit:h.nit, invoice_id_prefix:h.invoice_id_prefix, sihos_base_url:h.sihos_base_url||'', sihos_doc_code:h.sihos_doc_code||'', sihos_user:h.sihos_user||'', sihos_password:'' };
       window.scrollTo({ top: 0, behavior: 'smooth' });

@@ -39,6 +39,7 @@ class InstitutionOut(BaseModel):
     sihos_user: str | None
     logo_url: str | None = None
     has_drive_credentials: bool = False
+    has_sihos_password: bool = False
     # NOTE: sihos_password and drive_credentials_enc are never exposed
 
 

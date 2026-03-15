@@ -58,6 +58,7 @@ async def list_institutions(db: AsyncSession = Depends(get_db)):
         item = InstitutionOut.model_validate(inst)
         item.logo_url = f"/api/institutions/{inst.id}/logo" if inst.logo_content_type else None
         item.has_drive_credentials = bool(inst.drive_credentials_enc)
+        item.has_sihos_password = bool(inst.sihos_password)
         out.append(item)
     return out
 
