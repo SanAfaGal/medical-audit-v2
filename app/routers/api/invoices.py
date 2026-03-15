@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import Response
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -231,3 +233,61 @@ async def export_invoices(period_id: int, db: AsyncSession = Depends(get_db)):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+class RenameSurplusRequest(BaseModel):
+    folder_path: str
+    old_filename: str
+    doc_type_id: int
+
+
+@router.post("/{invoice_id}/rename-surplus")
+async def rename_surplus_file(
+    invoice_id: int,
+    data: RenameSurplusRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Rename a surplus file to match the required doc-type prefix and resolve the finding."""
+    import os
+
+    from app.paths import to_container_path
+    from app.repositories.rules_repo import RulesRepo
+
+    repo = InvoiceRepo(db)
+    invoice = await repo.get_by_id(invoice_id)
+    if not invoice:
+        raise HTTPException(404, "Factura no encontrada")
+
+    rules_repo = RulesRepo(db)
+    sys_settings = await rules_repo.get_system_settings()
+    if not sys_settings or not sys_settings.audit_data_root:
+        raise HTTPException(500, "audit_data_root no configurado")
+    audit_root = to_container_path(sys_settings.audit_data_root)
+    folder = Path(data.folder_path)
+    try:
+        folder.relative_to(audit_root)
+    except ValueError:
+        raise HTTPException(400, "Ruta fuera del directorio de auditoría")
+
+    if not folder.is_dir():
+        raise HTTPException(400, "Carpeta no encontrada")
+
+    doc_type = await rules_repo.get_doc_type_by_id(data.doc_type_id)
+    if not doc_type or not doc_type.prefix:
+        raise HTTPException(400, "Tipo de documento sin prefijo configurado")
+
+    old_path = folder / data.old_filename
+    if not old_path.exists():
+        raise HTTPException(404, "Archivo no encontrado en disco")
+
+    # Strip the existing wrong prefix (everything before the first "_") and replace it
+    stem = data.old_filename.split("_", 1)[1] if "_" in data.old_filename else data.old_filename
+    new_filename = f"{doc_type.prefix}_{stem}"
+    new_path = folder / new_filename
+    os.rename(old_path, new_path)
+
+    finding_repo = MissingFileRepo(db)
+    await finding_repo.resolve_missing_file(invoice_id, data.doc_type_id)
+    await db.commit()
+
+    return {"ok": True, "new_filename": new_filename}

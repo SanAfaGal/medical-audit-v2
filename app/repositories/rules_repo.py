@@ -131,6 +131,10 @@ class RulesRepo:
         result = await self.db.execute(select(DocType).where(DocType.code == code))
         return result.scalar_one_or_none()
 
+    async def get_doc_type_by_id(self, doc_type_id: int) -> DocType | None:
+        result = await self.db.execute(select(DocType).where(DocType.id == doc_type_id))
+        return result.scalar_one_or_none()
+
     # ------------------------------------------------------------------
     # Pipeline helpers
     # ------------------------------------------------------------------

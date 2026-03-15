@@ -662,6 +662,164 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
     yield f"[INFO] Hallazgos totales registrados: {total_findings}"
 
 
+def _compute_surplus_suggestions(sobrantes, faltantes, SequenceMatcher):
+    """Returns {filename: {suggested_doc_type_id, suggested_code, suggested_prefix, confidence}}"""
+    if not faltantes:
+        return {}
+
+    result = {}
+
+    if len(sobrantes) == 1 and len(faltantes) == 1:
+        dt = faltantes[0].doc_type
+        result[sobrantes[0].name] = {
+            "suggested_doc_type_id": dt.id,
+            "suggested_code": dt.code,
+            "suggested_prefix": dt.prefix,
+            "confidence": "high",
+        }
+    else:
+        for f in sobrantes:
+            best_score = 0.0
+            best_dt = None
+            for mf in faltantes:
+                dt = mf.doc_type
+                if not dt or not dt.prefix:
+                    continue
+                score = SequenceMatcher(None, f.name.upper(), dt.prefix.upper()).ratio()
+                if score > best_score:
+                    best_score = score
+                    best_dt = dt
+            if best_dt and best_score > 0.3:
+                result[f.name] = {
+                    "suggested_doc_type_id": best_dt.id,
+                    "suggested_code": best_dt.code,
+                    "suggested_prefix": best_dt.prefix,
+                    "confidence": "low",
+                }
+    return result
+
+
+@_stage("REVISAR_SOBRANTES")
+async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
+    """Identify surplus files per invoice folder and suggest doc-type renames."""
+    import json
+    from difflib import SequenceMatcher
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.models.finding import MissingFile
+    from app.models.invoice import Invoice
+    from app.repositories.invoice_repo import InvoiceRepo
+    from app.repositories.rules_repo import RulesRepo
+
+    stage_path: Path = ctx["stage_path"]
+    institution = ctx["institution"]
+    period = ctx["period"]
+    db: AsyncSession = ctx["db"]
+
+    if not stage_path.exists():
+        yield "[ERROR] Directorio STAGE no existe"
+        return
+
+    rules_repo = RulesRepo(db)
+    std_map = await rules_repo.get_service_type_docs_map(institution.id)
+    raw_prefix_map = await rules_repo.get_active_doc_types_map()
+    prefix_map = {k: v[0] if v else None for k, v in raw_prefix_map.items()}
+
+    q = (
+        select(Invoice)
+        .where(Invoice.audit_period_id == period.id)
+        .options(
+            selectinload(Invoice.service_type),
+            selectinload(Invoice.missing_files).selectinload(MissingFile.doc_type),
+        )
+    )
+    result = await db.execute(q)
+    invoices = list(result.scalars().all())
+    invoice_by_number = {inv.invoice_number.upper(): inv for inv in invoices}
+
+    items = []
+    total_sobrantes = 0
+
+    for folder in sorted(stage_path.iterdir()):
+        if not folder.is_dir():
+            continue
+
+        folder_key = folder.name.upper()
+        invoice = invoice_by_number.get(folder_key)
+        if invoice is None:
+            invoice = next(
+                (inv for num, inv in invoice_by_number.items()
+                 if folder_key == num
+                 or folder_key.startswith(num + "_")
+                 or folder_key.startswith(num + " ")
+                 or folder_key.endswith(num)),
+                None,
+            )
+        if invoice is None:
+            continue
+
+        required_dt_ids = std_map.get(invoice.service_type_id, [])
+        required_prefixes = [
+            prefix_map[dt_id]
+            for dt_id in required_dt_ids
+            if dt_id in prefix_map and prefix_map[dt_id]
+        ]
+
+        all_files = [f for f in folder.iterdir() if f.is_file()]
+        sobrantes = [
+            f for f in all_files
+            if not any(
+                f.name.upper().startswith(p.upper())
+                for p in required_prefixes
+            )
+        ]
+        if not sobrantes:
+            continue
+
+        faltantes = [
+            mf for mf in invoice.missing_files
+            if mf.resolved_at is None and mf.doc_type
+        ]
+
+        suggestions = _compute_surplus_suggestions(sobrantes, faltantes, SequenceMatcher)
+
+        items.append({
+            "invoice_id": invoice.id,
+            "invoice_number": invoice.invoice_number,
+            "folder_path": str(folder),
+            "sobrantes": [
+                {
+                    "filename": f.name,
+                    **suggestions.get(f.name, {
+                        "suggested_doc_type_id": None,
+                        "suggested_code": None,
+                        "suggested_prefix": None,
+                        "confidence": None,
+                    }),
+                }
+                for f in sobrantes
+            ],
+            "faltantes": [
+                {
+                    "doc_type_id": mf.doc_type.id,
+                    "code": mf.doc_type.code,
+                    "description": mf.doc_type.description,
+                }
+                for mf in faltantes
+            ],
+        })
+        total_sobrantes += len(sobrantes)
+        yield f"[INFO] {folder.name}: {len(sobrantes)} sobrante(s), {len(faltantes)} faltante(s)"
+
+    yield f"[INFO] Total: {total_sobrantes} archivos sobrantes en {len(items)} carpetas"
+    if items:
+        yield f"[DATA] {json.dumps(items, ensure_ascii=False)}"
+    else:
+        yield "[INFO] No se encontraron archivos sobrantes"
+
+
 @_stage("VERIFY_CUFE")
 async def _verify_cufe(ctx: dict) -> AsyncGenerator[str, None]:
     """Verify CUFE presence and tag folders missing a CUFE in invoice PDFs."""
