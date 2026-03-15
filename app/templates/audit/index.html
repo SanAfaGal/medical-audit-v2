@@ -275,6 +275,15 @@
             Limpiar todo
           </button>
         </template>
+        <a x-show="$store.ctx.periodId"
+           :href="`/api/invoices/export?period_id=${$store.ctx.periodId}`"
+           @click.stop
+           class="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg transition-colors"
+           style="color:var(--sky);border:1px solid var(--sky-border);background:var(--sky-soft)"
+           onmouseover="this.style.background='var(--sky-border)'" onmouseout="this.style.background='var(--sky-soft)'">
+          <i class="fa-solid fa-file-excel text-[10px]"></i>
+          Exportar Excel
+        </a>
         <i class="fa-solid fa-chevron-down text-gray-400 text-xs transition-transform duration-200"
            :class="filtersOpen ? 'rotate-180' : ''"></i>
       </div>

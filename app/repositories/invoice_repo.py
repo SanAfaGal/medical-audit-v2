@@ -372,3 +372,23 @@ class InvoiceRepo:
         )
         result = await self.db.execute(q)
         return {row[0]: row[1] for row in result.all()}
+
+    async def get_all_for_export(self, period_id: int) -> list[Invoice]:
+        """Return all invoices for a period with all relationships for Excel export."""
+        from app.models.institution import Institution
+
+        q = (
+            select(Invoice)
+            .where(Invoice.audit_period_id == period_id)
+            .order_by(Invoice.invoice_number)
+            .options(
+                selectinload(Invoice.folder_status),
+                selectinload(Invoice.service_type),
+                selectinload(Invoice.admin),
+                selectinload(Invoice.contract),
+                selectinload(Invoice.missing_files).selectinload(MissingFile.doc_type),
+                selectinload(Invoice.period).selectinload(AuditPeriod.institution),
+            )
+        )
+        result = await self.db.execute(q)
+        return list(result.scalars().all())

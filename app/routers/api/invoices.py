@@ -1,7 +1,10 @@
-"""API router for invoices: list, filter, batch-update, ingest."""
+"""API router for invoices: list, filter, batch-update, ingest, export."""
 from __future__ import annotations
 
+import io
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -161,3 +164,70 @@ async def ingest_excel(
     file_bytes = await file.read()
     result = await ingest(file_bytes, institution, period_id, db, scan_only=scan_only)
     return result
+
+
+@router.get("/export")
+async def export_invoices(period_id: int, db: AsyncSession = Depends(get_db)):
+    """Export all invoices for a period to Excel (.xlsx)."""
+    import openpyxl
+
+    repo = InvoiceRepo(db)
+    invoices = await repo.get_all_for_export(period_id)
+
+    wb = openpyxl.Workbook(write_only=True)
+    ws = wb.create_sheet("Facturas")
+    ws.append([
+        "Período", "Hospital", "Factura", "Fecha",
+        "Tipo Doc.", "Número Doc.", "Paciente",
+        "Administradora", "Contrato", "Servicio",
+        "Operación", "Estado", "Hallazgos",
+    ])
+
+    for inv in invoices:
+        period_label = inv.period.period_label if inv.period else ""
+        hospital = (
+            inv.period.institution.display_name
+            if inv.period and inv.period.institution else ""
+        )
+        admin = (
+            inv.admin.canonical_admin or inv.admin.raw_admin
+            if inv.admin else ""
+        )
+        contract = (
+            inv.contract.canonical_contract or inv.contract.raw_contract
+            if inv.contract else ""
+        )
+        service = inv.service_type.display_name if inv.service_type else ""
+        status = inv.folder_status.status if inv.folder_status else ""
+        findings = ", ".join(
+            mf.doc_type.code
+            for mf in inv.missing_files
+            if mf.resolved_at is None and mf.doc_type
+        )
+
+        ws.append([
+            period_label,
+            hospital,
+            inv.invoice_number,
+            inv.date.isoformat() if inv.date else "",
+            inv.id_type,
+            inv.id_number,
+            inv.patient_name,
+            admin,
+            contract,
+            service,
+            inv.employee or "",
+            status,
+            findings,
+        ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"facturas_{period_id}.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
