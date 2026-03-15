@@ -53,8 +53,9 @@ async def ingest(
 
     1. Parse Excel
     2. For each row: upsert Admin, Contract, Service
-    3. Skip rows where canonical_admin is NULL (user hasn't mapped it yet)
-    4. Upsert Invoice with FK references and resolved service_type_id
+    3. Group rows by invoice number; pick the service type with the highest
+       priority among all service rows for that invoice
+    4. Upsert one Invoice record per invoice number
     5. Return summary dict
     """
     inst_repo = InstitutionRepo(db)
@@ -69,11 +70,13 @@ async def ingest(
     raw_df = load_excel(file_bytes)
     df = _normalize(raw_df)
 
-    inserted = 0
     skipped = 0
     unknown_admins: list[str] = []
     unknown_contracts: list[str] = []
     unknown_services: list[str] = []
+
+    # invoice_number → {base fields dict, service_type_ids: set[int]}
+    invoice_map: dict[str, dict] = {}
 
     for _, row in df.iterrows():
         raw_admin = str(row.get("ADMINISTRADORA", "") or "").strip()
@@ -105,19 +108,47 @@ async def ingest(
         if scan_only:
             continue
 
-        invoice_data = {
-            "date":             invoice_date,
-            "id_type":          str(row.get("DOCUMENTO", "") or "")[:10],
-            "id_number":        str(row.get("NUMERO", "") or "")[:50],
-            "patient_name":     str(row.get("PACIENTE", "") or "")[:300],
-            "employee":         str(row.get("OPERARIO", "") or "")[:200] or None,
-            "admin_id":         admin.id,
-            "contract_id":      contract.id if contract else None,
-            "service_type_id":  service_type_id,
-            "folder_status_id": default_fs.id,
+        if invoice_number not in invoice_map:
+            invoice_map[invoice_number] = {
+                "date":             invoice_date,
+                "id_type":          str(row.get("DOCUMENTO", "") or "")[:10],
+                "id_number":        str(row.get("NUMERO", "") or "")[:50],
+                "patient_name":     str(row.get("PACIENTE", "") or "")[:300],
+                "employee":         str(row.get("OPERARIO", "") or "")[:200] or None,
+                "admin_id":         admin.id,
+                "contract_id":      contract.id if contract else None,
+                "folder_status_id": default_fs.id,
+                "_service_type_ids": set(),
+            }
+
+        if service_type_id is not None:
+            invoice_map[invoice_number]["_service_type_ids"].add(service_type_id)
+
+    if scan_only:
+        return {
+            "scan_only": True,
+            "inserted": 0,
+            "skipped": skipped,
+            "unknown_admins": unknown_admins,
+            "unknown_contracts": unknown_contracts,
+            "unknown_services": unknown_services,
         }
 
-        await inv_repo.upsert_invoice(period_id, invoice_number, invoice_data)
+    # Build priority map: service_type_id → priority
+    service_types = await rules_repo.get_service_types()
+    priority_map: dict[int, int] = {st.id: st.priority for st in service_types}
+
+    inserted = 0
+    for invoice_number, data in invoice_map.items():
+        service_type_ids: set[int] = data.pop("_service_type_ids")
+
+        # Pick the service type with the highest priority
+        best_st_id: int | None = None
+        if service_type_ids:
+            best_st_id = max(service_type_ids, key=lambda sid: priority_map.get(sid, 0))
+
+        data["service_type_id"] = best_st_id
+        await inv_repo.upsert_invoice(period_id, invoice_number, data)
         inserted += 1
 
     await db.commit()
@@ -126,7 +157,7 @@ async def ingest(
         institution.name, period_id, inserted, skipped,
     )
     return {
-        "scan_only": scan_only,
+        "scan_only": False,
         "inserted": inserted,
         "skipped": skipped,
         "unknown_admins": unknown_admins,
