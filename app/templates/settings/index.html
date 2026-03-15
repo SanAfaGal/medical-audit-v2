@@ -4,1241 +4,1092 @@
 {% block page_title %}Configuración{% endblock %}
 
 {% block content %}
-<div x-data="settingsApp()" class="max-w-5xl mx-auto space-y-1">
+<style>
+  .cfg-input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    background: var(--bg-subtle);
+    color: var(--text-1);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .cfg-input:focus {
+    outline: none;
+    border-color: var(--sky);
+    box-shadow: 0 0 0 3px var(--sky-soft);
+    background: var(--bg-surface);
+  }
+  .cfg-input::placeholder { color: var(--text-3); }
+  .cfg-input-sm {
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    background: var(--bg-subtle);
+    color: var(--text-1);
+  }
+  .cfg-input-sm:focus {
+    outline: none;
+    border-color: var(--sky);
+    box-shadow: 0 0 0 2px var(--sky-soft);
+    background: var(--bg-surface);
+  }
+  .cfg-input-sm.editing {
+    border-color: var(--sky);
+    background: var(--bg-surface);
+  }
+  .cfg-btn-primary {
+    display: inline-flex; align-items: center; gap: 0.375rem;
+    padding: 0.375rem 1rem;
+    background: var(--sky); color: #fff;
+    border-radius: 0.5rem; font-size: 0.875rem; font-weight: 600;
+    border: none; cursor: pointer; transition: opacity .15s;
+  }
+  .cfg-btn-primary:hover { opacity: .88; }
+  .cfg-btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+  .cfg-btn-sm {
+    display: inline-flex; align-items: center; gap: 0.25rem;
+    padding: 0.25rem 0.5rem; font-size: 0.75rem;
+    border-radius: 0.375rem; cursor: pointer; border: 1px solid var(--border);
+    background: var(--bg-surface); color: var(--text-2);
+    transition: background .12s, color .12s;
+  }
+  .cfg-btn-sm:hover { background: var(--bg-subtle); }
+  .cfg-btn-sky { border-color: var(--sky-border); color: var(--sky); }
+  .cfg-btn-sky:hover { background: var(--sky-soft); }
+  .cfg-btn-red { border-color: var(--red-border); color: var(--red); }
+  .cfg-btn-red:hover { background: var(--red-soft); }
+  .cfg-btn-confirm { background: var(--red); color: #fff; border-color: var(--red); font-weight: 600; }
+  .cfg-btn-confirm:hover { opacity: .88; }
+  .cfg-btn-violet { border-color: var(--violet-border); color: var(--violet); }
+  .cfg-btn-violet:hover { background: var(--violet-soft); }
+  .cfg-card {
+    border-radius: 0.75rem; overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+  }
+  .cfg-card-header {
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-subtle);
+    font-size: 0.8125rem; font-weight: 600;
+    color: var(--text-1);
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .cfg-table th {
+    padding: 0.5rem 1rem;
+    font-size: 0.6875rem; font-weight: 600; text-align: left;
+    color: var(--text-3); text-transform: uppercase; letter-spacing: .04em;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-subtle);
+  }
+  .cfg-table td {
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 0.8125rem; color: var(--text-1);
+  }
+  .cfg-table tr:last-child td { border-bottom: none; }
+  .cfg-table tr:hover td { background: var(--bg-subtle); }
+  .no-inst-banner {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 1rem 1.25rem; border-radius: 0.75rem;
+    border: 1px solid var(--amber-border);
+    background: var(--amber-soft);
+    color: var(--amber); font-size: 0.8125rem;
+  }
+</style>
 
-  <!-- Toast -->
+<div x-data="settingsApp()" class="flex gap-5 items-start">
+
+  <!-- ─── Toast ────────────────────────────────────────────── -->
   <div x-show="toast.msg" x-transition.opacity
-       :class="toast.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'"
-       class="fixed top-4 right-4 z-50 px-5 py-3 rounded-xl text-white text-sm font-medium shadow-lg flex items-center gap-2"
+       class="fixed top-4 right-4 z-50 px-5 py-3 rounded-xl text-white text-sm font-semibold shadow-xl flex items-center gap-2"
+       :style="toast.type === 'error' ? 'background:var(--red)' : 'background:var(--emerald)'"
        @click="toast.msg = ''" style="display:none">
     <i :class="toast.type === 'error' ? 'fa-solid fa-circle-xmark' : 'fa-solid fa-circle-check'"></i>
     <span x-text="toast.msg"></span>
   </div>
 
-  <!-- Tabs -->
-  <div class="flex gap-0.5 border-b border-gray-200 mb-5">
-    <template x-for="t in [{id:'instituciones',icon:'fa-hospital',label:'Instituciones'},{id:'mapeos',icon:'fa-arrows-left-right',label:'Mapeos'},{id:'periodos',icon:'fa-calendar-days',label:'Períodos'},{id:'reglas',icon:'fa-sliders',label:'Reglas'},{id:'prefijos',icon:'fa-tag',label:'Prefijos'},{id:'sistema',icon:'fa-gear',label:'Sistema'}]" :key="t.id">
-      <button @click="switchTab(t.id)"
-              :class="tab === t.id ? 'border-sky-600 text-sky-700 bg-sky-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'"
-              class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-md">
-        <i :class="'fa-solid ' + t.icon + ' mr-1.5'"></i>
-        <span x-text="t.label"></span>
-      </button>
-    </template>
-  </div>
+  <!-- ─── Sidebar nav ──────────────────────────────────────── -->
+  <nav class="w-52 shrink-0 rounded-xl sticky top-6 overflow-hidden"
+       style="border:1px solid var(--border);background:var(--bg-surface)">
 
-  <!-- ============================================================ -->
-  <!--  TAB: INSTITUCIONES                                          -->
-  <!-- ============================================================ -->
-  <div x-show="tab === 'instituciones'" class="space-y-5">
-
-    <!-- Form -->
-    <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-      <h2 class="text-sm font-semibold text-gray-700 mb-5">
-        <i class="fa-solid fa-hospital-user mr-2 text-sky-600"></i>
-        <span x-text="editingId ? 'Editando: ' + editingName : 'Agregar institución'"></span>
-      </h2>
-      <form @submit.prevent="saveInstitution()" class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Nombre interno (clave única) *</label>
-          <input type="text" x-model="form.name" required placeholder="SANTA_LUCIA"
-                 :readonly="!!editingId"
-                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500"
-                 :class="editingId ? 'bg-gray-50 text-gray-500' : ''" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Nombre para mostrar *</label>
-          <input type="text" x-model="form.display_name" required placeholder="Hospital Santa Lucía"
-                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">NIT *</label>
-          <input type="text" x-model="form.nit" required placeholder="900123456-1"
-                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Prefijo de factura</label>
-          <input type="text" x-model="form.invoice_id_prefix" placeholder="FE (opcional)"
-                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">URL portal SIHOS</label>
-          <input type="text" x-model="form.sihos_base_url"
-                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Código SIHOS</label>
-          <input type="text" x-model="form.sihos_doc_code"
-                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Usuario SIHOS</label>
-          <input type="text" x-model="form.sihos_user" autocomplete="username"
-                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Contraseña SIHOS</label>
-          <input type="password" x-model="form.sihos_password" autocomplete="new-password"
-                 placeholder="Dejar vacío para no cambiar"
-                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
-          <p class="text-xs text-gray-400 mt-0.5">Se cifra con Fernet antes de guardarse en la BD</p>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Credenciales Google Drive (.json)</label>
-          <div class="flex items-center gap-2">
-            <button type="button" @click="$refs.driveJsonInput.click()"
-                    class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-gray-700">
-              <i class="fa-solid fa-file-arrow-up text-sky-500"></i>
-              Subir archivo .json
-            </button>
-            <input type="file" accept=".json,application/json" x-ref="driveJsonInput" class="hidden"
-                   @change="uploadDriveCredentials(editingId, $event.target.files[0]); $event.target.value=''">
-            <span x-show="driveCredsStatus === 'ok'" class="flex items-center gap-1 text-xs text-emerald-600 font-medium">
-              <i class="fa-solid fa-circle-check"></i> Configuradas
-            </span>
-            <span x-show="driveCredsStatus === 'error'" class="flex items-center gap-1 text-xs text-red-500 font-medium">
-              <i class="fa-solid fa-triangle-exclamation"></i> <span x-text="driveCredsError"></span>
-            </span>
-          </div>
-          <p class="text-xs text-gray-400 mt-1">
-            <template x-if="editingId">
-              <span x-show="currentInstHasDriveCreds" class="text-emerald-600">
-                <i class="fa-solid fa-lock mr-0.5"></i>Credenciales almacenadas y cifradas.
-                Sube un nuevo archivo para reemplazarlas.
-              </span>
-            </template>
-            <template x-if="!editingId || !currentInstHasDriveCreds">
-              <span>Sube el archivo <code class="bg-gray-100 px-1 rounded">service_account.json</code> de Google Cloud. Se cifra con Fernet.</span>
-            </template>
-          </p>
-        </div>
-        <div class="col-span-2 flex items-center gap-3 pt-2 border-t border-gray-100">
-          <button type="submit"
-                  class="px-5 py-2 bg-sky-600 text-white text-sm font-semibold rounded-lg hover:bg-sky-700 shadow-sm transition-colors">
-            <i class="fa-solid fa-floppy-disk mr-1.5"></i>Guardar
+    <!-- Global section -->
+    <div class="px-3 pt-3 pb-1">
+      <p class="px-2 text-[10px] font-bold uppercase tracking-widest mb-1" style="color:var(--text-3)">Global</p>
+      <div class="space-y-0.5">
+        <template x-for="t in navTabs.filter(t => t.scope === 'global')" :key="t.id">
+          <button @click="switchTab(t.id)"
+                  class="w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-all"
+                  :style="tab === t.id
+                    ? 'background:var(--sky-soft);color:var(--sky);font-weight:600;'
+                    : 'color:var(--text-2);'">
+            <i :class="'fa-solid ' + t.icon + ' w-4 text-center shrink-0'"
+               style="font-size:0.75rem"
+               :style="tab === t.id ? 'color:var(--sky)' : 'color:var(--text-3)'"></i>
+            <span x-text="t.label" class="truncate"></span>
           </button>
-          <button type="button" @click="resetInstForm()"
-                  class="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-            Limpiar
-          </button>
-        </div>
-      </form>
+        </template>
+      </div>
     </div>
 
-    <!-- List -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
-        <h3 class="text-sm font-semibold text-gray-700">
-          <i class="fa-solid fa-list mr-2 text-gray-400"></i>Instituciones registradas
-          <span class="ml-2 text-xs text-gray-400 font-normal" x-text="'(' + institutions.length + ')'"></span>
-        </h3>
+    <!-- Divider -->
+    <div class="mx-3 my-2" style="height:1px;background:var(--border)"></div>
+
+    <!-- Institution section -->
+    <div class="px-3 pb-3">
+      <!-- Institution label -->
+      <div class="px-2 mb-1 flex items-center gap-1.5">
+        <p class="text-[10px] font-bold uppercase tracking-widest" style="color:var(--text-3)">Hospital</p>
       </div>
-      <div class="divide-y divide-gray-100">
-        <!-- Shared hidden file input for logo uploads -->
+      <template x-if="$store.ctx.institution">
+        <div class="px-2 py-1.5 mb-1.5 rounded-lg flex items-center gap-2"
+             style="background:var(--bg-subtle);border:1px solid var(--border)">
+          <i class="fa-solid fa-hospital shrink-0" style="font-size:0.65rem;color:var(--sky)"></i>
+          <span class="text-[11px] font-semibold truncate" style="color:var(--text-1)"
+                x-text="$store.ctx.institution.display_name"></span>
+        </div>
+      </template>
+      <template x-if="!$store.ctx.institution">
+        <div class="px-2 py-1.5 mb-1.5 rounded-lg flex items-center gap-2"
+             style="background:var(--amber-soft);border:1px solid var(--amber-border)">
+          <i class="fa-solid fa-triangle-exclamation shrink-0" style="font-size:0.65rem;color:var(--amber)"></i>
+          <span class="text-[11px]" style="color:var(--amber)">Sin selección</span>
+        </div>
+      </template>
+      <div class="space-y-0.5">
+        <template x-for="t in navTabs.filter(t => t.scope === 'institution')" :key="t.id">
+          <button @click="switchTab(t.id)"
+                  class="w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-all"
+                  :style="tab === t.id
+                    ? 'background:var(--sky-soft);color:var(--sky);font-weight:600;'
+                    : 'color:var(--text-2);'">
+            <i :class="'fa-solid ' + t.icon + ' w-4 text-center shrink-0'"
+               style="font-size:0.75rem"
+               :style="tab === t.id ? 'color:var(--sky)' : 'color:var(--text-3)'"></i>
+            <span x-text="t.label" class="truncate"></span>
+          </button>
+        </template>
+      </div>
+    </div>
+
+  </nav>
+
+  <!-- ─── Content area ─────────────────────────────────────── -->
+  <div class="flex-1 min-w-0 space-y-4" style="min-height:calc(100vh - 10rem)">
+
+    <!-- ══════════════════════════════════════════════════════
+         TAB: INSTITUCIONES
+    ══════════════════════════════════════════════════════════ -->
+    <div x-show="tab === 'instituciones'" class="space-y-4">
+
+      <!-- Form card -->
+      <div class="cfg-card">
+        <div class="cfg-card-header">
+          <i class="fa-solid fa-hospital-user" style="color:var(--sky)"></i>
+          <span x-text="editingId ? 'Editando: ' + editingName : 'Nueva institución'"></span>
+        </div>
+        <form @submit.prevent="saveInstitution()" class="p-5 grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">Nombre interno *</label>
+            <input type="text" x-model="form.name" required placeholder="SANTA_LUCIA"
+                   :readonly="!!editingId" class="cfg-input"
+                   :style="editingId ? 'opacity:.6;cursor:default' : ''" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">Nombre para mostrar *</label>
+            <input type="text" x-model="form.display_name" required placeholder="Hospital Santa Lucía" class="cfg-input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">NIT *</label>
+            <input type="text" x-model="form.nit" required placeholder="900123456-1" class="cfg-input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">Prefijo de factura</label>
+            <input type="text" x-model="form.invoice_id_prefix" placeholder="FE (opcional)" class="cfg-input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">URL portal SIHOS</label>
+            <input type="text" x-model="form.sihos_base_url" class="cfg-input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">Código SIHOS</label>
+            <input type="text" x-model="form.sihos_doc_code" class="cfg-input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">Usuario SIHOS</label>
+            <input type="text" x-model="form.sihos_user" autocomplete="username" class="cfg-input" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">Contraseña SIHOS</label>
+            <input type="password" x-model="form.sihos_password" autocomplete="new-password"
+                   placeholder="Dejar vacío para no cambiar" class="cfg-input" />
+            <p class="text-[11px] mt-1" style="color:var(--text-3)">Se cifra con Fernet antes de guardarse.</p>
+          </div>
+          <!-- Drive credentials -->
+          <div>
+            <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">Credenciales Google Drive</label>
+            <div class="flex items-center gap-2">
+              <button type="button" @click="$refs.driveJsonInput.click()"
+                      class="cfg-btn-sm cfg-btn-sky text-xs">
+                <i class="fa-solid fa-file-arrow-up"></i>Subir .json
+              </button>
+              <input type="file" accept=".json,application/json" x-ref="driveJsonInput" class="hidden"
+                     @change="uploadDriveCredentials(editingId, $event.target.files[0]); $event.target.value=''">
+              <span x-show="driveCredsStatus === 'ok'" class="flex items-center gap-1 text-xs font-medium" style="color:var(--emerald)">
+                <i class="fa-solid fa-circle-check"></i> Configuradas
+              </span>
+              <span x-show="driveCredsStatus === 'error'" class="text-xs font-medium" style="color:var(--red)" x-text="driveCredsError"></span>
+            </div>
+            <p class="text-[11px] mt-1" style="color:var(--text-3)">
+              <template x-if="editingId && currentInstHasDriveCreds">
+                <span style="color:var(--emerald)"><i class="fa-solid fa-lock mr-0.5"></i>Almacenadas y cifradas. Sube nuevo archivo para reemplazar.</span>
+              </template>
+              <template x-if="!editingId || !currentInstHasDriveCreds">
+                <span>Sube <code style="background:var(--bg-subtle);padding:0 3px;border-radius:3px">service_account.json</code> de Google Cloud.</span>
+              </template>
+            </p>
+          </div>
+          <!-- Actions -->
+          <div class="col-span-2 flex items-center gap-2 pt-2" style="border-top:1px solid var(--border-soft)">
+            <button type="submit" class="cfg-btn-primary">
+              <i class="fa-solid fa-floppy-disk"></i>Guardar
+            </button>
+            <button type="button" @click="resetInstForm()" class="cfg-btn-sm">
+              Limpiar
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- List card -->
+      <div class="cfg-card">
+        <div class="cfg-card-header">
+          <i class="fa-solid fa-list" style="color:var(--text-3)"></i>
+          Instituciones registradas
+          <span class="ml-1 text-xs font-normal" style="color:var(--text-3)" x-text="'(' + institutions.length + ')'"></span>
+        </div>
         <input type="file" accept="image/*" x-ref="logoFileInput" class="hidden"
                @change="uploadLogo(uploadingLogoFor, $event.target.files[0]); $event.target.value=''">
-        <template x-for="h in institutions" :key="h.id">
-          <div class="flex items-center justify-between px-5 py-3 hover:bg-gray-50">
-            <div class="flex items-center gap-3">
-              <!-- Logo thumbnail / upload trigger -->
-              <button @click="uploadingLogoFor = h.id; $refs.logoFileInput.click()"
-                      title="Cambiar logo"
-                      class="w-8 h-8 rounded flex items-center justify-center border border-gray-200 bg-gray-50 hover:border-blue-400 hover:bg-blue-50 transition-colors flex-shrink-0 overflow-hidden">
-                <template x-if="h.logo_url">
-                  <img :src="h.logo_url" class="w-full h-full object-contain" :alt="h.display_name">
-                </template>
-                <template x-if="!h.logo_url">
-                  <i class="fa-solid fa-image text-gray-300 text-xs"></i>
-                </template>
-              </button>
-              <div>
-                <div class="text-sm font-semibold text-gray-800" x-text="h.display_name"></div>
-                <div class="text-xs text-gray-500 mt-0.5 space-x-2">
-                  <span>NIT: <span x-text="h.nit"></span></span>
-                  <span class="text-gray-300">|</span>
-                  <span class="font-mono" x-text="h.name"></span>
-                  <span class="text-gray-300">|</span>
-                  <span>Prefijo: <span class="font-mono" x-text="h.invoice_id_prefix || '—'"></span></span>
+        <div>
+          <template x-for="h in institutions" :key="h.id">
+            <div class="flex items-center justify-between px-5 py-3"
+                 style="border-bottom:1px solid var(--border-soft)">
+              <div class="flex items-center gap-3">
+                <button @click="uploadingLogoFor = h.id; $refs.logoFileInput.click()"
+                        title="Cambiar logo"
+                        class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 overflow-hidden transition-colors"
+                        style="border:1px solid var(--border);background:var(--bg-subtle)">
+                  <template x-if="h.logo_url">
+                    <img :src="h.logo_url" class="w-full h-full object-contain" :alt="h.display_name">
+                  </template>
+                  <template x-if="!h.logo_url">
+                    <i class="fa-solid fa-image text-xs" style="color:var(--text-3)"></i>
+                  </template>
+                </button>
+                <div>
+                  <div class="text-sm font-semibold" style="color:var(--text-1)" x-text="h.display_name"></div>
+                  <div class="text-xs mt-0.5 space-x-2" style="color:var(--text-3)">
+                    <span>NIT: <span x-text="h.nit"></span></span>
+                    <span style="color:var(--border)">|</span>
+                    <span class="font-mono" x-text="h.name"></span>
+                    <span style="color:var(--border)">|</span>
+                    <span>Prefijo: <span class="font-mono" x-text="h.invoice_id_prefix || '—'"></span></span>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div class="flex items-center gap-2">
-              <span x-show="h.has_drive_credentials"
-                    title="Credenciales Google Drive configuradas"
-                    class="inline-flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 font-medium">
-                <i class="fa-brands fa-google-drive text-[10px]"></i> Drive
-              </span>
-              <button @click="editInstitution(h)"
-                      class="text-xs px-3 py-1.5 text-sky-600 border border-sky-200 rounded-lg hover:bg-sky-50 transition-colors">
-                <i class="fa-solid fa-pen-to-square mr-1"></i>Editar
-              </button>
-              <template x-if="confirmDeleteInstId !== h.id">
-                <button @click="confirmDeleteInstId = h.id"
-                        class="text-xs px-2.5 py-1.5 text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
-                  <i class="fa-solid fa-trash"></i>
+              <div class="flex items-center gap-1.5">
+                <span x-show="h.has_drive_credentials"
+                      class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full"
+                      style="background:var(--emerald-soft);color:var(--emerald);border:1px solid var(--emerald-border)">
+                  <i class="fa-brands fa-google-drive text-[10px]"></i> Drive
+                </span>
+                <button @click="editInstitution(h)" class="cfg-btn-sm cfg-btn-sky">
+                  <i class="fa-solid fa-pen text-xs"></i>Editar
                 </button>
-              </template>
-              <template x-if="confirmDeleteInstId === h.id">
-                <div class="flex items-center gap-1">
-                  <button @click="deleteInstitution(h.id)"
-                          class="text-xs px-2.5 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold">
-                    Eliminar
+                <template x-if="confirmDeleteInstId !== h.id">
+                  <button @click="confirmDeleteInstId = h.id" class="cfg-btn-sm cfg-btn-red">
+                    <i class="fa-solid fa-trash text-xs"></i>
                   </button>
-                  <button @click="confirmDeleteInstId = null"
-                          class="text-xs px-2.5 py-1.5 text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
-                    Cancelar
-                  </button>
-                </div>
-              </template>
-            </div>
-          </div>
-        </template>
-        <template x-if="institutions.length === 0">
-          <div class="text-sm text-gray-400 text-center py-8">
-            <i class="fa-solid fa-hospital text-2xl mb-2 block text-gray-300"></i>
-            No hay instituciones registradas
-          </div>
-        </template>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================ -->
-  <!--  TAB: MAPEOS                                                 -->
-  <!-- ============================================================ -->
-  <div x-show="tab === 'mapeos'" class="space-y-4">
-
-    <!-- Institution selector -->
-    <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-      <label class="block text-xs font-medium text-gray-600 mb-1">Institución</label>
-      <select x-model="mapInstId" @change="loadMappings()"
-              class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 min-w-[300px]">
-        <option value="">— Seleccionar institución —</option>
-        <template x-for="h in institutions" :key="h.id">
-          <option :value="h.id" x-text="h.display_name"></option>
-        </template>
-      </select>
-    </div>
-
-    <!-- Sub-tabs -->
-    <div x-show="mapInstId" class="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div class="flex border-b border-gray-200 bg-gray-50/60">
-        <template x-for="st in [{id:'admins',icon:'fa-user-shield',label:'Administradoras'},{id:'contracts',icon:'fa-file-contract',label:'Contratos'},{id:'services',icon:'fa-briefcase-medical',label:'Servicios'},{id:'stdocs',icon:'fa-file-circle-check',label:'Docs por Servicio'}]" :key="st.id">
-          <button @click="mapSubTab = st.id"
-                  :class="mapSubTab === st.id ? 'border-b-2 border-sky-600 text-sky-700 bg-white' : 'text-gray-500 hover:text-gray-700'"
-                  class="px-4 py-2.5 text-xs font-medium transition-colors">
-            <i :class="'fa-solid ' + st.icon + ' mr-1.5'"></i>
-            <span x-text="st.label"></span>
-          </button>
-        </template>
-      </div>
-
-      <!-- Admins -->
-      <div x-show="mapSubTab === 'admins'" class="p-4 space-y-3">
-        <table class="w-full text-sm">
-          <thead class="text-xs text-gray-500 border-b border-gray-100">
-            <tr>
-              <th class="text-left py-2 px-2 font-semibold">Raw</th>
-              <th class="text-left py-2 px-2 font-semibold">Canónico</th>
-              <th class="text-left py-2 px-2 font-semibold">Tipo</th>
-              <th class="py-2 px-2"></th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-50">
-            <template x-for="a in allAdmins" :key="a.id">
-              <tr class="hover:bg-gray-50">
-                <td class="px-2 py-2 font-mono text-xs text-gray-600 max-w-[200px] truncate" x-text="a.raw_admin"></td>
-                <td class="px-2 py-2">
-                  <template x-if="editingAdminId !== a.id">
-                    <span :class="a.canonical_admin ? 'text-gray-800' : 'text-amber-500 italic text-xs'"
-                          x-text="a.canonical_admin || 'Sin mapear'"></span>
-                  </template>
-                  <template x-if="editingAdminId === a.id">
-                    <input type="text" x-model="editingAdminVal"
-                           class="border border-sky-400 rounded px-2 py-1 text-xs w-full focus:outline-none focus:ring-1 focus:ring-sky-500" />
-                  </template>
-                </td>
-                <td class="px-2 py-2">
-                  <template x-if="editingAdminId !== a.id">
-                    <span class="text-xs text-gray-500" x-text="a.type || '—'"></span>
-                  </template>
-                  <template x-if="editingAdminId === a.id">
-                    <select x-model="editingAdminType" class="border border-sky-400 rounded px-1 py-1 text-xs focus:outline-none">
-                      <option value="">—</option>
-                      <option>EPS</option><option>SOAT</option><option>ARL</option><option>OTRO</option>
-                    </select>
-                  </template>
-                </td>
-                <td class="px-2 py-2">
-                  <div class="flex items-center justify-end gap-1">
-                    <template x-if="editingAdminId !== a.id">
-                      <button @click="startEditAdmin(a)"
-                              class="text-xs px-2 py-1 text-sky-600 border border-sky-200 rounded hover:bg-sky-50">
-                        <i class="fa-solid fa-pen text-xs"></i>
-                      </button>
-                    </template>
-                    <template x-if="editingAdminId === a.id">
-                      <button @click="saveAdminEdit(a.id)"
-                              class="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700">
-                        <i class="fa-solid fa-check text-xs"></i>
-                      </button>
-                    </template>
-                    <template x-if="editingAdminId === a.id">
-                      <button @click="editingAdminId = null"
-                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                        <i class="fa-solid fa-xmark text-xs"></i>
-                      </button>
-                    </template>
-                    <template x-if="confirmDeleteAdminId !== a.id && editingAdminId !== a.id">
-                      <button @click="confirmDeleteAdminId = a.id"
-                              class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
-                        <i class="fa-solid fa-trash text-xs"></i>
-                      </button>
-                    </template>
-                    <template x-if="confirmDeleteAdminId === a.id">
-                      <button @click="deleteAdmin(a.id)"
-                              class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
-                        Eliminar
-                      </button>
-                    </template>
-                    <template x-if="confirmDeleteAdminId === a.id">
-                      <button @click="confirmDeleteAdminId = null"
-                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                        Cancelar
-                      </button>
-                    </template>
-                  </div>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-        <!-- Add admin row -->
-        <div class="flex gap-2 pt-2 border-t border-gray-100">
-          <input type="text" x-model="newAdmin.raw_admin" placeholder="Valor raw"
-                 class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
-          <input type="text" x-model="newAdmin.canonical_admin" placeholder="Canónico"
-                 class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
-          <select x-model="newAdmin.type"
-                  class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500">
-            <option value="">Tipo</option>
-            <option>EPS</option><option>SOAT</option><option>ARL</option><option>OTRO</option>
-          </select>
-          <button @click="addAdmin()" :disabled="!newAdmin.raw_admin.trim()"
-                  class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
-            <i class="fa-solid fa-plus mr-1"></i>Agregar
-          </button>
-        </div>
-      </div>
-
-      <!-- Contracts -->
-      <div x-show="mapSubTab === 'contracts'" class="p-4 space-y-3">
-        <table class="w-full text-sm">
-          <thead class="text-xs text-gray-500 border-b border-gray-100">
-            <tr>
-              <th class="text-left py-2 px-2 font-semibold">Raw</th>
-              <th class="text-left py-2 px-2 font-semibold">Canónico</th>
-              <th class="py-2 px-2"></th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-50">
-            <template x-for="c in allContracts" :key="c.id">
-              <tr class="hover:bg-gray-50">
-                <td class="px-2 py-2 font-mono text-xs text-gray-600 max-w-[220px] truncate" x-text="c.raw_contract"></td>
-                <td class="px-2 py-2">
-                  <template x-if="editingContractId !== c.id">
-                    <span :class="c.canonical_contract ? 'text-gray-800' : 'text-amber-500 italic text-xs'"
-                          x-text="c.canonical_contract || 'Sin mapear'"></span>
-                  </template>
-                  <template x-if="editingContractId === c.id">
-                    <input type="text" x-model="editingContractVal"
-                           class="border border-sky-400 rounded px-2 py-1 text-xs w-full focus:outline-none focus:ring-1 focus:ring-sky-500" />
-                  </template>
-                </td>
-                <td class="px-2 py-2">
-                  <div class="flex items-center justify-end gap-1">
-                    <template x-if="editingContractId !== c.id">
-                      <button @click="startEditContract(c)"
-                              class="text-xs px-2 py-1 text-sky-600 border border-sky-200 rounded hover:bg-sky-50">
-                        <i class="fa-solid fa-pen text-xs"></i>
-                      </button>
-                    </template>
-                    <template x-if="editingContractId === c.id">
-                      <button @click="saveContractEdit(c.id)"
-                              class="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700">
-                        <i class="fa-solid fa-check text-xs"></i>
-                      </button>
-                    </template>
-                    <template x-if="editingContractId === c.id">
-                      <button @click="editingContractId = null"
-                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                        <i class="fa-solid fa-xmark text-xs"></i>
-                      </button>
-                    </template>
-                    <template x-if="confirmDeleteContractId !== c.id && editingContractId !== c.id">
-                      <button @click="confirmDeleteContractId = c.id"
-                              class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
-                        <i class="fa-solid fa-trash text-xs"></i>
-                      </button>
-                    </template>
-                    <template x-if="confirmDeleteContractId === c.id">
-                      <button @click="deleteContract(c.id)"
-                              class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
-                        Eliminar
-                      </button>
-                    </template>
-                    <template x-if="confirmDeleteContractId === c.id">
-                      <button @click="confirmDeleteContractId = null"
-                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                        Cancelar
-                      </button>
-                    </template>
-                  </div>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-        <div class="flex gap-2 pt-2 border-t border-gray-100">
-          <input type="text" x-model="newContract.raw_contract" placeholder="Valor raw"
-                 class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
-          <input type="text" x-model="newContract.canonical_contract" placeholder="Canónico"
-                 class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
-          <button @click="addContract()" :disabled="!newContract.raw_contract.trim()"
-                  class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
-            <i class="fa-solid fa-plus mr-1"></i>Agregar
-          </button>
-        </div>
-      </div>
-
-      <!-- Services -->
-      <div x-show="mapSubTab === 'services'" class="p-4 space-y-3">
-        <table class="w-full text-sm">
-          <thead class="text-xs text-gray-500 border-b border-gray-100">
-            <tr>
-              <th class="text-left py-2 px-2 font-semibold">Servicio raw</th>
-              <th class="text-left py-2 px-2 font-semibold">Tipo de servicio</th>
-              <th class="py-2 px-2"></th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-50">
-            <template x-for="s in allServices" :key="s.id">
-              <tr class="hover:bg-gray-50">
-                <td class="px-2 py-2 font-mono text-xs text-gray-600 max-w-[220px] truncate" x-text="s.raw_service"></td>
-                <td class="px-2 py-2">
-                  <template x-if="editingServiceId !== s.id">
-                    <span :class="s.service_type_id ? 'text-gray-800' : 'text-amber-500 italic'"
-                          class="text-xs" x-text="stName(s.service_type_id)"></span>
-                  </template>
-                  <template x-if="editingServiceId === s.id">
-                    <select x-model="editingServiceTypeId"
-                            class="border border-sky-400 rounded px-2 py-1 text-xs focus:outline-none">
-                      <template x-for="st in serviceTypes" :key="st.id">
-                        <option :value="st.id" x-text="st.display_name"></option>
-                      </template>
-                    </select>
-                  </template>
-                </td>
-                <td class="px-2 py-2">
-                  <div class="flex items-center justify-end gap-1">
-                    <template x-if="editingServiceId !== s.id">
-                      <button @click="startEditService(s)"
-                              class="text-xs px-2 py-1 text-sky-600 border border-sky-200 rounded hover:bg-sky-50">
-                        <i class="fa-solid fa-pen text-xs"></i>
-                      </button>
-                    </template>
-                    <template x-if="editingServiceId === s.id">
-                      <button @click="saveServiceEdit(s.id)"
-                              class="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700">
-                        <i class="fa-solid fa-check text-xs"></i>
-                      </button>
-                    </template>
-                    <template x-if="editingServiceId === s.id">
-                      <button @click="editingServiceId = null"
-                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                        <i class="fa-solid fa-xmark text-xs"></i>
-                      </button>
-                    </template>
-                    <template x-if="confirmDeleteServiceId !== s.id && editingServiceId !== s.id">
-                      <button @click="confirmDeleteServiceId = s.id"
-                              class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
-                        <i class="fa-solid fa-trash text-xs"></i>
-                      </button>
-                    </template>
-                    <template x-if="confirmDeleteServiceId === s.id">
-                      <button @click="deleteService(s.id)"
-                              class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
-                        Eliminar
-                      </button>
-                    </template>
-                    <template x-if="confirmDeleteServiceId === s.id">
-                      <button @click="confirmDeleteServiceId = null"
-                              class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                        Cancelar
-                      </button>
-                    </template>
-                  </div>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-        <div class="flex gap-2 pt-2 border-t border-gray-100">
-          <input type="text" x-model="newService.raw_service" placeholder="Servicio raw"
-                 class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
-          <select x-model="newService.service_type_id"
-                  class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500 min-w-[160px]">
-            <option value="">Tipo de servicio</option>
-            <template x-for="st in serviceTypes" :key="st.id">
-              <option :value="st.id" x-text="st.display_name"></option>
-            </template>
-          </select>
-          <button @click="addService()" :disabled="!newService.raw_service.trim() || !newService.service_type_id"
-                  class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
-            <i class="fa-solid fa-plus mr-1"></i>Agregar
-          </button>
-        </div>
-      </div>
-
-      <!-- Docs por Servicio — matriz de checkboxes -->
-      <div x-show="mapSubTab === 'stdocs'" class="p-4">
-        <p class="text-xs text-gray-500 mb-3">Marque los documentos requeridos por tipo de servicio. Los cambios se aplican de inmediato.</p>
-        <div class="overflow-x-auto">
-          <table class="text-xs border-collapse">
-            <thead>
-              <tr>
-                <!-- Corner cell -->
-                <th class="sticky left-0 z-10 bg-white min-w-[160px] pr-3 pb-2 text-left text-gray-500 font-semibold border-b border-gray-200"></th>
-                <!-- Doc type headers -->
-                <template x-for="dt in docTypes" :key="dt.id">
-                  <th class="pb-2 px-2 border-b border-gray-200 font-mono font-semibold text-gray-600 whitespace-nowrap">
-                    <span x-text="dt.code"></span>
-                  </th>
                 </template>
-              </tr>
-            </thead>
+                <template x-if="confirmDeleteInstId === h.id">
+                  <div class="flex items-center gap-1">
+                    <button @click="deleteInstitution(h.id)" class="cfg-btn-sm cfg-btn-confirm">Eliminar</button>
+                    <button @click="confirmDeleteInstId = null" class="cfg-btn-sm">Cancelar</button>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+          <template x-if="institutions.length === 0">
+            <div class="text-sm text-center py-10" style="color:var(--text-3)">
+              <i class="fa-solid fa-hospital text-2xl mb-2 block"></i>
+              No hay instituciones registradas
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         TAB: MAPEOS
+    ══════════════════════════════════════════════════════════ -->
+    <div x-show="tab === 'mapeos'" class="space-y-4">
+
+      <!-- No institution selected -->
+      <template x-if="!$store.ctx.institutionId">
+        <div class="no-inst-banner">
+          <i class="fa-solid fa-triangle-exclamation shrink-0"></i>
+          <span>Selecciona una institución en el menú lateral para ver y editar mapeos.</span>
+        </div>
+      </template>
+
+      <div x-show="$store.ctx.institutionId" class="cfg-card">
+        <!-- Sub-tabs -->
+        <div class="flex" style="border-bottom:1px solid var(--border);background:var(--bg-subtle)">
+          <template x-for="st in [{id:'admins',icon:'fa-user-shield',label:'Administradoras'},{id:'contracts',icon:'fa-file-contract',label:'Contratos'},{id:'services',icon:'fa-briefcase-medical',label:'Servicios'},{id:'stdocs',icon:'fa-file-circle-check',label:'Docs × Servicio'}]" :key="st.id">
+            <button @click="mapSubTab = st.id"
+                    class="px-4 py-2.5 text-xs font-medium transition-colors"
+                    :style="mapSubTab === st.id
+                      ? 'border-bottom:2px solid var(--sky);color:var(--sky);margin-bottom:-1px;background:var(--bg-surface)'
+                      : 'color:var(--text-2);border-bottom:2px solid transparent'">
+              <i :class="'fa-solid ' + st.icon + ' mr-1.5'"></i>
+              <span x-text="st.label"></span>
+            </button>
+          </template>
+        </div>
+
+        <!-- Admins -->
+        <div x-show="mapSubTab === 'admins'" class="p-4 space-y-3">
+          <table class="cfg-table w-full">
+            <thead><tr>
+              <th>Raw</th><th>Canónico</th><th>Tipo</th><th></th>
+            </tr></thead>
             <tbody>
-              <template x-for="st in serviceTypes" :key="st.id">
-                <tr class="hover:bg-sky-50/40 group">
-                  <!-- Service type label -->
-                  <td class="sticky left-0 bg-white group-hover:bg-sky-50/40 pr-4 py-2 font-medium text-gray-700 border-b border-gray-100 whitespace-nowrap">
-                    <span x-text="st.display_name"></span>
+              <template x-for="a in allAdmins" :key="a.id">
+                <tr>
+                  <td class="font-mono text-xs max-w-[180px] truncate" style="color:var(--text-2)" x-text="a.raw_admin"></td>
+                  <td>
+                    <template x-if="editingAdminId !== a.id">
+                      <span :style="a.canonical_admin ? '' : 'color:var(--amber);font-style:italic'"
+                            x-text="a.canonical_admin || 'Sin mapear'"></span>
+                    </template>
+                    <template x-if="editingAdminId === a.id">
+                      <input type="text" x-model="editingAdminVal" class="cfg-input-sm editing w-full" />
+                    </template>
                   </td>
-                  <!-- Checkbox per doc type -->
-                  <template x-for="dt in docTypes" :key="dt.id">
-                    <td class="px-2 py-2 text-center border-b border-gray-100">
-                      <input type="checkbox"
-                             :checked="stdHas(st.id, dt.id)"
-                             @change="toggleSTD(st.id, dt.id, $event.target.checked)"
-                             :disabled="stdPending[st.id + '-' + dt.id] === true"
-                             class="w-4 h-4 rounded border-gray-300 text-sky-600 cursor-pointer focus:ring-sky-500 disabled:opacity-40 disabled:cursor-wait" />
-                    </td>
-                  </template>
+                  <td>
+                    <template x-if="editingAdminId !== a.id">
+                      <span class="text-xs" style="color:var(--text-3)" x-text="a.type || '—'"></span>
+                    </template>
+                    <template x-if="editingAdminId === a.id">
+                      <select x-model="editingAdminType" class="cfg-input-sm editing">
+                        <option value="">—</option>
+                        <option>EPS</option><option>SOAT</option><option>ARL</option><option>OTRO</option>
+                      </select>
+                    </template>
+                  </td>
+                  <td>
+                    <div class="flex items-center justify-end gap-1">
+                      <template x-if="editingAdminId !== a.id">
+                        <button @click="startEditAdmin(a)" class="cfg-btn-sm cfg-btn-sky"><i class="fa-solid fa-pen text-xs"></i></button>
+                      </template>
+                      <template x-if="editingAdminId === a.id">
+                        <button @click="saveAdminEdit(a.id)" class="cfg-btn-sm" style="background:var(--sky);color:#fff;border-color:var(--sky)"><i class="fa-solid fa-check text-xs"></i></button>
+                      </template>
+                      <template x-if="editingAdminId === a.id">
+                        <button @click="editingAdminId = null" class="cfg-btn-sm"><i class="fa-solid fa-xmark text-xs"></i></button>
+                      </template>
+                      <template x-if="confirmDeleteAdminId !== a.id && editingAdminId !== a.id">
+                        <button @click="confirmDeleteAdminId = a.id" class="cfg-btn-sm cfg-btn-red"><i class="fa-solid fa-trash text-xs"></i></button>
+                      </template>
+                      <template x-if="confirmDeleteAdminId === a.id">
+                        <button @click="deleteAdmin(a.id)" class="cfg-btn-sm cfg-btn-confirm">Eliminar</button>
+                      </template>
+                      <template x-if="confirmDeleteAdminId === a.id">
+                        <button @click="confirmDeleteAdminId = null" class="cfg-btn-sm">Cancelar</button>
+                      </template>
+                    </div>
+                  </td>
                 </tr>
               </template>
             </tbody>
           </table>
+          <div class="flex gap-2 pt-2" style="border-top:1px solid var(--border-soft)">
+            <input type="text" x-model="newAdmin.raw_admin" placeholder="Valor raw" class="cfg-input flex-1" />
+            <input type="text" x-model="newAdmin.canonical_admin" placeholder="Canónico" class="cfg-input flex-1" />
+            <select x-model="newAdmin.type" class="cfg-input" style="width:7rem">
+              <option value="">Tipo</option>
+              <option>EPS</option><option>SOAT</option><option>ARL</option><option>OTRO</option>
+            </select>
+            <button @click="addAdmin()" :disabled="!newAdmin.raw_admin.trim()" class="cfg-btn-primary">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+          </div>
         </div>
 
-        <!-- Summary -->
-        <div class="mt-5 border-t border-gray-100 pt-4 space-y-2">
-          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Resumen</p>
-          <template x-for="st in serviceTypes" :key="st.id">
-            <div x-data="{ get docs() { return serviceTypeDocs.filter(d => d.service_type_id === st.id); } }"
-                 class="flex items-start gap-3 py-2 px-3 rounded-lg"
-                 :class="docs.length > 0 ? 'bg-sky-50 border border-sky-100' : 'bg-gray-50 border border-gray-100'">
-              <div class="flex items-center gap-2 min-w-[160px]">
-                <span class="font-medium text-sm text-gray-700" x-text="st.display_name"></span>
-                <span class="text-xs font-semibold px-1.5 py-0.5 rounded-full"
-                      :class="docs.length > 0 ? 'bg-sky-200 text-sky-700' : 'bg-gray-200 text-gray-500'"
-                      x-text="docs.length"></span>
-              </div>
-              <div class="flex flex-wrap gap-1.5">
-                <template x-if="docs.length === 0">
-                  <span class="text-xs text-gray-400 italic">Sin documentos requeridos</span>
-                </template>
-                <template x-for="d in docs" :key="d.id">
-                  <span class="text-xs font-mono bg-white border border-sky-200 text-sky-700 px-2 py-0.5 rounded-full"
-                        x-text="dtCode(d.doc_type_id)"></span>
-                </template>
-              </div>
-            </div>
-          </template>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================ -->
-  <!--  TAB: PERÍODOS                                               -->
-  <!-- ============================================================ -->
-  <div x-show="tab === 'periodos'" class="space-y-4">
-
-    <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-      <label class="block text-xs font-medium text-gray-600 mb-1">Institución</label>
-      <select x-model="periodInstId" @change="loadPeriods()"
-              class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 min-w-[300px]">
-        <option value="">— Seleccionar institución —</option>
-        <template x-for="h in institutions" :key="h.id">
-          <option :value="h.id" x-text="h.display_name"></option>
-        </template>
-      </select>
-    </div>
-
-    <div x-show="periodInstId" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-gray-700">
-          <i class="fa-solid fa-calendar-days mr-2 text-sky-600"></i>Períodos de auditoría
-        </h3>
-      </div>
-      <div class="divide-y divide-gray-100">
-        <template x-for="p in periods" :key="p.id">
-          <div class="flex items-center justify-between px-5 py-3 hover:bg-gray-50">
-            <div>
-              <div class="text-sm font-semibold text-gray-800" x-text="p.period_label"></div>
-              <div class="text-xs text-gray-500 mt-0.5">
-                <span x-text="p.date_from"></span> → <span x-text="p.date_to"></span>
-              </div>
-            </div>
-            <div class="flex items-center gap-1">
-              <template x-if="confirmDeletePeriodId !== p.id">
-                <button @click="confirmDeletePeriodId = p.id"
-                        class="text-xs px-2.5 py-1.5 text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
-                  <i class="fa-solid fa-trash text-xs"></i>
-                </button>
+        <!-- Contracts -->
+        <div x-show="mapSubTab === 'contracts'" class="p-4 space-y-3">
+          <table class="cfg-table w-full">
+            <thead><tr><th>Raw</th><th>Canónico</th><th></th></tr></thead>
+            <tbody>
+              <template x-for="c in allContracts" :key="c.id">
+                <tr>
+                  <td class="font-mono text-xs max-w-[220px] truncate" style="color:var(--text-2)" x-text="c.raw_contract"></td>
+                  <td>
+                    <template x-if="editingContractId !== c.id">
+                      <span :style="c.canonical_contract ? '' : 'color:var(--amber);font-style:italic'"
+                            x-text="c.canonical_contract || 'Sin mapear'"></span>
+                    </template>
+                    <template x-if="editingContractId === c.id">
+                      <input type="text" x-model="editingContractVal" class="cfg-input-sm editing w-full" />
+                    </template>
+                  </td>
+                  <td>
+                    <div class="flex items-center justify-end gap-1">
+                      <template x-if="editingContractId !== c.id">
+                        <button @click="startEditContract(c)" class="cfg-btn-sm cfg-btn-sky"><i class="fa-solid fa-pen text-xs"></i></button>
+                      </template>
+                      <template x-if="editingContractId === c.id">
+                        <button @click="saveContractEdit(c.id)" class="cfg-btn-sm" style="background:var(--sky);color:#fff;border-color:var(--sky)"><i class="fa-solid fa-check text-xs"></i></button>
+                      </template>
+                      <template x-if="editingContractId === c.id">
+                        <button @click="editingContractId = null" class="cfg-btn-sm"><i class="fa-solid fa-xmark text-xs"></i></button>
+                      </template>
+                      <template x-if="confirmDeleteContractId !== c.id && editingContractId !== c.id">
+                        <button @click="confirmDeleteContractId = c.id" class="cfg-btn-sm cfg-btn-red"><i class="fa-solid fa-trash text-xs"></i></button>
+                      </template>
+                      <template x-if="confirmDeleteContractId === c.id">
+                        <button @click="deleteContract(c.id)" class="cfg-btn-sm cfg-btn-confirm">Eliminar</button>
+                      </template>
+                      <template x-if="confirmDeleteContractId === c.id">
+                        <button @click="confirmDeleteContractId = null" class="cfg-btn-sm">Cancelar</button>
+                      </template>
+                    </div>
+                  </td>
+                </tr>
               </template>
-              <template x-if="confirmDeletePeriodId === p.id">
-                <div class="flex flex-col gap-2 items-end">
-                  <div class="text-[11px] leading-relaxed rounded-lg px-3 py-2 max-w-xs text-right"
-                       style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);color:#b91c1c">
-                    <i class="fa-solid fa-triangle-exclamation mr-1"></i>
-                    <strong>¿Eliminar el período "<span x-text="p.period_label"></span>"?</strong><br>
-                    Se borrarán permanentemente todas las <strong>facturas</strong>, <strong>hallazgos</strong> y <strong>archivos faltantes</strong> asociados. Esta acción no se puede deshacer.
-                  </div>
-                  <div class="flex gap-1">
-                    <button @click="deletePeriod(p.id)"
-                            class="text-xs px-2.5 py-1.5 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700">
-                      Sí, eliminar
-                    </button>
-                    <button @click="confirmDeletePeriodId = null"
-                            class="text-xs px-2.5 py-1.5 text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
+            </tbody>
+          </table>
+          <div class="flex gap-2 pt-2" style="border-top:1px solid var(--border-soft)">
+            <input type="text" x-model="newContract.raw_contract" placeholder="Valor raw" class="cfg-input flex-1" />
+            <input type="text" x-model="newContract.canonical_contract" placeholder="Canónico" class="cfg-input flex-1" />
+            <button @click="addContract()" :disabled="!newContract.raw_contract.trim()" class="cfg-btn-primary">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Services -->
+        <div x-show="mapSubTab === 'services'" class="p-4 space-y-3">
+          <table class="cfg-table w-full">
+            <thead><tr><th>Servicio raw</th><th>Tipo de servicio</th><th></th></tr></thead>
+            <tbody>
+              <template x-for="s in allServices" :key="s.id">
+                <tr>
+                  <td class="font-mono text-xs max-w-[220px] truncate" style="color:var(--text-2)" x-text="s.raw_service"></td>
+                  <td>
+                    <template x-if="editingServiceId !== s.id">
+                      <span class="text-xs" :style="s.service_type_id ? '' : 'color:var(--amber);font-style:italic'"
+                            x-text="stName(s.service_type_id)"></span>
+                    </template>
+                    <template x-if="editingServiceId === s.id">
+                      <select x-model="editingServiceTypeId" class="cfg-input-sm editing">
+                        <template x-for="st in serviceTypes" :key="st.id">
+                          <option :value="st.id" x-text="st.display_name"></option>
+                        </template>
+                      </select>
+                    </template>
+                  </td>
+                  <td>
+                    <div class="flex items-center justify-end gap-1">
+                      <template x-if="editingServiceId !== s.id">
+                        <button @click="startEditService(s)" class="cfg-btn-sm cfg-btn-sky"><i class="fa-solid fa-pen text-xs"></i></button>
+                      </template>
+                      <template x-if="editingServiceId === s.id">
+                        <button @click="saveServiceEdit(s.id)" class="cfg-btn-sm" style="background:var(--sky);color:#fff;border-color:var(--sky)"><i class="fa-solid fa-check text-xs"></i></button>
+                      </template>
+                      <template x-if="editingServiceId === s.id">
+                        <button @click="editingServiceId = null" class="cfg-btn-sm"><i class="fa-solid fa-xmark text-xs"></i></button>
+                      </template>
+                      <template x-if="confirmDeleteServiceId !== s.id && editingServiceId !== s.id">
+                        <button @click="confirmDeleteServiceId = s.id" class="cfg-btn-sm cfg-btn-red"><i class="fa-solid fa-trash text-xs"></i></button>
+                      </template>
+                      <template x-if="confirmDeleteServiceId === s.id">
+                        <button @click="deleteService(s.id)" class="cfg-btn-sm cfg-btn-confirm">Eliminar</button>
+                      </template>
+                      <template x-if="confirmDeleteServiceId === s.id">
+                        <button @click="confirmDeleteServiceId = null" class="cfg-btn-sm">Cancelar</button>
+                      </template>
+                    </div>
+                  </td>
+                </tr>
               </template>
-            </div>
+            </tbody>
+          </table>
+          <div class="flex gap-2 pt-2" style="border-top:1px solid var(--border-soft)">
+            <input type="text" x-model="newService.raw_service" placeholder="Servicio raw" class="cfg-input flex-1" />
+            <select x-model="newService.service_type_id" class="cfg-input" style="min-width:10rem">
+              <option value="">Tipo de servicio</option>
+              <template x-for="st in serviceTypes" :key="st.id">
+                <option :value="st.id" x-text="st.display_name"></option>
+              </template>
+            </select>
+            <button @click="addService()" :disabled="!newService.raw_service.trim() || !newService.service_type_id" class="cfg-btn-primary">
+              <i class="fa-solid fa-plus"></i>
+            </button>
           </div>
-        </template>
-        <template x-if="periods.length === 0">
-          <div class="text-sm text-gray-400 text-center py-6">
-            <i class="fa-solid fa-calendar text-xl mb-2 block text-gray-300"></i>
-            No hay períodos registrados
-          </div>
-        </template>
-      </div>
-
-      <!-- Add period form -->
-      <div class="px-5 py-4 border-t border-gray-200 bg-gray-50/50">
-        <div class="text-xs font-semibold text-gray-600 mb-3">Agregar período</div>
-        <div class="flex gap-3 flex-wrap items-end">
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">Etiqueta *</label>
-            <input type="text" x-model="newPeriod.period_label" placeholder="2024-01"
-                   class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500 w-32" />
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">Fecha inicio *</label>
-            <input type="date" x-model="newPeriod.date_from"
-                   class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">Fecha fin *</label>
-            <input type="date" x-model="newPeriod.date_to"
-                   class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
-          </div>
-          <button @click="addPeriod()"
-                  :disabled="!newPeriod.period_label.trim() || !newPeriod.date_from || !newPeriod.date_to"
-                  class="px-4 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
-            <i class="fa-solid fa-plus mr-1"></i>Agregar
-          </button>
         </div>
-      </div>
-    </div>
-  </div>
 
-  <!-- ============================================================ -->
-  <!--  TAB: REGLAS                                                 -->
-  <!-- ============================================================ -->
-  <div x-show="tab === 'reglas'" class="space-y-5">
-
-    <!-- Service Types -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
-        <h2 class="text-sm font-semibold text-gray-700">
-          <i class="fa-solid fa-tags mr-2 text-sky-600"></i>Tipos de servicio
-        </h2>
-      </div>
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50/50 border-b border-gray-100">
-          <tr>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Código</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Nombre</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Prioridad</th>
-            <th class="px-4 py-2"></th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-50">
-          <template x-for="st in serviceTypes" :key="st.id">
-            <tr class="hover:bg-gray-50">
-              <td class="px-4 py-2.5 font-mono text-xs">
-                <template x-if="editingSTId !== st.id">
-                  <span class="text-gray-700" x-text="st.code"></span>
-                </template>
-                <template x-if="editingSTId === st.id">
-                  <input type="text" x-model="editingST.code"
-                         class="border border-sky-400 rounded px-2 py-1 text-xs font-mono w-28 focus:outline-none focus:ring-1 focus:ring-sky-500 uppercase"
-                         @input="editingST.code = editingST.code.toUpperCase()" />
-                </template>
-              </td>
-              <td class="px-4 py-2.5">
-                <template x-if="editingSTId !== st.id">
-                  <span class="text-gray-800" x-text="st.display_name"></span>
-                </template>
-                <template x-if="editingSTId === st.id">
-                  <input type="text" x-model="editingST.display_name"
-                         class="border border-sky-400 rounded px-2 py-1 text-sm w-full focus:outline-none focus:ring-1 focus:ring-sky-500" />
-                </template>
-              </td>
-              <td class="px-4 py-2.5 w-24">
-                <template x-if="editingSTId !== st.id">
-                  <span class="text-gray-500" x-text="st.priority"></span>
-                </template>
-                <template x-if="editingSTId === st.id">
-                  <input type="number" x-model="editingST.priority"
-                         class="border border-sky-400 rounded px-2 py-1 text-xs w-20 focus:outline-none focus:ring-1 focus:ring-sky-500" />
-                </template>
-              </td>
-              <td class="px-4 py-2.5">
-                <div class="flex items-center justify-end gap-1">
-                  <template x-if="editingSTId !== st.id">
-                    <button @click="startEditST(st)"
-                            class="text-xs px-2 py-1 text-sky-600 border border-sky-200 rounded hover:bg-sky-50">
-                      <i class="fa-solid fa-pen text-xs"></i>
-                    </button>
+        <!-- Docs por Servicio -->
+        <div x-show="mapSubTab === 'stdocs'" class="p-4">
+          <p class="text-xs mb-3" style="color:var(--text-3)">Marque los documentos requeridos por tipo de servicio. Los cambios se aplican de inmediato.</p>
+          <div class="overflow-x-auto">
+            <table class="text-xs border-collapse">
+              <thead>
+                <tr>
+                  <th class="sticky left-0 z-10 min-w-[160px] pr-3 pb-2 text-left font-semibold"
+                      style="color:var(--text-3);border-bottom:1px solid var(--border);background:var(--bg-surface)"></th>
+                  <template x-for="dt in docTypes" :key="dt.id">
+                    <th class="pb-2 px-2 font-mono font-semibold whitespace-nowrap"
+                        style="border-bottom:1px solid var(--border);color:var(--text-2)" x-text="dt.code"></th>
                   </template>
-                  <template x-if="editingSTId === st.id">
-                    <button @click="saveSTEdit(st.id)"
-                            class="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700">
-                      <i class="fa-solid fa-check text-xs"></i>
-                    </button>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="st in serviceTypes" :key="st.id">
+                  <tr>
+                    <td class="sticky left-0 pr-4 py-2 font-medium whitespace-nowrap"
+                        style="border-bottom:1px solid var(--border-soft);background:var(--bg-surface);color:var(--text-1)"
+                        x-text="st.display_name"></td>
+                    <template x-for="dt in docTypes" :key="dt.id">
+                      <td class="px-2 py-2 text-center" style="border-bottom:1px solid var(--border-soft)">
+                        <input type="checkbox"
+                               :checked="stdHas(st.id, dt.id)"
+                               @change="toggleSTD(st.id, dt.id, $event.target.checked)"
+                               :disabled="stdPending[st.id + '-' + dt.id] === true"
+                               class="w-4 h-4 rounded cursor-pointer disabled:opacity-40 disabled:cursor-wait"
+                               style="accent-color:var(--sky)" />
+                      </td>
+                    </template>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <!-- Summary -->
+          <div class="mt-5 space-y-2" style="border-top:1px solid var(--border-soft);padding-top:1rem">
+            <p class="text-[11px] font-bold uppercase tracking-wider mb-2" style="color:var(--text-3)">Resumen</p>
+            <template x-for="st in serviceTypes" :key="st.id">
+              <div x-data="{ get docs() { return serviceTypeDocs.filter(d => d.service_type_id === st.id); } }"
+                   class="flex items-start gap-3 py-2 px-3 rounded-lg"
+                   :style="docs.length > 0 ? 'background:var(--sky-soft);border:1px solid var(--sky-border)' : 'background:var(--bg-subtle);border:1px solid var(--border)'">
+                <div class="flex items-center gap-2 min-w-[160px]">
+                  <span class="text-sm font-medium" style="color:var(--text-1)" x-text="st.display_name"></span>
+                  <span class="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
+                        :style="docs.length > 0 ? 'background:var(--sky-border);color:var(--sky)' : 'background:var(--border);color:var(--text-3)'"
+                        x-text="docs.length"></span>
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                  <template x-if="docs.length === 0">
+                    <span class="text-xs italic" style="color:var(--text-3)">Sin documentos requeridos</span>
                   </template>
-                  <template x-if="editingSTId === st.id">
-                    <button @click="editingSTId = null"
-                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                      <i class="fa-solid fa-xmark text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="confirmDeleteSTId !== st.id && editingSTId !== st.id">
-                    <button @click="confirmDeleteSTId = st.id"
-                            class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
-                      <i class="fa-solid fa-trash text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="confirmDeleteSTId === st.id">
-                    <button @click="deleteServiceType(st.id)"
-                            class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
-                      Eliminar
-                    </button>
-                  </template>
-                  <template x-if="confirmDeleteSTId === st.id">
-                    <button @click="confirmDeleteSTId = null"
-                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                      Cancelar
-                    </button>
+                  <template x-for="d in docs" :key="d.id">
+                    <span class="text-[11px] font-mono px-2 py-0.5 rounded-full"
+                          style="background:var(--bg-surface);border:1px solid var(--sky-border);color:var(--sky)"
+                          x-text="dtCode(d.doc_type_id)"></span>
                   </template>
                 </div>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-      <div class="px-4 py-3 border-t border-gray-100 bg-gray-50/50 flex gap-2">
-        <input type="text" x-model="newST.code" placeholder="Código"
-               class="w-28 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500 uppercase"
-               @input="newST.code = newST.code.toUpperCase()" />
-        <input type="text" x-model="newST.display_name" placeholder="Nombre"
-               class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
-        <input type="number" x-model="newST.priority" placeholder="Prioridad"
-               class="w-24 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
-        <button @click="addServiceType()" :disabled="!newST.code.trim() || !newST.display_name.trim()"
-                class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
-          <i class="fa-solid fa-plus mr-1"></i>Agregar
-        </button>
-      </div>
-    </div>
-
-    <!-- Doc Types -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
-        <h2 class="text-sm font-semibold text-gray-700">
-          <i class="fa-solid fa-file-lines mr-2 text-sky-600"></i>Tipos de documento
-        </h2>
-      </div>
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50/50 border-b border-gray-100">
-          <tr>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Código</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Descripción</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Prefijo</th>
-            <th class="px-4 py-2"></th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-50">
-          <template x-for="dt in docTypes" :key="dt.id">
-            <tr class="hover:bg-gray-50">
-              <td class="px-4 py-2.5 font-mono text-xs">
-                <template x-if="editingDTId !== dt.id">
-                  <span class="text-gray-700" x-text="dt.code"></span>
-                </template>
-                <template x-if="editingDTId === dt.id">
-                  <input type="text" x-model="editingDT.code"
-                         class="border border-sky-400 rounded px-2 py-1 text-xs font-mono w-28 focus:outline-none focus:ring-1 focus:ring-sky-500 uppercase"
-                         @input="editingDT.code = editingDT.code.toUpperCase()" />
-                </template>
-              </td>
-              <td class="px-4 py-2.5">
-                <template x-if="editingDTId !== dt.id">
-                  <span class="text-gray-800" x-text="dt.description"></span>
-                </template>
-                <template x-if="editingDTId === dt.id">
-                  <input type="text" x-model="editingDT.description"
-                         class="border border-sky-400 rounded px-2 py-1 text-sm w-full focus:outline-none focus:ring-1 focus:ring-sky-500" />
-                </template>
-              </td>
-              <td class="px-4 py-2.5 font-mono text-xs w-24">
-                <template x-if="editingDTId !== dt.id">
-                  <span class="text-gray-500" x-text="dt.prefix || '—'"></span>
-                </template>
-                <template x-if="editingDTId === dt.id">
-                  <input type="text" x-model="editingDT.prefix"
-                         class="border border-sky-400 rounded px-2 py-1 text-xs font-mono w-20 focus:outline-none focus:ring-1 focus:ring-sky-500" />
-                </template>
-              </td>
-              <td class="px-4 py-2.5">
-                <div class="flex items-center justify-end gap-1">
-                  <template x-if="editingDTId !== dt.id">
-                    <button @click="startEditDT(dt)"
-                            class="text-xs px-2 py-1 text-sky-600 border border-sky-200 rounded hover:bg-sky-50">
-                      <i class="fa-solid fa-pen text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="editingDTId === dt.id">
-                    <button @click="saveDTEdit(dt.id)"
-                            class="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700">
-                      <i class="fa-solid fa-check text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="editingDTId === dt.id">
-                    <button @click="editingDTId = null"
-                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                      <i class="fa-solid fa-xmark text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="confirmDeleteDTId !== dt.id && editingDTId !== dt.id">
-                    <button @click="confirmDeleteDTId = dt.id"
-                            class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
-                      <i class="fa-solid fa-trash text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="confirmDeleteDTId === dt.id">
-                    <button @click="deleteDocType(dt.id)"
-                            class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
-                      Eliminar
-                    </button>
-                  </template>
-                  <template x-if="confirmDeleteDTId === dt.id">
-                    <button @click="confirmDeleteDTId = null"
-                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                      Cancelar
-                    </button>
-                  </template>
-                </div>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-      <div class="px-4 py-3 border-t border-gray-100 bg-gray-50/50 flex gap-2">
-        <input type="text" x-model="newDT.code" placeholder="Código"
-               class="w-28 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500 uppercase"
-               @input="newDT.code = newDT.code.toUpperCase()" />
-        <input type="text" x-model="newDT.description" placeholder="Descripción"
-               class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-sky-500" />
-        <input type="text" x-model="newDT.prefix" placeholder="Prefijo"
-               class="w-24 border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono focus:ring-2 focus:ring-sky-500" />
-        <button @click="addDocType()" :disabled="!newDT.code.trim() || !newDT.description.trim()"
-                class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
-          <i class="fa-solid fa-plus mr-1"></i>Agregar
-        </button>
-      </div>
-    </div>
-
-    <!-- Folder Statuses -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
-        <h2 class="text-sm font-semibold text-gray-700">
-          <i class="fa-solid fa-folder mr-2 text-sky-600"></i>Estados de carpeta
-        </h2>
-      </div>
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50/50 border-b border-gray-100">
-          <tr>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">ID</th>
-            <th class="text-left px-4 py-2 text-xs font-semibold text-gray-500">Estado</th>
-            <th class="px-4 py-2"></th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-50">
-          <template x-for="fs in folderStatuses" :key="fs.id">
-            <tr class="hover:bg-gray-50">
-              <td class="px-4 py-2.5 text-gray-400 text-xs" x-text="fs.id"></td>
-              <td class="px-4 py-2.5">
-                <template x-if="editingFSId !== fs.id">
-                  <span class="font-mono text-xs text-gray-700" x-text="fs.status"></span>
-                </template>
-                <template x-if="editingFSId === fs.id">
-                  <input type="text" x-model="editingFSVal"
-                         class="border border-sky-400 rounded px-2 py-1 text-xs font-mono w-36 focus:outline-none focus:ring-1 focus:ring-sky-500" />
-                </template>
-              </td>
-              <td class="px-4 py-2.5 text-right">
-                <div class="flex items-center justify-end gap-1">
-                  <template x-if="editingFSId !== fs.id">
-                    <button @click="startEditFS(fs)"
-                            class="text-xs px-2 py-1 text-sky-600 border border-sky-200 rounded hover:bg-sky-50">
-                      <i class="fa-solid fa-pen text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="editingFSId === fs.id">
-                    <button @click="saveFSEdit(fs.id)"
-                            class="text-xs px-2 py-1 bg-sky-600 text-white rounded hover:bg-sky-700">
-                      <i class="fa-solid fa-check text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="editingFSId === fs.id">
-                    <button @click="editingFSId = null"
-                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                      <i class="fa-solid fa-xmark text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="confirmDeleteFSId !== fs.id && editingFSId !== fs.id">
-                    <button @click="confirmDeleteFSId = fs.id"
-                            class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50">
-                      <i class="fa-solid fa-trash text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="confirmDeleteFSId === fs.id">
-                    <button @click="deleteFolderStatus(fs.id)"
-                            class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
-                      Eliminar
-                    </button>
-                  </template>
-                  <template x-if="confirmDeleteFSId === fs.id">
-                    <button @click="confirmDeleteFSId = null"
-                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                      Cancelar
-                    </button>
-                  </template>
-                </div>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-      <div class="px-4 py-3 border-t border-gray-100 bg-gray-50/50 flex gap-2">
-        <input type="text" x-model="newFS.status" placeholder="Código del estado (ej. AUDITADA)"
-               class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono uppercase focus:ring-2 focus:ring-sky-500"
-               @input="newFS.status = newFS.status.toUpperCase()" />
-        <button @click="addFolderStatus()" :disabled="!newFS.status.trim()"
-                class="px-3 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50">
-          <i class="fa-solid fa-plus mr-1"></i>Agregar
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================ -->
-  <!--  TAB: PREFIJOS                                               -->
-  <!-- ============================================================ -->
-  <div x-show="tab === 'prefijos'" class="space-y-5">
-
-    <!-- Header + description -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-      <div class="flex items-start gap-4 mb-6">
-        <div class="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
-          <i class="fa-solid fa-tag text-violet-600"></i>
-        </div>
-        <div>
-          <h2 class="text-sm font-semibold text-gray-800 mb-1">Correcciones de prefijos</h2>
-          <p class="text-xs text-gray-500 leading-relaxed">
-            Define los prefijos incorrectos que aparecen en los archivos y su forma correcta.
-            La etapa <span class="font-mono bg-gray-100 px-1 py-0.5 rounded text-xs">NORMALIZE_FILES</span>
-            aplicará estos renombrados automáticamente antes de la normalización estándar.
-          </p>
-        </div>
-      </div>
-
-      <!-- Add form -->
-      <div class="bg-gray-50 rounded-xl border border-gray-200 p-4">
-        <div class="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">
-          <i class="fa-solid fa-plus text-violet-500 mr-1.5"></i>Agregar corrección
-        </div>
-        <div class="flex items-center gap-3 flex-wrap">
-          <!-- Wrong prefix -->
-          <div class="flex items-center gap-2">
-            <div class="relative">
-              <input type="text" x-model="newPC.wrong_prefix"
-                     @input="newPC.wrong_prefix = newPC.wrong_prefix.toUpperCase()"
-                     placeholder="INCORRECTO"
-                     maxlength="20"
-                     class="w-32 border border-red-200 bg-red-50 rounded-lg px-3 py-2 text-sm font-mono
-                            text-red-700 placeholder-red-300 focus:ring-2 focus:ring-red-300 focus:border-red-300
-                            uppercase tracking-wider" />
-            </div>
-            <!-- Arrow -->
-            <div class="flex items-center gap-1 text-gray-400">
-              <div class="w-8 h-px bg-gray-300"></div>
-              <i class="fa-solid fa-arrow-right text-xs text-gray-400"></i>
-              <div class="w-8 h-px bg-gray-300"></div>
-            </div>
-            <!-- Correct prefix -->
-            <div class="relative">
-              <input type="text" x-model="newPC.correct_prefix"
-                     @input="newPC.correct_prefix = newPC.correct_prefix.toUpperCase()"
-                     placeholder="CORRECTO"
-                     maxlength="20"
-                     class="w-32 border border-emerald-200 bg-emerald-50 rounded-lg px-3 py-2 text-sm font-mono
-                            text-emerald-700 placeholder-emerald-300 focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300
-                            uppercase tracking-wider" />
-            </div>
+              </div>
+            </template>
           </div>
-          <input type="text" x-model="newPC.notes" placeholder="Nota (opcional)"
-                 class="flex-1 min-w-[160px] border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-600
-                        focus:ring-2 focus:ring-violet-400 focus:border-violet-400" />
-          <button @click="addPrefixCorrection()"
-                  :disabled="!newPC.wrong_prefix.trim() || !newPC.correct_prefix.trim()"
-                  class="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg
-                         hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0">
-            <i class="fa-solid fa-plus mr-1.5"></i>Agregar
-          </button>
         </div>
       </div>
     </div>
 
-    <!-- Corrections table -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-gray-700">
-          <i class="fa-solid fa-table-list mr-2 text-violet-500"></i>
-          Correcciones registradas
-        </h3>
-        <span class="text-xs text-gray-400 font-mono" x-text="prefixCorrections.length + ' regla(s)'"></span>
-      </div>
+    <!-- ══════════════════════════════════════════════════════
+         TAB: PERÍODOS
+    ══════════════════════════════════════════════════════════ -->
+    <div x-show="tab === 'periodos'" class="space-y-4">
 
-      <!-- Empty state -->
-      <template x-if="prefixCorrections.length === 0">
-        <div class="px-5 py-10 text-center text-gray-400 text-sm">
-          <i class="fa-solid fa-tags text-2xl mb-3 text-gray-300 block"></i>
-          No hay correcciones configuradas aún.
+      <template x-if="!$store.ctx.institutionId">
+        <div class="no-inst-banner">
+          <i class="fa-solid fa-triangle-exclamation shrink-0"></i>
+          <span>Selecciona una institución en el menú lateral para gestionar períodos.</span>
         </div>
       </template>
 
-      <table class="w-full text-sm" x-show="prefixCorrections.length > 0">
-        <thead class="bg-gray-50/50 border-b border-gray-100">
-          <tr>
-            <th class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500">Incorrecto</th>
-            <th class="text-center px-2 py-2.5 text-xs text-gray-300 w-8"></th>
-            <th class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500">Correcto</th>
-            <th class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500">Nota</th>
-            <th class="px-4 py-2.5 w-24"></th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-50">
-          <template x-for="pc in prefixCorrections" :key="pc.id">
-            <tr class="hover:bg-gray-50/60 group">
+      <div x-show="$store.ctx.institutionId" class="cfg-card overflow-hidden">
+        <div class="cfg-card-header">
+          <i class="fa-solid fa-calendar-days" style="color:var(--sky)"></i>
+          Períodos de auditoría
+        </div>
 
-              <!-- View mode -->
-              <template x-if="editingPCId !== pc.id">
-                <td class="px-5 py-3">
-                  <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono font-semibold
-                               bg-red-50 text-red-600 border border-red-200"
-                        x-text="pc.wrong_prefix"></span>
-                </td>
-              </template>
-              <!-- Edit mode wrong (non-editable) -->
-              <template x-if="editingPCId === pc.id">
-                <td class="px-5 py-3">
-                  <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono font-semibold
-                               bg-red-50 text-red-600 border border-red-200 opacity-60"
-                        x-text="pc.wrong_prefix"></span>
-                </td>
-              </template>
-
-              <!-- Arrow column -->
-              <td class="px-2 py-3 text-center text-gray-300">
-                <i class="fa-solid fa-arrow-right text-xs"></i>
-              </td>
-
-              <!-- Correct prefix -->
-              <template x-if="editingPCId !== pc.id">
-                <td class="px-5 py-3">
-                  <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono font-semibold
-                               bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        x-text="pc.correct_prefix"></span>
-                </td>
-              </template>
-              <template x-if="editingPCId === pc.id">
-                <td class="px-5 py-3">
-                  <input type="text" x-model="editingPC.correct_prefix"
-                         @input="editingPC.correct_prefix = editingPC.correct_prefix.toUpperCase()"
-                         maxlength="20"
-                         class="w-28 border border-emerald-300 bg-emerald-50 rounded-lg px-2.5 py-1
-                                text-xs font-mono text-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-400
-                                uppercase tracking-wider" />
-                </td>
-              </template>
-
-              <!-- Notes -->
-              <template x-if="editingPCId !== pc.id">
-                <td class="px-5 py-3 text-gray-400 text-xs truncate max-w-[200px]"
-                    x-text="pc.notes || '—'"></td>
-              </template>
-              <template x-if="editingPCId === pc.id">
-                <td class="px-5 py-3">
-                  <input type="text" x-model="editingPC.notes"
-                         class="w-full border border-gray-300 rounded-lg px-2.5 py-1 text-xs text-gray-600
-                                focus:outline-none focus:ring-1 focus:ring-violet-400" />
-                </td>
-              </template>
-
-              <!-- Actions -->
-              <td class="px-4 py-3 text-right">
-                <div class="flex items-center justify-end gap-1">
-                  <template x-if="editingPCId !== pc.id">
-                    <button @click="startEditPC(pc)"
-                            class="text-xs px-2 py-1 text-violet-600 border border-violet-200 rounded hover:bg-violet-50 transition-colors">
-                      <i class="fa-solid fa-pen text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="editingPCId === pc.id">
-                    <button @click="savePCEdit(pc.id)"
-                            class="text-xs px-2 py-1 bg-violet-600 text-white rounded hover:bg-violet-700">
-                      <i class="fa-solid fa-check text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="editingPCId === pc.id">
-                    <button @click="editingPCId = null"
-                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                      <i class="fa-solid fa-xmark text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="confirmDeletePCId !== pc.id && editingPCId !== pc.id">
-                    <button @click="confirmDeletePCId = pc.id"
-                            class="text-xs px-2 py-1 text-red-400 border border-red-200 rounded hover:bg-red-50 transition-colors">
-                      <i class="fa-solid fa-trash text-xs"></i>
-                    </button>
-                  </template>
-                  <template x-if="confirmDeletePCId === pc.id">
-                    <button @click="deletePrefixCorrection(pc.id)"
-                            class="text-xs px-2 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700">
-                      Eliminar
-                    </button>
-                  </template>
-                  <template x-if="confirmDeletePCId === pc.id">
-                    <button @click="confirmDeletePCId = null"
-                            class="text-xs px-2 py-1 text-gray-500 border border-gray-200 rounded hover:bg-gray-50">
-                      Cancelar
-                    </button>
-                  </template>
+        <div>
+          <template x-for="p in periods" :key="p.id">
+            <div class="flex items-center justify-between px-5 py-3"
+                 style="border-bottom:1px solid var(--border-soft)">
+              <div>
+                <div class="text-sm font-semibold" style="color:var(--text-1)" x-text="p.period_label"></div>
+                <div class="text-xs mt-0.5" style="color:var(--text-3)">
+                  <span x-text="p.date_from"></span> → <span x-text="p.date_to"></span>
                 </div>
-              </td>
-            </tr>
+              </div>
+              <div class="flex items-center gap-1">
+                <template x-if="confirmDeletePeriodId !== p.id">
+                  <button @click="confirmDeletePeriodId = p.id" class="cfg-btn-sm cfg-btn-red">
+                    <i class="fa-solid fa-trash text-xs"></i>
+                  </button>
+                </template>
+                <template x-if="confirmDeletePeriodId === p.id">
+                  <div class="flex flex-col gap-2 items-end">
+                    <div class="text-[11px] leading-relaxed rounded-lg px-3 py-2 max-w-xs text-right"
+                         style="background:var(--red-soft);border:1px solid var(--red-border);color:var(--red)">
+                      <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+                      <strong>¿Eliminar "<span x-text="p.period_label"></span>"?</strong><br>
+                      Se borrarán todas las <strong>facturas</strong>, <strong>hallazgos</strong> y <strong>archivos faltantes</strong> asociados. No se puede deshacer.
+                    </div>
+                    <div class="flex gap-1">
+                      <button @click="deletePeriod(p.id)" class="cfg-btn-sm cfg-btn-confirm">Sí, eliminar</button>
+                      <button @click="confirmDeletePeriodId = null" class="cfg-btn-sm">Cancelar</button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
           </template>
-        </tbody>
-      </table>
+          <template x-if="periods.length === 0">
+            <div class="text-sm text-center py-8" style="color:var(--text-3)">
+              <i class="fa-solid fa-calendar text-xl mb-2 block"></i>
+              No hay períodos registrados
+            </div>
+          </template>
+        </div>
+
+        <!-- Add form -->
+        <div class="px-5 py-4" style="border-top:1px solid var(--border);background:var(--bg-subtle)">
+          <div class="text-xs font-semibold mb-3" style="color:var(--text-2)">Agregar período</div>
+          <div class="flex gap-3 flex-wrap items-end">
+            <div>
+              <label class="block text-xs mb-1" style="color:var(--text-3)">Etiqueta *</label>
+              <input type="text" x-model="newPeriod.period_label" placeholder="2024-01"
+                     class="cfg-input" style="width:8rem" />
+            </div>
+            <div>
+              <label class="block text-xs mb-1" style="color:var(--text-3)">Fecha inicio *</label>
+              <input type="date" x-model="newPeriod.date_from" class="cfg-input" />
+            </div>
+            <div>
+              <label class="block text-xs mb-1" style="color:var(--text-3)">Fecha fin *</label>
+              <input type="date" x-model="newPeriod.date_to" class="cfg-input" />
+            </div>
+            <button @click="addPeriod()"
+                    :disabled="!newPeriod.period_label.trim() || !newPeriod.date_from || !newPeriod.date_to"
+                    class="cfg-btn-primary">
+              <i class="fa-solid fa-plus"></i>Agregar
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
-  </div>
+    <!-- ══════════════════════════════════════════════════════
+         TAB: REGLAS (tipos de servicio + tipos de doc + estados + prefijos)
+    ══════════════════════════════════════════════════════════ -->
+    <div x-show="tab === 'reglas'" class="space-y-4">
 
-  <!-- ═══════════════════════════════════════════════════════════════
-       TAB: SISTEMA
-  ════════════════════════════════════════════════════════════════ -->
-  <div x-show="tab === 'sistema'" class="space-y-5">
-
-    <!-- Estado actual -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-      <div class="flex items-start gap-4 mb-5">
-        <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-             :class="systemSettings.audit_data_root ? 'bg-green-100' : 'bg-amber-100'">
-          <i class="fa-solid fa-folder-open text-lg"
-             :class="systemSettings.audit_data_root ? 'text-green-600' : 'text-amber-500'"></i>
+      <!-- Service Types -->
+      <div class="cfg-card">
+        <div class="cfg-card-header">
+          <i class="fa-solid fa-tags" style="color:var(--sky)"></i>
+          Tipos de servicio
         </div>
-        <div>
-          <h2 class="text-sm font-semibold text-gray-800 mb-0.5">Carpeta principal de auditorías</h2>
-          <p class="text-xs leading-relaxed"
-             :class="systemSettings.audit_data_root ? 'text-green-700' : 'text-amber-600'">
-            <template x-if="systemSettings.audit_data_root">
-              <span><i class="fa-solid fa-circle-check mr-1"></i>Configurada correctamente.</span>
+        <table class="cfg-table w-full">
+          <thead><tr><th>Código</th><th>Nombre</th><th>Prioridad</th><th></th></tr></thead>
+          <tbody>
+            <template x-for="st in serviceTypes" :key="st.id">
+              <tr>
+                <td class="font-mono text-xs">
+                  <template x-if="editingSTId !== st.id">
+                    <span style="color:var(--text-2)" x-text="st.code"></span>
+                  </template>
+                  <template x-if="editingSTId === st.id">
+                    <input type="text" x-model="editingST.code" class="cfg-input-sm editing w-24 font-mono uppercase"
+                           @input="editingST.code = editingST.code.toUpperCase()" />
+                  </template>
+                </td>
+                <td>
+                  <template x-if="editingSTId !== st.id">
+                    <span x-text="st.display_name"></span>
+                  </template>
+                  <template x-if="editingSTId === st.id">
+                    <input type="text" x-model="editingST.display_name" class="cfg-input-sm editing w-full" />
+                  </template>
+                </td>
+                <td style="width:6rem">
+                  <template x-if="editingSTId !== st.id">
+                    <span style="color:var(--text-3)" x-text="st.priority"></span>
+                  </template>
+                  <template x-if="editingSTId === st.id">
+                    <input type="number" x-model="editingST.priority" class="cfg-input-sm editing w-16" />
+                  </template>
+                </td>
+                <td>
+                  <div class="flex items-center justify-end gap-1">
+                    <template x-if="editingSTId !== st.id">
+                      <button @click="startEditST(st)" class="cfg-btn-sm cfg-btn-sky"><i class="fa-solid fa-pen text-xs"></i></button>
+                    </template>
+                    <template x-if="editingSTId === st.id">
+                      <button @click="saveSTEdit(st.id)" class="cfg-btn-sm" style="background:var(--sky);color:#fff;border-color:var(--sky)"><i class="fa-solid fa-check text-xs"></i></button>
+                    </template>
+                    <template x-if="editingSTId === st.id">
+                      <button @click="editingSTId = null" class="cfg-btn-sm"><i class="fa-solid fa-xmark text-xs"></i></button>
+                    </template>
+                    <template x-if="confirmDeleteSTId !== st.id && editingSTId !== st.id">
+                      <button @click="confirmDeleteSTId = st.id" class="cfg-btn-sm cfg-btn-red"><i class="fa-solid fa-trash text-xs"></i></button>
+                    </template>
+                    <template x-if="confirmDeleteSTId === st.id">
+                      <button @click="deleteServiceType(st.id)" class="cfg-btn-sm cfg-btn-confirm">Eliminar</button>
+                    </template>
+                    <template x-if="confirmDeleteSTId === st.id">
+                      <button @click="confirmDeleteSTId = null" class="cfg-btn-sm">Cancelar</button>
+                    </template>
+                  </div>
+                </td>
+              </tr>
             </template>
-            <template x-if="!systemSettings.audit_data_root">
-              <span><i class="fa-solid fa-triangle-exclamation mr-1"></i>No configurada — el pipeline no podrá acceder a los archivos.</span>
-            </template>
-          </p>
-        </div>
-      </div>
-
-      <!-- Explicación visual -->
-      <div class="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-5">
-        <p class="text-xs font-semibold text-gray-600 mb-2">¿Cómo deben estar organizadas las carpetas?</p>
-        <div class="font-mono text-xs text-gray-700 leading-6 space-y-0.5">
-          <div><i class="fa-solid fa-folder text-amber-400 mr-1"></i><span class="font-semibold">Carpeta principal</span> <span class="text-gray-400">← esta es la que configuras aquí</span></div>
-          <div class="ml-4"><i class="fa-solid fa-folder text-amber-400 mr-1"></i>HOSPITAL #1 <span class="text-gray-400">← nombre de la institución</span></div>
-          <div class="ml-8"><i class="fa-solid fa-folder text-amber-400 mr-1"></i>DD-DD-MMMM <span class="text-gray-400">← período</span></div>
-          <div class="ml-12"><i class="fa-solid fa-folder text-sky-400 mr-1"></i>DRIVE</div>
-          <div class="ml-12"><i class="fa-solid fa-folder text-sky-400 mr-1"></i>STAGE</div>
-          <div class="ml-12"><i class="fa-solid fa-folder text-sky-400 mr-1"></i>AUDIT</div>
-          <div class="ml-4"><i class="fa-solid fa-folder text-amber-400 mr-1"></i>HOSPITAL #2</div>
-          <div class="ml-8 text-gray-400">…</div>
-        </div>
-      </div>
-
-      <!-- Campo de configuración -->
-      <div class="max-w-lg">
-        <label class="block text-xs font-semibold text-gray-700 mb-1">
-          Ubicación de la carpeta principal
-        </label>
-        <p class="text-xs text-gray-500 mb-2.5 leading-relaxed">
-          Copia y pega aquí la ruta de la carpeta tal como aparece en el Explorador de archivos de Windows.<br>
-          Puedes obtenerla haciendo clic en la barra de direcciones del Explorador de archivos.
-        </p>
-        <div class="flex gap-2">
-          <input type="text" x-model="systemSettings.audit_data_root"
-                 placeholder="C:\Users\tu_usuario\Desktop\Carpeta compartida"
-                 class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500" />
-          <button @click="saveSystemSettings()"
-                  :disabled="savingSystem"
-                  class="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
-            <span x-show="!savingSystem"><i class="fa-solid fa-floppy-disk mr-1"></i>Guardar</span>
-            <span x-show="savingSystem"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Guardando…</span>
+          </tbody>
+        </table>
+        <div class="flex gap-2 px-4 py-3" style="border-top:1px solid var(--border);background:var(--bg-subtle)">
+          <input type="text" x-model="newST.code" placeholder="Código" class="cfg-input w-28 font-mono uppercase"
+                 @input="newST.code = newST.code.toUpperCase()" />
+          <input type="text" x-model="newST.display_name" placeholder="Nombre" class="cfg-input flex-1" />
+          <input type="number" x-model="newST.priority" placeholder="Prioridad" class="cfg-input w-24" />
+          <button @click="addServiceType()" :disabled="!newST.code.trim() || !newST.display_name.trim()" class="cfg-btn-primary">
+            <i class="fa-solid fa-plus"></i>
           </button>
         </div>
       </div>
+
+      <!-- Doc Types -->
+      <div class="cfg-card">
+        <div class="cfg-card-header">
+          <i class="fa-solid fa-file-lines" style="color:var(--sky)"></i>
+          Tipos de documento
+        </div>
+        <table class="cfg-table w-full">
+          <thead><tr><th>Código</th><th>Descripción</th><th>Prefijo</th><th></th></tr></thead>
+          <tbody>
+            <template x-for="dt in docTypes" :key="dt.id">
+              <tr>
+                <td class="font-mono text-xs">
+                  <template x-if="editingDTId !== dt.id">
+                    <span style="color:var(--text-2)" x-text="dt.code"></span>
+                  </template>
+                  <template x-if="editingDTId === dt.id">
+                    <input type="text" x-model="editingDT.code" class="cfg-input-sm editing w-24 font-mono uppercase"
+                           @input="editingDT.code = editingDT.code.toUpperCase()" />
+                  </template>
+                </td>
+                <td>
+                  <template x-if="editingDTId !== dt.id">
+                    <span x-text="dt.description"></span>
+                  </template>
+                  <template x-if="editingDTId === dt.id">
+                    <input type="text" x-model="editingDT.description" class="cfg-input-sm editing w-full" />
+                  </template>
+                </td>
+                <td class="font-mono text-xs" style="width:6rem">
+                  <template x-if="editingDTId !== dt.id">
+                    <span style="color:var(--text-3)" x-text="dt.prefix || '—'"></span>
+                  </template>
+                  <template x-if="editingDTId === dt.id">
+                    <input type="text" x-model="editingDT.prefix" class="cfg-input-sm editing w-20 font-mono" />
+                  </template>
+                </td>
+                <td>
+                  <div class="flex items-center justify-end gap-1">
+                    <template x-if="editingDTId !== dt.id">
+                      <button @click="startEditDT(dt)" class="cfg-btn-sm cfg-btn-sky"><i class="fa-solid fa-pen text-xs"></i></button>
+                    </template>
+                    <template x-if="editingDTId === dt.id">
+                      <button @click="saveDTEdit(dt.id)" class="cfg-btn-sm" style="background:var(--sky);color:#fff;border-color:var(--sky)"><i class="fa-solid fa-check text-xs"></i></button>
+                    </template>
+                    <template x-if="editingDTId === dt.id">
+                      <button @click="editingDTId = null" class="cfg-btn-sm"><i class="fa-solid fa-xmark text-xs"></i></button>
+                    </template>
+                    <template x-if="confirmDeleteDTId !== dt.id && editingDTId !== dt.id">
+                      <button @click="confirmDeleteDTId = dt.id" class="cfg-btn-sm cfg-btn-red"><i class="fa-solid fa-trash text-xs"></i></button>
+                    </template>
+                    <template x-if="confirmDeleteDTId === dt.id">
+                      <button @click="deleteDocType(dt.id)" class="cfg-btn-sm cfg-btn-confirm">Eliminar</button>
+                    </template>
+                    <template x-if="confirmDeleteDTId === dt.id">
+                      <button @click="confirmDeleteDTId = null" class="cfg-btn-sm">Cancelar</button>
+                    </template>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="flex gap-2 px-4 py-3" style="border-top:1px solid var(--border);background:var(--bg-subtle)">
+          <input type="text" x-model="newDT.code" placeholder="Código" class="cfg-input w-28 font-mono uppercase"
+                 @input="newDT.code = newDT.code.toUpperCase()" />
+          <input type="text" x-model="newDT.description" placeholder="Descripción" class="cfg-input flex-1" />
+          <input type="text" x-model="newDT.prefix" placeholder="Prefijo" class="cfg-input w-24 font-mono" />
+          <button @click="addDocType()" :disabled="!newDT.code.trim() || !newDT.description.trim()" class="cfg-btn-primary">
+            <i class="fa-solid fa-plus"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Folder Statuses -->
+      <div class="cfg-card">
+        <div class="cfg-card-header">
+          <i class="fa-solid fa-folder" style="color:var(--sky)"></i>
+          Estados de carpeta
+        </div>
+        <table class="cfg-table w-full">
+          <thead><tr><th style="width:3rem">ID</th><th>Estado</th><th></th></tr></thead>
+          <tbody>
+            <template x-for="fs in folderStatuses" :key="fs.id">
+              <tr>
+                <td class="text-xs" style="color:var(--text-3)" x-text="fs.id"></td>
+                <td>
+                  <template x-if="editingFSId !== fs.id">
+                    <span class="font-mono text-xs" x-text="fs.status"></span>
+                  </template>
+                  <template x-if="editingFSId === fs.id">
+                    <input type="text" x-model="editingFSVal" class="cfg-input-sm editing w-36 font-mono" />
+                  </template>
+                </td>
+                <td>
+                  <div class="flex items-center justify-end gap-1">
+                    <template x-if="editingFSId !== fs.id">
+                      <button @click="startEditFS(fs)" class="cfg-btn-sm cfg-btn-sky"><i class="fa-solid fa-pen text-xs"></i></button>
+                    </template>
+                    <template x-if="editingFSId === fs.id">
+                      <button @click="saveFSEdit(fs.id)" class="cfg-btn-sm" style="background:var(--sky);color:#fff;border-color:var(--sky)"><i class="fa-solid fa-check text-xs"></i></button>
+                    </template>
+                    <template x-if="editingFSId === fs.id">
+                      <button @click="editingFSId = null" class="cfg-btn-sm"><i class="fa-solid fa-xmark text-xs"></i></button>
+                    </template>
+                    <template x-if="confirmDeleteFSId !== fs.id && editingFSId !== fs.id">
+                      <button @click="confirmDeleteFSId = fs.id" class="cfg-btn-sm cfg-btn-red"><i class="fa-solid fa-trash text-xs"></i></button>
+                    </template>
+                    <template x-if="confirmDeleteFSId === fs.id">
+                      <button @click="deleteFolderStatus(fs.id)" class="cfg-btn-sm cfg-btn-confirm">Eliminar</button>
+                    </template>
+                    <template x-if="confirmDeleteFSId === fs.id">
+                      <button @click="confirmDeleteFSId = null" class="cfg-btn-sm">Cancelar</button>
+                    </template>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="flex gap-2 px-4 py-3" style="border-top:1px solid var(--border);background:var(--bg-subtle)">
+          <input type="text" x-model="newFS.status" placeholder="Código del estado (ej. AUDITADA)"
+                 class="cfg-input flex-1 font-mono uppercase"
+                 @input="newFS.status = newFS.status.toUpperCase()" />
+          <button @click="addFolderStatus()" :disabled="!newFS.status.trim()" class="cfg-btn-primary">
+            <i class="fa-solid fa-plus"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Prefix Corrections (formerly "Prefijos" tab) -->
+      <div class="cfg-card">
+        <div class="cfg-card-header">
+          <i class="fa-solid fa-tag" style="color:var(--violet)"></i>
+          Correcciones de prefijos
+          <span class="ml-auto text-xs font-normal font-mono" style="color:var(--text-3)"
+                x-text="prefixCorrections.length + ' regla(s)'"></span>
+        </div>
+
+        <!-- Explanation -->
+        <div class="px-5 py-3 text-xs" style="border-bottom:1px solid var(--border);background:var(--bg-subtle);color:var(--text-2)">
+          Define prefijos incorrectos y su forma correcta. La etapa
+          <code style="background:var(--bg-surface);border:1px solid var(--border);padding:1px 4px;border-radius:4px;font-size:11px">NORMALIZE_FILES</code>
+          aplicará estos renombrados automáticamente.
+        </div>
+
+        <!-- Add form -->
+        <div class="px-5 py-4" style="border-bottom:1px solid var(--border)">
+          <div class="flex items-center gap-3 flex-wrap">
+            <div class="flex items-center gap-2">
+              <input type="text" x-model="newPC.wrong_prefix"
+                     @input="newPC.wrong_prefix = newPC.wrong_prefix.toUpperCase()"
+                     placeholder="INCORRECTO" maxlength="20"
+                     class="cfg-input w-32 font-mono uppercase text-center"
+                     style="border-color:var(--red-border);background:var(--red-soft);color:var(--red)" />
+              <div class="flex items-center gap-1" style="color:var(--text-3)">
+                <div style="width:1.5rem;height:1px;background:var(--border)"></div>
+                <i class="fa-solid fa-arrow-right text-xs"></i>
+                <div style="width:1.5rem;height:1px;background:var(--border)"></div>
+              </div>
+              <input type="text" x-model="newPC.correct_prefix"
+                     @input="newPC.correct_prefix = newPC.correct_prefix.toUpperCase()"
+                     placeholder="CORRECTO" maxlength="20"
+                     class="cfg-input w-32 font-mono uppercase text-center"
+                     style="border-color:var(--emerald-border);background:var(--emerald-soft);color:var(--emerald)" />
+            </div>
+            <input type="text" x-model="newPC.notes" placeholder="Nota (opcional)"
+                   class="cfg-input flex-1 min-w-[10rem]" />
+            <button @click="addPrefixCorrection()"
+                    :disabled="!newPC.wrong_prefix.trim() || !newPC.correct_prefix.trim()"
+                    class="cfg-btn-primary shrink-0"
+                    style="background:var(--violet)">
+              <i class="fa-solid fa-plus"></i>Agregar
+            </button>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <template x-if="prefixCorrections.length === 0">
+          <div class="px-5 py-10 text-center text-sm" style="color:var(--text-3)">
+            <i class="fa-solid fa-tags text-2xl mb-3 block"></i>
+            No hay correcciones configuradas aún.
+          </div>
+        </template>
+
+        <table class="cfg-table w-full" x-show="prefixCorrections.length > 0">
+          <thead><tr>
+            <th>Incorrecto</th>
+            <th style="width:2rem"></th>
+            <th>Correcto</th>
+            <th>Nota</th>
+            <th></th>
+          </tr></thead>
+          <tbody>
+            <template x-for="pc in prefixCorrections" :key="pc.id">
+              <tr>
+                <td>
+                  <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono font-semibold"
+                        style="background:var(--red-soft);color:var(--red);border:1px solid var(--red-border)"
+                        x-text="pc.wrong_prefix"></span>
+                </td>
+                <td class="text-center" style="color:var(--text-3)">
+                  <i class="fa-solid fa-arrow-right text-xs"></i>
+                </td>
+                <td>
+                  <template x-if="editingPCId !== pc.id">
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono font-semibold"
+                          style="background:var(--emerald-soft);color:var(--emerald);border:1px solid var(--emerald-border)"
+                          x-text="pc.correct_prefix"></span>
+                  </template>
+                  <template x-if="editingPCId === pc.id">
+                    <input type="text" x-model="editingPC.correct_prefix"
+                           @input="editingPC.correct_prefix = editingPC.correct_prefix.toUpperCase()"
+                           maxlength="20" class="cfg-input-sm editing w-28 font-mono uppercase"
+                           style="border-color:var(--emerald-border);color:var(--emerald)" />
+                  </template>
+                </td>
+                <td class="text-xs max-w-[200px] truncate" style="color:var(--text-3)">
+                  <template x-if="editingPCId !== pc.id">
+                    <span x-text="pc.notes || '—'"></span>
+                  </template>
+                  <template x-if="editingPCId === pc.id">
+                    <input type="text" x-model="editingPC.notes" class="cfg-input-sm editing w-full" />
+                  </template>
+                </td>
+                <td>
+                  <div class="flex items-center justify-end gap-1">
+                    <template x-if="editingPCId !== pc.id">
+                      <button @click="startEditPC(pc)" class="cfg-btn-sm cfg-btn-violet"><i class="fa-solid fa-pen text-xs"></i></button>
+                    </template>
+                    <template x-if="editingPCId === pc.id">
+                      <button @click="savePCEdit(pc.id)" class="cfg-btn-sm" style="background:var(--violet);color:#fff;border-color:var(--violet)"><i class="fa-solid fa-check text-xs"></i></button>
+                    </template>
+                    <template x-if="editingPCId === pc.id">
+                      <button @click="editingPCId = null" class="cfg-btn-sm"><i class="fa-solid fa-xmark text-xs"></i></button>
+                    </template>
+                    <template x-if="confirmDeletePCId !== pc.id && editingPCId !== pc.id">
+                      <button @click="confirmDeletePCId = pc.id" class="cfg-btn-sm cfg-btn-red"><i class="fa-solid fa-trash text-xs"></i></button>
+                    </template>
+                    <template x-if="confirmDeletePCId === pc.id">
+                      <button @click="deletePrefixCorrection(pc.id)" class="cfg-btn-sm cfg-btn-confirm">Eliminar</button>
+                    </template>
+                    <template x-if="confirmDeletePCId === pc.id">
+                      <button @click="confirmDeletePCId = null" class="cfg-btn-sm">Cancelar</button>
+                    </template>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
     </div>
 
-  </div>
+    <!-- ══════════════════════════════════════════════════════
+         TAB: SISTEMA
+    ══════════════════════════════════════════════════════════ -->
+    <div x-show="tab === 'sistema'" class="space-y-4">
 
-</div>
+      <div class="cfg-card p-5">
+        <!-- Status header -->
+        <div class="flex items-start gap-4 mb-5">
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+               :style="systemSettings.audit_data_root ? 'background:var(--emerald-soft)' : 'background:var(--amber-soft)'">
+            <i class="fa-solid fa-folder-open text-lg"
+               :style="systemSettings.audit_data_root ? 'color:var(--emerald)' : 'color:var(--amber)'"></i>
+          </div>
+          <div>
+            <h2 class="text-sm font-semibold mb-0.5" style="color:var(--text-1)">Carpeta principal de auditorías</h2>
+            <p class="text-xs leading-relaxed"
+               :style="systemSettings.audit_data_root ? 'color:var(--emerald)' : 'color:var(--amber)'">
+              <template x-if="systemSettings.audit_data_root">
+                <span><i class="fa-solid fa-circle-check mr-1"></i>Configurada correctamente.</span>
+              </template>
+              <template x-if="!systemSettings.audit_data_root">
+                <span><i class="fa-solid fa-triangle-exclamation mr-1"></i>No configurada — el pipeline no podrá acceder a los archivos.</span>
+              </template>
+            </p>
+          </div>
+        </div>
+
+        <!-- Folder structure diagram -->
+        <div class="rounded-xl p-4 mb-5 font-mono text-xs leading-6"
+             style="background:var(--bg-subtle);border:1px solid var(--border)">
+          <p class="font-sans text-xs font-semibold mb-2" style="color:var(--text-2)">¿Cómo deben estar organizadas las carpetas?</p>
+          <div style="color:var(--text-1)"><i class="fa-solid fa-folder mr-1" style="color:var(--amber)"></i><strong>Carpeta principal</strong> <span style="color:var(--text-3)">← esta es la que configuras aquí</span></div>
+          <div class="ml-4" style="color:var(--text-1)"><i class="fa-solid fa-folder mr-1" style="color:var(--amber)"></i>HOSPITAL #1 <span style="color:var(--text-3)">← nombre de la institución</span></div>
+          <div class="ml-8" style="color:var(--text-1)"><i class="fa-solid fa-folder mr-1" style="color:var(--amber)"></i>DD-DD-MMMM <span style="color:var(--text-3)">← período</span></div>
+          <div class="ml-12" style="color:var(--sky)"><i class="fa-solid fa-folder mr-1"></i>DRIVE</div>
+          <div class="ml-12" style="color:var(--sky)"><i class="fa-solid fa-folder mr-1"></i>STAGE</div>
+          <div class="ml-12" style="color:var(--sky)"><i class="fa-solid fa-folder mr-1"></i>AUDIT</div>
+          <div class="ml-4" style="color:var(--text-1)"><i class="fa-solid fa-folder mr-1" style="color:var(--amber)"></i>HOSPITAL #2</div>
+          <div class="ml-8" style="color:var(--text-3)">…</div>
+        </div>
+
+        <!-- Input -->
+        <div class="max-w-xl">
+          <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">
+            Ubicación de la carpeta principal
+          </label>
+          <p class="text-xs mb-2.5 leading-relaxed" style="color:var(--text-3)">
+            Copia y pega aquí la ruta tal como aparece en el Explorador de archivos de Windows.
+          </p>
+          <div class="flex gap-2">
+            <input type="text" x-model="systemSettings.audit_data_root"
+                   placeholder="C:\Users\tu_usuario\Desktop\Carpeta compartida"
+                   class="cfg-input flex-1" />
+            <button @click="saveSystemSettings()" :disabled="savingSystem" class="cfg-btn-primary whitespace-nowrap">
+              <span x-show="!savingSystem"><i class="fa-solid fa-floppy-disk"></i>Guardar</span>
+              <span x-show="savingSystem"><i class="fa-solid fa-spinner fa-spin"></i>Guardando…</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /wrapper -->
 {% endblock %}
 
 {% block extra_scripts %}
@@ -1247,6 +1098,14 @@ function settingsApp() {
   return {
     tab: 'instituciones',
 
+    navTabs: [
+      { id: 'instituciones', icon: 'fa-hospital',          label: 'Instituciones', scope: 'global'      },
+      { id: 'reglas',        icon: 'fa-sliders',            label: 'Reglas',        scope: 'global'      },
+      { id: 'sistema',       icon: 'fa-gear',               label: 'Sistema',       scope: 'global'      },
+      { id: 'mapeos',        icon: 'fa-arrows-left-right',  label: 'Mapeos',        scope: 'institution' },
+      { id: 'periodos',      icon: 'fa-calendar-days',      label: 'Períodos',      scope: 'institution' },
+    ],
+
     // Instituciones
     institutions: [],
     editingId: null,
@@ -1254,12 +1113,11 @@ function settingsApp() {
     confirmDeleteInstId: null,
     uploadingLogoFor: null,
     currentInstHasDriveCreds: false,
-    driveCredsStatus: '',   // '' | 'ok' | 'error'
+    driveCredsStatus: '',
     driveCredsError: '',
     form: { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'' },
 
     // Mapeos
-    mapInstId: '',
     mapSubTab: 'admins',
     allAdmins: [], allContracts: [], allServices: [], serviceTypeDocs: [],
     editingAdminId: null, editingAdminVal: '', editingAdminType: '',
@@ -1272,7 +1130,6 @@ function settingsApp() {
     stdPending: {},
 
     // Períodos
-    periodInstId: '',
     periods: [],
     confirmDeletePeriodId: null,
     newPeriod: { period_label:'', date_from:'', date_to:'' },
@@ -1291,7 +1148,7 @@ function settingsApp() {
     newDT: { code:'', description:'', prefix:'' },
     newFS: { status:'' },
 
-    // Prefijos
+    // Prefijos (now part of Reglas tab)
     prefixCorrections: [],
     confirmDeletePCId: null,
     editingPCId: null, editingPC: { correct_prefix:'', notes:'' },
@@ -1316,6 +1173,13 @@ function settingsApp() {
       this.prefixCorrections  = await pcRes.json();
       const sys = await sysRes.json();
       this.systemSettings = { audit_data_root: sys.audit_data_root || '' };
+
+      // Reload tab data when the sidebar institution changes
+      this.$watch(() => this.$store.ctx.institutionId, (newId) => {
+        if (!newId) return;
+        if (this.tab === 'mapeos') this.loadMappings();
+        if (this.tab === 'periodos') this.loadPeriods();
+      });
     },
 
     showToast(msg, type = 'success') {
@@ -1325,6 +1189,9 @@ function settingsApp() {
 
     switchTab(t) {
       this.tab = t;
+      const instId = this.$store.ctx.institutionId;
+      if (t === 'mapeos' && instId) this.loadMappings();
+      if (t === 'periodos' && instId) this.loadPeriods();
     },
 
     // ---- HELPERS ----
@@ -1430,8 +1297,8 @@ function settingsApp() {
 
     // ---- MAPEOS ----
     async loadMappings() {
-      if (!this.mapInstId) return;
-      const id = this.mapInstId;
+      const id = this.$store.ctx.institutionId;
+      if (!id) return;
       const [admins, contracts, services, stdocs] = await Promise.all([
         fetch(`/api/institutions/${id}/admins`).then(r => r.json()),
         fetch(`/api/institutions/${id}/contracts`).then(r => r.json()),
@@ -1450,11 +1317,12 @@ function settingsApp() {
       else this.showToast('Error al actualizar.', 'error');
     },
     async addAdmin() {
-      if (!this.mapInstId || !this.newAdmin.raw_admin.trim()) return;
+      const id = this.$store.ctx.institutionId;
+      if (!id || !this.newAdmin.raw_admin.trim()) return;
       const body = { raw_admin: this.newAdmin.raw_admin };
       if (this.newAdmin.canonical_admin) body.canonical_admin = this.newAdmin.canonical_admin;
       if (this.newAdmin.type) body.type = this.newAdmin.type;
-      const res = await fetch(`/api/institutions/${this.mapInstId}/admins`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const res = await fetch(`/api/institutions/${id}/admins`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
       if (res.ok) { this.newAdmin = {raw_admin:'',canonical_admin:'',type:''}; await this.loadMappings(); this.showToast('Administradora agregada.'); }
       else this.showToast('Error al agregar.', 'error');
     },
@@ -1472,10 +1340,11 @@ function settingsApp() {
       else this.showToast('Error al actualizar.', 'error');
     },
     async addContract() {
-      if (!this.mapInstId || !this.newContract.raw_contract.trim()) return;
+      const id = this.$store.ctx.institutionId;
+      if (!id || !this.newContract.raw_contract.trim()) return;
       const body = { raw_contract: this.newContract.raw_contract };
       if (this.newContract.canonical_contract) body.canonical_contract = this.newContract.canonical_contract;
-      const res = await fetch(`/api/institutions/${this.mapInstId}/contracts`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const res = await fetch(`/api/institutions/${id}/contracts`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
       if (res.ok) { this.newContract = {raw_contract:'',canonical_contract:''}; await this.loadMappings(); this.showToast('Contrato agregado.'); }
       else this.showToast('Error al agregar.', 'error');
     },
@@ -1493,8 +1362,9 @@ function settingsApp() {
       else this.showToast('Error al actualizar.', 'error');
     },
     async addService() {
-      if (!this.mapInstId || !this.newService.raw_service.trim() || !this.newService.service_type_id) return;
-      const res = await fetch(`/api/institutions/${this.mapInstId}/services`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ raw_service: this.newService.raw_service, service_type_id: parseInt(this.newService.service_type_id) }) });
+      const id = this.$store.ctx.institutionId;
+      if (!id || !this.newService.raw_service.trim() || !this.newService.service_type_id) return;
+      const res = await fetch(`/api/institutions/${id}/services`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ raw_service: this.newService.raw_service, service_type_id: parseInt(this.newService.service_type_id) }) });
       if (res.ok) { this.newService = {raw_service:'',service_type_id:''}; await this.loadMappings(); this.showToast('Servicio agregado.'); }
       else this.showToast('Error al agregar.', 'error');
     },
@@ -1509,16 +1379,17 @@ function settingsApp() {
       return this.serviceTypeDocs.some(d => d.service_type_id === stId && d.doc_type_id === dtId);
     },
     async toggleSTD(stId, dtId, checked) {
+      const instId = this.$store.ctx.institutionId;
       const key = `${stId}-${dtId}`;
       this.stdPending = { ...this.stdPending, [key]: true };
       if (checked) {
-        const res = await fetch(`/api/institutions/${this.mapInstId}/service-type-documents`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ institution_id: parseInt(this.mapInstId), service_type_id: stId, doc_type_id: dtId }) });
+        const res = await fetch(`/api/institutions/${instId}/service-type-documents`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ institution_id: parseInt(instId), service_type_id: stId, doc_type_id: dtId }) });
         if (res.ok) {
           const obj = await res.json();
           this.serviceTypeDocs.push(obj);
         } else this.showToast('Error al agregar.', 'error');
       } else {
-        const res = await fetch(`/api/institutions/${this.mapInstId}/service-type-documents/${stId}/${dtId}`, { method:'DELETE' });
+        const res = await fetch(`/api/institutions/${instId}/service-type-documents/${stId}/${dtId}`, { method:'DELETE' });
         if (res.ok || res.status === 204) {
           this.serviceTypeDocs = this.serviceTypeDocs.filter(d => !(d.service_type_id === stId && d.doc_type_id === dtId));
         } else this.showToast('No se pudo eliminar.', 'error');
@@ -1528,12 +1399,14 @@ function settingsApp() {
 
     // ---- PERÍODOS ----
     async loadPeriods() {
-      if (!this.periodInstId) return;
-      this.periods = await fetch(`/api/institutions/${this.periodInstId}/periods`).then(r => r.json());
+      const id = this.$store.ctx.institutionId;
+      if (!id) return;
+      this.periods = await fetch(`/api/institutions/${id}/periods`).then(r => r.json());
     },
     async addPeriod() {
-      if (!this.periodInstId || !this.newPeriod.period_label.trim() || !this.newPeriod.date_from || !this.newPeriod.date_to) return;
-      const res = await fetch(`/api/institutions/${this.periodInstId}/periods`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ institution_id: parseInt(this.periodInstId), period_label: this.newPeriod.period_label, date_from: this.newPeriod.date_from, date_to: this.newPeriod.date_to }) });
+      const id = this.$store.ctx.institutionId;
+      if (!id || !this.newPeriod.period_label.trim() || !this.newPeriod.date_from || !this.newPeriod.date_to) return;
+      const res = await fetch(`/api/institutions/${id}/periods`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ institution_id: parseInt(id), period_label: this.newPeriod.period_label, date_from: this.newPeriod.date_from, date_to: this.newPeriod.date_to }) });
       if (res.ok) { this.newPeriod = {period_label:'',date_from:'',date_to:''}; await this.loadPeriods(); this.showToast('Período creado.'); }
       else this.showToast('Error al crear período.', 'error');
     },
