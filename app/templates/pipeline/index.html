@@ -404,16 +404,26 @@
                             style="background:var(--sky-soft);color:var(--sky);border:1px solid var(--sky-border)">
                       Renombrar
                     </button>
-                    <button @click="sob._done = true"
+                    <button @click="applyDelete(inv, sob)"
+                            class="text-[11px] font-semibold px-2.5 py-1 rounded-lg shrink-0"
+                            style="background:var(--red-soft,rgba(239,68,68,0.08));color:#ef4444;border:1px solid rgba(239,68,68,0.2)"
+                            title="Eliminar archivo del disco">
+                      <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                    <button @click="sob._done = true; sob._skipped = true"
                             class="text-[11px] px-2 py-1 rounded-lg shrink-0"
                             style="color:var(--text-3)">
                       <i class="fa-solid fa-xmark"></i>
                     </button>
                   </div>
                   <!-- Done state -->
-                  <div x-show="sob._done" class="text-[11px]" style="color:var(--emerald)">
+                  <div x-show="sob._done && !sob._deleted" class="text-[11px]" style="color:var(--emerald)">
                     <i class="fa-solid fa-check mr-1"></i>
                     <span x-text="sob._new_filename || sob.filename"></span>
+                  </div>
+                  <div x-show="sob._done && sob._deleted" class="text-[11px]" style="color:#ef4444">
+                    <i class="fa-solid fa-trash-can mr-1"></i>
+                    <span x-text="sob.filename"></span> — eliminado
                   </div>
                 </div>
               </template>
@@ -705,6 +715,7 @@ function pipeline() {
                         selected_doc_type_id: s.suggested_doc_type_id || '',
                         _done: false,
                         _new_filename: null,
+                        _deleted: false,
                       }))
                     }));
                   } catch(e) {}
@@ -735,6 +746,22 @@ function pipeline() {
       this.currentStageLabel = '';
       this.logLines.push('─── PIPELINE FINALIZADO ───');
       this.scrollLog();
+    },
+
+    async applyDelete(inv, sob) {
+      if (!confirm(`¿Eliminar "${sob.filename}" del disco?`)) return;
+      const res = await fetch(`/api/invoices/${inv.invoice_id}/delete-surplus`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ folder_path: inv.folder_path, filename: sob.filename })
+      });
+      if (res.ok) {
+        sob._deleted = true;
+        sob._done = true;
+      } else {
+        const err = await res.json().catch(() => ({detail: 'Error desconocido'}));
+        alert('Error: ' + (err.detail || JSON.stringify(err)));
+      }
     },
 
     async applyRename(inv, sob) {

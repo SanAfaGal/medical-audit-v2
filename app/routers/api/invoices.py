@@ -291,3 +291,44 @@ async def rename_surplus_file(
     await db.commit()
 
     return {"ok": True, "new_filename": new_filename}
+
+
+class DeleteSurplusRequest(BaseModel):
+    folder_path: str
+    filename: str
+
+
+@router.post("/{invoice_id}/delete-surplus")
+async def delete_surplus_file(
+    invoice_id: int,
+    data: DeleteSurplusRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a surplus file from disk."""
+    import os
+
+    from app.paths import to_container_path
+    from app.repositories.rules_repo import RulesRepo
+
+    repo = InvoiceRepo(db)
+    invoice = await repo.get_by_id(invoice_id)
+    if not invoice:
+        raise HTTPException(404, "Factura no encontrada")
+
+    rules_repo = RulesRepo(db)
+    sys_settings = await rules_repo.get_system_settings()
+    if not sys_settings or not sys_settings.audit_data_root:
+        raise HTTPException(500, "audit_data_root no configurado")
+    audit_root = to_container_path(sys_settings.audit_data_root)
+    folder = Path(data.folder_path)
+    try:
+        folder.relative_to(audit_root)
+    except ValueError:
+        raise HTTPException(400, "Ruta fuera del directorio de auditoría")
+
+    target = folder / data.filename
+    if not target.exists():
+        raise HTTPException(404, "Archivo no encontrado en disco")
+
+    os.remove(target)
+    return {"ok": True}
