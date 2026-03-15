@@ -414,20 +414,20 @@
         <table class="w-full text-xs">
           <thead>
             <tr class="bg-gray-50 border-b border-gray-100">
-              <th class="px-3 py-2.5 w-9 text-center">
+              <th class="px-3 py-1.5 w-9 text-center">
                 <input type="checkbox"
                   :checked="pageAllSelected"
                   :indeterminate="somethingSelected && !pageAllSelected"
                   @change="togglePageSelection($event)"
                   class="rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer w-3.5 h-3.5" />
               </th>
-              <th class="text-left px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Factura</th>
-              <th class="text-left px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider">Paciente</th>
-              <th class="text-left px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">Administradora</th>
-              <th class="text-left px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Contrato</th>
-              <th class="text-left px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Servicio</th>
-              <th class="text-left px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Estado</th>
-              <th class="text-center px-3 py-2.5 font-semibold text-gray-500 uppercase tracking-wider">Hall.</th>
+              <th class="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Factura</th>
+              <th class="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider">Paciente</th>
+              <th class="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">Administradora</th>
+              <th class="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Contrato</th>
+              <th class="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Servicio</th>
+              <th class="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Estado</th>
+              <th class="text-center px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider">Hall.</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-50">
@@ -444,44 +444,46 @@
                   @click="selectInvoice(inv)">
 
                 <!-- Checkbox — click doesn't open detail -->
-                <td class="px-3 py-2.5 text-center" @click.stop>
+                <td class="px-3 py-1.5 text-center" @click.stop>
                   <input type="checkbox"
                     :checked="selectedIds.has(inv.id)"
                     @change="toggleSelection(inv.id)"
                     class="rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer w-3.5 h-3.5" />
                 </td>
 
-                <td class="px-3 py-2.5 whitespace-nowrap">
+                <td class="px-3 py-1.5 whitespace-nowrap">
                   <span class="font-mono font-semibold text-teal-700 text-xs" x-text="inv.invoice_number"></span>
                 </td>
-                <td class="px-3 py-2.5 max-w-[180px]">
-                  <span class="truncate block text-gray-700" x-text="inv.patient_name || '—'"></span>
+                <td class="px-3 py-1.5 max-w-[180px]">
+                  <span class="truncate block text-xs text-gray-700" x-text="inv.patient_name || '—'"></span>
                 </td>
-                <td class="px-3 py-2.5 hidden md:table-cell max-w-[160px]">
-                  <span class="truncate block text-gray-600" x-text="inv.admin_canonical || '—'"></span>
-                  <template x-if="inv.admin_type">
-                    <span class="inline-block px-1.5 py-px rounded text-[10px] font-semibold bg-sky-100 text-sky-700 mt-0.5"
-                          x-text="inv.admin_type"></span>
-                  </template>
+                <td class="px-3 py-1.5 hidden md:table-cell max-w-[180px]">
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <span class="truncate text-xs text-gray-600" x-text="inv.admin_canonical || '—'"></span>
+                    <template x-if="inv.admin_type">
+                      <span class="shrink-0 px-1.5 py-px rounded text-[9px] font-semibold bg-sky-100 text-sky-700"
+                            x-text="inv.admin_type"></span>
+                    </template>
+                  </div>
                 </td>
-                <td class="px-3 py-2.5 text-gray-500 hidden lg:table-cell max-w-[140px]">
-                  <span class="truncate block" x-text="inv.contract_canonical || '—'"></span>
+                <td class="px-3 py-1.5 hidden lg:table-cell max-w-[140px]">
+                  <span class="truncate block text-xs text-gray-500" x-text="inv.contract_canonical || '—'"></span>
                 </td>
-                <td class="px-3 py-2.5 text-gray-500 hidden lg:table-cell whitespace-nowrap" x-text="inv.service_type_code || '—'"></td>
-                <td class="px-3 py-2.5">
-                  <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap"
+                <td class="px-3 py-1.5 text-xs text-gray-500 hidden lg:table-cell whitespace-nowrap" x-text="inv.service_type_code || '—'"></td>
+                <td class="px-3 py-1.5">
+                  <span class="inline-block px-2 py-px rounded-full text-[10px] font-semibold whitespace-nowrap"
                         :class="statusBadgeClass(inv.folder_status)"
                         x-text="inv.folder_status"></span>
                 </td>
-                <td class="px-3 py-2.5 text-center">
+                <td class="px-3 py-1.5 text-center">
                   <template x-if="inv.missing_file_count > 0">
-                    <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">
+                    <span class="inline-flex items-center gap-0.5 px-1.5 py-px rounded-full text-[10px] font-semibold bg-red-100 text-red-700">
                       <i class="fa-solid fa-triangle-exclamation text-[9px]"></i>
                       <span x-text="inv.missing_file_count"></span>
                     </span>
                   </template>
                   <template x-if="inv.missing_file_count === 0">
-                    <i class="fa-solid fa-circle-check text-emerald-400 text-sm"></i>
+                    <i class="fa-solid fa-circle-check text-emerald-400 text-xs"></i>
                   </template>
                 </td>
               </tr>
