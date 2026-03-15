@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Auditoría Médica{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -76,6 +77,271 @@
       --indigo-border:#c7d2fe;
     }
   </style>
+
+  <!-- ── Store global de UI ─────────────────────────────────────────────── -->
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.store('ui', {
+        consoleOpen: true,
+      });
+    });
+  </script>
+
+  <!-- ── Explorador PDF: componente Alpine ──────────────────────────────── -->
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('explorerApp', () => ({
+        explorerOpen: false,
+        rootFolder: 'DRIVE',
+        currentPath: '',
+        entries: [],
+        selectedEntry: null,
+        previewUrl: null,
+        pdfMode: 'none',
+        filterText: '',
+        renamingPath: null,
+        renameValue: '',
+        selectedPdfs: [],
+        mergeOutputName: 'resultado.pdf',
+        splitRanges: '',
+        thumbnails: [],
+        pageOrder: [],
+        reorderDragIdx: null,
+        toast: null,
+        panelWidth: 560,
+        _resizing: false,
+        _resizeStartX: 0,
+        _resizeStartWidth: 0,
+
+        get institutionId() { return Alpine.store('ctx').institutionId; },
+        get periodId()      { return Alpine.store('ctx').periodId; },
+
+        filteredEntries() {
+          if (!this.filterText) return this.entries;
+          const q = this.filterText.toLowerCase();
+          return this.entries.filter(e => e.name.toLowerCase().includes(q));
+        },
+
+        async load() {
+          if (!this.institutionId || !this.periodId) return;
+          const root = this.rootFolder;
+          const subPath = this.currentPath.split('/').slice(1).join('/');
+          const url = `/api/explorer/list?institution_id=${this.institutionId}&period_id=${this.periodId}&root=${root}&path=${encodeURIComponent(subPath)}`;
+          try {
+            const res = await fetch(url);
+            const data = await res.json();
+            this.entries = data.entries || [];
+          } catch {
+            this.entries = [];
+          }
+        },
+
+        async selectEntry(entry) {
+          this.selectedEntry = entry;
+          if (!entry.is_dir) {
+            this.previewUrl = `/api/explorer/file?institution_id=${this.institutionId}&period_id=${this.periodId}&path=${encodeURIComponent(entry.path)}`;
+            this.pdfMode = 'none';
+          }
+        },
+
+        navigateTo(path) {
+          this.currentPath = path;
+          this.selectedEntry = null;
+          this.previewUrl = null;
+          this.pdfMode = 'none';
+          this.load();
+        },
+
+        switchRoot(tab) {
+          this.rootFolder = tab;
+          this.currentPath = tab;
+          this.selectedEntry = null;
+          this.previewUrl = null;
+          this.pdfMode = 'none';
+          this.entries = [];
+          this.load();
+        },
+
+        goUp() {
+          const parts = this.currentPath.split('/').filter(Boolean);
+          if (parts.length <= 1) {
+            this.currentPath = this.rootFolder;
+          } else {
+            parts.pop();
+            this.currentPath = parts.join('/');
+          }
+          this.selectedEntry = null;
+          this.previewUrl = null;
+          this.load();
+        },
+
+        startRename(entry) {
+          this.renamingPath = entry.path;
+          this.renameValue = entry.name;
+          this.$nextTick(() => this.$refs.renameInput && this.$refs.renameInput.focus());
+        },
+
+        async commitRename(entry) {
+          if (!this.renameValue.trim() || this.renameValue === entry.name) {
+            this.renamingPath = null;
+            return;
+          }
+          const res = await fetch('/api/explorer/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              institution_id: this.institutionId,
+              period_id: this.periodId,
+              path: entry.path,
+              new_name: this.renameValue.trim(),
+            }),
+          });
+          const data = await res.json();
+          this.renamingPath = null;
+          this.showToast(data.ok, data.message);
+          if (data.ok) this.load();
+        },
+
+        // Drag-to-move
+        onDragStart(event, entry) {
+          event.dataTransfer.setData('text/plain', entry.path);
+        },
+
+        async onDrop(event, targetFolder) {
+          const srcPath = event.dataTransfer.getData('text/plain');
+          if (!srcPath || srcPath === targetFolder.path) return;
+          const res = await fetch('/api/explorer/move', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              institution_id: this.institutionId,
+              period_id: this.periodId,
+              src: srcPath,
+              dst_folder: targetFolder.path,
+            }),
+          });
+          const data = await res.json();
+          this.showToast(data.ok, data.message);
+          if (data.ok) this.load();
+        },
+
+        toggleMergePdf(path) {
+          const idx = this.selectedPdfs.indexOf(path);
+          if (idx >= 0) this.selectedPdfs.splice(idx, 1);
+          else this.selectedPdfs.push(path);
+        },
+
+        async executeMerge() {
+          if (this.selectedPdfs.length < 2) return;
+          const res = await fetch('/api/explorer/merge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              institution_id: this.institutionId,
+              period_id: this.periodId,
+              paths: this.selectedPdfs,
+              output_name: this.mergeOutputName || 'resultado.pdf',
+            }),
+          });
+          const data = await res.json();
+          this.showToast(data.ok, data.message);
+          if (data.ok) { this.pdfMode = 'none'; this.selectedPdfs = []; this.load(); }
+        },
+
+        async executeSplit() {
+          if (!this.selectedEntry) return;
+          const res = await fetch('/api/explorer/split', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              institution_id: this.institutionId,
+              period_id: this.periodId,
+              path: this.selectedEntry.path,
+              ranges: this.splitRanges.trim() || null,
+            }),
+          });
+          const data = await res.json();
+          this.showToast(data.ok, data.message);
+          if (data.ok) { this.pdfMode = 'none'; this.load(); }
+        },
+
+        async startReorder() {
+          if (!this.selectedEntry) return;
+          this.pdfMode = 'reorder';
+          this.thumbnails = [];
+          this.pageOrder = [];
+          const url = `/api/explorer/thumbnails?institution_id=${this.institutionId}&period_id=${this.periodId}&path=${encodeURIComponent(this.selectedEntry.path)}`;
+          try {
+            const res = await fetch(url);
+            const data = await res.json();
+            this.thumbnails = data.thumbnails || [];
+            this.pageOrder = this.thumbnails.map((_, i) => i);
+          } catch {
+            this.showToast(false, 'Error al cargar miniaturas');
+            this.pdfMode = 'none';
+          }
+        },
+
+        reorderDragStart(event, pos) {
+          this.reorderDragIdx = pos;
+        },
+
+        reorderDrop(event, toPos) {
+          if (this.reorderDragIdx === null || this.reorderDragIdx === toPos) return;
+          const item = this.pageOrder.splice(this.reorderDragIdx, 1)[0];
+          this.pageOrder.splice(toPos, 0, item);
+          this.reorderDragIdx = null;
+        },
+
+        async executeReorder() {
+          if (!this.selectedEntry || !this.pageOrder.length) return;
+          const res = await fetch('/api/explorer/reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              institution_id: this.institutionId,
+              period_id: this.periodId,
+              path: this.selectedEntry.path,
+              page_order: this.pageOrder,
+            }),
+          });
+          const data = await res.json();
+          this.showToast(data.ok, data.message);
+          if (data.ok) this.pdfMode = 'none';
+        },
+
+        startResize(event) {
+          this._resizing = true;
+          this._resizeStartX = event.clientX;
+          this._resizeStartWidth = this.panelWidth;
+          const onMove = (e) => {
+            if (!this._resizing) return;
+            const delta = this._resizeStartX - e.clientX;
+            this.panelWidth = Math.max(320, Math.min(960, this._resizeStartWidth + delta));
+          };
+          const onUp = () => {
+            this._resizing = false;
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          };
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        },
+
+        showToast(ok, message) {
+          this.toast = { type: ok ? 'ok' : 'err', message };
+          setTimeout(() => { this.toast = null; }, 4000);
+        },
+
+        // Abrir explorador (carga inicial si corresponde)
+        open() {
+          this.explorerOpen = true;
+          if (!this.currentPath) this.currentPath = this.rootFolder;
+          this.load();
+        },
+      }));
+    });
+  </script>
 
   <!-- Global context store — must register before Alpine deferred init -->
   <script>
@@ -155,7 +421,7 @@
   </script>
 </head>
 
-<body class="h-full flex font-sans bg-gray-50" x-data="{}">
+<body class="h-full flex font-sans bg-gray-50" x-data="explorerApp()">
 
   <!-- ================================================================ -->
   <!--  SIDEBAR                                                         -->
@@ -295,13 +561,36 @@
   <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
     <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0">
       <h1 class="text-base font-semibold text-gray-800">{% block page_title %}{% endblock %}</h1>
-      <div class="text-sm text-gray-500">{% block header_extra %}{% endblock %}</div>
+      <div class="flex items-center gap-2">
+        <div class="text-sm text-gray-500">{% block header_extra %}{% endblock %}</div>
+        <!-- Toggle consola pipeline -->
+        <button @click="$store.ui.consoleOpen = !$store.ui.consoleOpen"
+                :title="$store.ui.consoleOpen ? 'Ocultar consola' : 'Mostrar consola'"
+                :class="$store.ui.consoleOpen
+                  ? 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                  : 'bg-slate-100 text-slate-600'"
+                class="p-1.5 rounded-lg transition-colors">
+          <i class="fa-solid fa-terminal text-sm"></i>
+        </button>
+        <!-- Toggle explorador PDF -->
+        <button @click="explorerOpen ? (explorerOpen = false) : open()"
+                title="Explorador PDF"
+                :class="explorerOpen
+                  ? 'bg-sky-100 text-sky-600 border border-sky-200'
+                  : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600 border border-transparent'"
+                class="p-1.5 rounded-lg transition-colors">
+          <i class="fa-solid fa-folder-open text-sm"></i>
+        </button>
+      </div>
     </header>
 
     <main class="flex-1 overflow-y-auto p-6">
       {% block content %}{% endblock %}
     </main>
   </div>
+
+  {# ── Explorador de archivos PDF (panel lateral derecho) ── #}
+  {% include "explorer/panel.html" %}
 
 {% block extra_scripts %}{% endblock %}
 </body>
