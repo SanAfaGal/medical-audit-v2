@@ -181,7 +181,7 @@ async def get_thumbnails(
         doc.close()
         return result
 
-    thumbnails = await asyncio.get_event_loop().run_in_executor(None, _render)
+    thumbnails = await asyncio.get_running_loop().run_in_executor(None, _render)
     return {"thumbnails": thumbnails, "count": len(thumbnails)}
 
 
@@ -270,7 +270,7 @@ async def merge_pdfs(body: MergeRequest, db: AsyncSession = Depends(get_db)):
         merged.save(str(output_path))
         merged.close()
 
-    await asyncio.get_event_loop().run_in_executor(None, _merge)
+    await asyncio.get_running_loop().run_in_executor(None, _merge)
     return OperationResult(ok=True, message=f"PDFs unidos en {output_name}")
 
 
@@ -334,7 +334,7 @@ async def split_pdf(body: SplitRequest, db: AsyncSession = Depends(get_db)):
         doc.close()
         return created
 
-    n = await asyncio.get_event_loop().run_in_executor(None, _split)
+    n = await asyncio.get_running_loop().run_in_executor(None, _split)
     return OperationResult(ok=True, message=f"PDF dividido en {n} archivo(s)")
 
 
@@ -354,17 +354,33 @@ async def reorder_pages(body: ReorderRequest, db: AsyncSession = Depends(get_db)
     def _reorder():
         import fitz
         doc = fitz.open(str(src))
-        if len(body.page_order) != doc.page_count:
+        page_count = doc.page_count
+        order = list(body.page_order)
+
+        if len(order) != page_count:
             doc.close()
-            raise ValueError(f"page_order tiene {len(body.page_order)} elementos pero el PDF tiene {doc.page_count} páginas")
-        doc.select(body.page_order)
-        doc.save(str(src), incremental=False)
+            raise ValueError(
+                f"Se enviaron {len(order)} páginas pero el PDF tiene {page_count}"
+            )
+        for idx in order:
+            if idx < 0 or idx >= page_count:
+                doc.close()
+                raise ValueError(
+                    f"Índice de página inválido: {idx} (rango válido 0–{page_count - 1})"
+                )
+
+        doc.select(order)
+        # tobytes() evita guardar sobre el mismo archivo abierto (problema en Windows)
+        out_bytes = doc.tobytes(garbage=4, deflate=True)
         doc.close()
+        src.write_bytes(out_bytes)
 
     try:
-        await asyncio.get_event_loop().run_in_executor(None, _reorder)
+        await asyncio.get_running_loop().run_in_executor(None, _reorder)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Error al reordenar: {e}")
 
     return OperationResult(ok=True, message="Páginas reordenadas correctamente")
 

@@ -117,6 +117,18 @@
         get institutionId() { return Alpine.store('ctx').institutionId; },
         get periodId()      { return Alpine.store('ctx').periodId; },
 
+        // Wrapper fetch que normaliza errores FastAPI {"detail":"..."} → {ok, message}
+        async _apiFetch(url, opts = {}) {
+          try {
+            const res = await fetch(url, opts);
+            const data = await res.json();
+            if (!res.ok) return { ok: false, message: data.detail || `Error ${res.status}` };
+            return data;
+          } catch (e) {
+            return { ok: false, message: `Error de red: ${e.message}` };
+          }
+        },
+
         filteredEntries() {
           if (!this.filterText) return this.entries;
           const q = this.filterText.toLowerCase();
@@ -187,7 +199,7 @@
             this.renamingPath = null;
             return;
           }
-          const res = await fetch('/api/explorer/rename', {
+          const data = await this._apiFetch('/api/explorer/rename', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -197,7 +209,6 @@
               new_name: this.renameValue.trim(),
             }),
           });
-          const data = await res.json();
           this.renamingPath = null;
           this.showToast(data.ok, data.message);
           if (data.ok) this.load();
@@ -211,7 +222,7 @@
         async onDrop(event, targetFolder) {
           const srcPath = event.dataTransfer.getData('text/plain');
           if (!srcPath || srcPath === targetFolder.path) return;
-          const res = await fetch('/api/explorer/move', {
+          const data = await this._apiFetch('/api/explorer/move', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -221,7 +232,6 @@
               dst_folder: targetFolder.path,
             }),
           });
-          const data = await res.json();
           this.showToast(data.ok, data.message);
           if (data.ok) this.load();
         },
@@ -234,7 +244,7 @@
 
         async executeMerge() {
           if (this.selectedPdfs.length < 2) return;
-          const res = await fetch('/api/explorer/merge', {
+          const data = await this._apiFetch('/api/explorer/merge', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -244,14 +254,13 @@
               output_name: this.mergeOutputName || 'resultado.pdf',
             }),
           });
-          const data = await res.json();
           this.showToast(data.ok, data.message);
           if (data.ok) { this.pdfMode = 'none'; this.selectedPdfs = []; this.load(); }
         },
 
         async executeSplit() {
           if (!this.selectedEntry) return;
-          const res = await fetch('/api/explorer/split', {
+          const data = await this._apiFetch('/api/explorer/split', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -261,7 +270,6 @@
               ranges: this.splitRanges.trim() || null,
             }),
           });
-          const data = await res.json();
           this.showToast(data.ok, data.message);
           if (data.ok) { this.pdfMode = 'none'; this.load(); }
         },
@@ -272,13 +280,16 @@
           this.thumbnails = [];
           this.pageOrder = [];
           const url = `/api/explorer/thumbnails?institution_id=${this.institutionId}&period_id=${this.periodId}&path=${encodeURIComponent(this.selectedEntry.path)}`;
-          try {
-            const res = await fetch(url);
-            const data = await res.json();
-            this.thumbnails = data.thumbnails || [];
-            this.pageOrder = this.thumbnails.map((_, i) => i);
-          } catch {
-            this.showToast(false, 'Error al cargar miniaturas');
+          const data = await this._apiFetch(url);
+          if (!data.ok && data.ok !== undefined) {
+            this.showToast(false, data.message);
+            this.pdfMode = 'none';
+            return;
+          }
+          this.thumbnails = data.thumbnails || [];
+          this.pageOrder = this.thumbnails.map((_, i) => i);
+          if (!this.thumbnails.length) {
+            this.showToast(false, 'No se pudieron cargar las miniaturas');
             this.pdfMode = 'none';
           }
         },
@@ -296,23 +307,22 @@
 
         async executeReorder() {
           if (!this.selectedEntry || !this.pageOrder.length) return;
-          const res = await fetch('/api/explorer/reorder', {
+          const data = await this._apiFetch('/api/explorer/reorder', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               institution_id: this.institutionId,
               period_id: this.periodId,
               path: this.selectedEntry.path,
-              page_order: this.pageOrder,
+              page_order: Array.from(this.pageOrder),  // desenvuelve Proxy reactivo
             }),
           });
-          const data = await res.json();
           this.showToast(data.ok, data.message);
           if (data.ok) this.pdfMode = 'none';
         },
 
         async deleteEntry(entry) {
-          const res = await fetch('/api/explorer/delete', {
+          const data = await this._apiFetch('/api/explorer/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -321,7 +331,6 @@
               path: entry.path,
             }),
           });
-          const data = await res.json();
           this.confirmingDelete = null;
           this.showToast(data.ok, data.message);
           if (data.ok) {
