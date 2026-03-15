@@ -7,6 +7,7 @@ import structlog
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.config import settings
@@ -47,7 +48,9 @@ from app.routers.api.invoices import router as invoices_router
 from app.routers.api.findings import router as findings_router
 from app.routers.api.pipeline import router as pipeline_router
 from app.routers.api.settings import router as settings_router
+from app.routers.api.explorer import router as explorer_router
 
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(pages_router)
 app.include_router(hospitals_router, prefix="/api")
 app.include_router(periods_router, prefix="/api")
@@ -55,6 +58,7 @@ app.include_router(invoices_router, prefix="/api")
 app.include_router(findings_router, prefix="/api")
 app.include_router(pipeline_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(explorer_router, prefix="/api")
 
 
 if __name__ == "__main__":

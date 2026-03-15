@@ -1,0 +1,324 @@
+{# ─── Explorador de archivos PDF — panel lateral ─────────────────────────── #}
+<div :style="explorerOpen ? `width:${panelWidth}px` : 'width:0'"
+     :class="_resizing ? '' : 'transition-all duration-300'"
+     class="relative flex flex-col h-full shrink-0 bg-white border-l border-slate-200 overflow-hidden"
+     style="box-shadow: -4px 0 20px rgba(0,0,0,0.06)">
+
+  <!-- ── Handle de redimensionamiento (borde izquierdo) ─────────────────── -->
+  <div x-show="explorerOpen"
+       @mousedown.prevent="startResize($event)"
+       class="absolute left-0 top-0 bottom-0 w-1.5 z-20 cursor-col-resize group"
+       title="Arrastrar para redimensionar">
+    <div class="h-full w-px bg-slate-200 group-hover:bg-sky-400 group-hover:w-full transition-all duration-150 ml-0.5"></div>
+    <!-- Tooltip de ancho durante resize -->
+    <div x-show="_resizing"
+         class="absolute top-1/2 -translate-y-1/2 left-4 bg-slate-800 text-white text-[10px] font-mono px-2 py-1 rounded-md whitespace-nowrap pointer-events-none"
+         x-text="panelWidth + 'px'"></div>
+  </div>
+
+  <!-- ── Contenido del panel (sólo visible cuando está abierto) ────────── -->
+  <template x-if="explorerOpen">
+    <div class="flex flex-col h-full w-full">
+
+      <!-- ── Header ───────────────────────────────────────────────────── -->
+      <div class="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100 shrink-0 bg-slate-50">
+        <!-- Tabs AUDIT / DRIVE / STAGE -->
+        <div class="flex gap-1">
+          <template x-for="tab in ['AUDIT','DRIVE','STAGE']" :key="tab">
+            <button @click="switchRoot(tab)"
+                    :class="rootFolder === tab
+                      ? 'bg-sky-100 text-sky-700 border border-sky-200'
+                      : 'text-slate-500 hover:bg-slate-100 border border-transparent'"
+                    class="px-2.5 py-1 rounded-md text-xs font-semibold transition-all"
+                    x-text="tab"></button>
+          </template>
+        </div>
+
+        <!-- Botón atrás -->
+        <button @click="goUp()"
+                :disabled="!currentPath || currentPath === rootFolder"
+                class="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 disabled:opacity-30 transition-colors"
+                title="Subir un nivel">
+          <i class="fa-solid fa-arrow-left text-xs"></i>
+        </button>
+
+        <!-- Ruta actual -->
+        <span class="text-xs text-slate-400 truncate flex-1 min-w-0" x-text="currentPath || rootFolder"></span>
+
+        <!-- Filtro -->
+        <input x-model="filterText"
+               type="text"
+               placeholder="Filtrar…"
+               class="text-xs border border-slate-200 rounded-md px-2 py-1 w-28 focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white">
+
+        <!-- Cerrar panel -->
+        <button @click="explorerOpen = false"
+                class="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 transition-colors"
+                title="Cerrar explorador">
+          <i class="fa-solid fa-xmark text-xs"></i>
+        </button>
+      </div>
+
+      <!-- ── Body: lista + preview ─────────────────────────────────────── -->
+      <div class="flex flex-1 min-h-0">
+
+        <!-- Lista de entradas (200px) -->
+        <div class="w-[200px] shrink-0 border-r border-slate-100 flex flex-col min-h-0">
+          <div class="flex-1 overflow-y-auto py-1">
+            <template x-if="entries.length === 0">
+              <div class="px-3 py-4 text-xs text-slate-400 italic text-center">Carpeta vacía</div>
+            </template>
+
+            <template x-for="entry in filteredEntries()" :key="entry.path">
+              <div class="group relative">
+                <!-- Nombre / rename inline -->
+                <template x-if="renamingPath !== entry.path">
+                  <div @click="selectEntry(entry)"
+                       @dblclick="entry.is_dir && navigateTo(entry.path)"
+                       :draggable="!entry.is_dir"
+                       @dragstart="onDragStart($event, entry)"
+                       @dragover.prevent
+                       @drop="entry.is_dir && onDrop($event, entry)"
+                       :class="selectedEntry && selectedEntry.path === entry.path
+                         ? 'bg-sky-50 text-sky-700'
+                         : 'hover:bg-slate-50 text-slate-700'"
+                       class="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer select-none text-xs transition-colors">
+                    <i :class="entry.is_dir ? 'fa-solid fa-folder text-amber-400' : 'fa-solid fa-file-pdf text-red-400'"
+                       class="w-3.5 text-center shrink-0"></i>
+                    <span class="truncate flex-1" x-text="entry.name"></span>
+                    <!-- Botones de acción (hover) -->
+                    <div class="hidden group-hover:flex items-center gap-0.5 ml-auto shrink-0">
+                      <button @click.stop="startRename(entry)"
+                              class="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600"
+                              title="Renombrar">
+                        <i class="fa-solid fa-pencil text-[10px]"></i>
+                      </button>
+                    </div>
+                  </div>
+                </template>
+
+                <!-- Input de rename inline -->
+                <template x-if="renamingPath === entry.path">
+                  <div class="flex items-center gap-1 px-2 py-1">
+                    <input x-ref="renameInput"
+                           x-model="renameValue"
+                           @keydown.enter="commitRename(entry)"
+                           @keydown.escape="renamingPath = null"
+                           @blur="renamingPath = null"
+                           class="flex-1 text-xs border border-sky-400 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-sky-400 min-w-0">
+                    <button @click="commitRename(entry)"
+                            class="shrink-0 text-sky-600 hover:text-sky-800 text-[10px]">
+                      <i class="fa-solid fa-check"></i>
+                    </button>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+
+          <!-- Merge checkbox list (modo merge) -->
+          <template x-if="pdfMode === 'merge'">
+            <div class="border-t border-slate-100 px-2 py-2 space-y-1 max-h-32 overflow-y-auto">
+              <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Seleccionar PDFs</div>
+              <template x-for="entry in entries.filter(e => !e.is_dir)" :key="entry.path">
+                <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer hover:text-slate-800">
+                  <input type="checkbox"
+                         :value="entry.path"
+                         @change="toggleMergePdf(entry.path)"
+                         :checked="selectedPdfs.includes(entry.path)"
+                         class="accent-sky-500">
+                  <span class="truncate" x-text="entry.name"></span>
+                </label>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <!-- Panel derecho: preview / operaciones ──────────────────────── -->
+        <div class="flex-1 flex flex-col min-h-0 min-w-0">
+
+          <!-- ── Toolbar de operaciones ─────────────────────────────── -->
+          <div class="flex items-center gap-1.5 px-3 py-2 border-b border-slate-100 shrink-0 bg-slate-50 flex-wrap">
+            <!-- Vista normal -->
+            <template x-if="pdfMode !== 'none'">
+              <button @click="pdfMode = 'none'"
+                      class="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-slate-500 hover:bg-white hover:text-slate-700 border border-transparent hover:border-slate-200 transition-all">
+                <i class="fa-solid fa-arrow-left text-[10px]"></i>
+                Volver
+              </button>
+            </template>
+
+            <template x-if="selectedEntry && !selectedEntry.is_dir && pdfMode === 'none'">
+              <div class="flex items-center gap-1.5">
+                <button @click="pdfMode = 'split'"
+                        class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-600 transition-all">
+                  <i class="fa-solid fa-scissors text-[10px]"></i>
+                  Dividir
+                </button>
+                <button @click="startReorder()"
+                        class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:border-violet-300 hover:text-violet-600 transition-all">
+                  <i class="fa-solid fa-sort text-[10px]"></i>
+                  Reordenar
+                </button>
+              </div>
+            </template>
+
+            <template x-if="pdfMode === 'none'">
+              <button @click="pdfMode = 'merge'"
+                      class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:border-emerald-300 hover:text-emerald-600 transition-all">
+                <i class="fa-solid fa-object-group text-[10px]"></i>
+                Unir PDFs
+              </button>
+            </template>
+          </div>
+
+          <!-- ── Preview (modo none) ────────────────────────────────── -->
+          <template x-if="pdfMode === 'none'">
+            <div class="flex-1 min-h-0">
+              <template x-if="previewUrl">
+                <iframe :src="previewUrl"
+                        class="w-full h-full border-0"
+                        title="Vista previa PDF"></iframe>
+              </template>
+              <template x-if="!previewUrl">
+                <div class="flex flex-col items-center justify-center h-full text-slate-300 gap-3">
+                  <i class="fa-solid fa-file-pdf text-5xl"></i>
+                  <span class="text-sm">Selecciona un PDF para previsualizarlo</span>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <!-- ── Modo Split ─────────────────────────────────────────── -->
+          <template x-if="pdfMode === 'split'">
+            <div class="flex-1 flex flex-col gap-4 p-4 overflow-y-auto">
+              <div class="text-sm font-semibold text-slate-700">
+                Dividir: <span class="font-normal text-slate-500" x-text="selectedEntry && selectedEntry.name"></span>
+              </div>
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1">
+                    Rangos de páginas (ej: <code class="text-sky-600">1-3, 5</code>)
+                  </label>
+                  <input x-model="splitRanges"
+                         type="text"
+                         placeholder="Dejar vacío para dividir página a página"
+                         class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400">
+                </div>
+                <button @click="executeSplit()"
+                        class="w-full py-2 rounded-lg bg-sky-500 text-white text-sm font-semibold hover:bg-sky-600 transition-colors">
+                  <i class="fa-solid fa-scissors mr-1.5"></i>
+                  Dividir PDF
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <!-- ── Modo Merge ─────────────────────────────────────────── -->
+          <template x-if="pdfMode === 'merge'">
+            <div class="flex-1 flex flex-col gap-4 p-4 overflow-y-auto">
+              <div class="text-sm font-semibold text-slate-700">Unir PDFs seleccionados</div>
+              <div class="text-xs text-slate-500">
+                Selecciona los PDFs en la lista de la izquierda (<span x-text="selectedPdfs.length"></span> seleccionados)
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1">Nombre del archivo resultado</label>
+                <input x-model="mergeOutputName"
+                       type="text"
+                       placeholder="resultado.pdf"
+                       class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+              </div>
+              <!-- Lista de PDFs seleccionados con orden -->
+              <div class="space-y-1">
+                <div class="text-xs font-medium text-slate-500">Orden de fusión:</div>
+                <template x-for="(p, i) in selectedPdfs" :key="p">
+                  <div class="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 rounded-md px-2 py-1.5">
+                    <span class="text-slate-400 font-mono w-4" x-text="i+1"></span>
+                    <span class="truncate flex-1" x-text="p.split('/').pop()"></span>
+                    <button @click="selectedPdfs.splice(i,1)"
+                            class="text-slate-300 hover:text-red-400 transition-colors">
+                      <i class="fa-solid fa-xmark text-[10px]"></i>
+                    </button>
+                  </div>
+                </template>
+              </div>
+              <button @click="executeMerge()"
+                      :disabled="selectedPdfs.length < 2"
+                      class="w-full py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                <i class="fa-solid fa-object-group mr-1.5"></i>
+                Unir PDFs
+              </button>
+            </div>
+          </template>
+
+          <!-- ── Modo Reorder ───────────────────────────────────────── -->
+          <template x-if="pdfMode === 'reorder'">
+            <div class="flex-1 flex flex-col min-h-0">
+              <div class="px-4 py-2 border-b border-slate-100 shrink-0 flex items-center justify-between">
+                <span class="text-xs font-medium text-slate-600">Arrastra las páginas para reordenar</span>
+                <button @click="executeReorder()"
+                        class="px-3 py-1.5 rounded-lg bg-violet-500 text-white text-xs font-semibold hover:bg-violet-600 transition-colors">
+                  <i class="fa-solid fa-floppy-disk mr-1"></i>
+                  Guardar orden
+                </button>
+              </div>
+              <div class="flex-1 overflow-y-auto p-3">
+                <template x-if="thumbnails.length === 0">
+                  <div class="flex items-center justify-center h-full text-slate-400 text-sm">
+                    <i class="fa-solid fa-spinner fa-spin mr-2"></i>
+                    Cargando miniaturas…
+                  </div>
+                </template>
+                <div class="grid grid-cols-3 gap-2">
+                  <template x-for="(imgIdx, pos) in pageOrder" :key="imgIdx">
+                    <div draggable="true"
+                         @dragstart="reorderDragStart($event, pos)"
+                         @dragover.prevent
+                         @drop="reorderDrop($event, pos)"
+                         class="relative rounded-lg overflow-hidden border-2 border-transparent hover:border-violet-400 cursor-grab active:cursor-grabbing transition-colors bg-slate-50">
+                      <img :src="'data:image/png;base64,' + thumbnails[imgIdx]"
+                           class="w-full h-auto block"
+                           :alt="'Página ' + (imgIdx+1)">
+                      <div class="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] text-center py-0.5"
+                           x-text="'Pág. ' + (imgIdx+1)"></div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </template>
+
+        </div>
+      </div>
+
+    </div>
+  </template>
+</div>
+
+<!-- ── Toast global (visible aunque el panel esté cerrado) ──────────────── -->
+<template x-teleport="body">
+  <div x-show="toast"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 translate-y-2"
+       x-transition:enter-end="opacity-100 translate-y-0"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 translate-y-0"
+       x-transition:leave-end="opacity-0 translate-y-2"
+       class="fixed bottom-5 right-5 z-50 max-w-xs">
+    <template x-if="toast">
+      <div :class="toast.type === 'ok'
+                    ? 'bg-white border-emerald-200 text-emerald-800 shadow-emerald-100'
+                    : 'bg-white border-red-200 text-red-800 shadow-red-100'"
+           class="px-4 py-3 rounded-xl border text-xs flex items-center gap-2.5 shadow-lg">
+        <i :class="toast.type === 'ok'
+                    ? 'fa-solid fa-circle-check text-emerald-500'
+                    : 'fa-solid fa-circle-xmark text-red-500'"
+           class="shrink-0"></i>
+        <span x-text="toast.message" class="flex-1"></span>
+        <button @click="toast = null" class="opacity-40 hover:opacity-80 transition-opacity ml-1">
+          <i class="fa-solid fa-xmark text-[10px]"></i>
+        </button>
+      </div>
+    </template>
+  </div>
+</template>
