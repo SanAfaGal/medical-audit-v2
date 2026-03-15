@@ -161,27 +161,27 @@ async def _run_staging(ctx: dict) -> AsyncGenerator[str, None]:
 
 @_stage("CHECK_NESTED_FOLDERS")
 async def _check_nested_folders(ctx: dict) -> AsyncGenerator[str, None]:
-    """List invoice-level folders in DRIVE that contain nested subdirectories."""
-    drive_path: Path = ctx["drive_path"]
+    """List invoice-level folders in STAGE that contain nested subdirectories."""
+    stage_path: Path = ctx["stage_path"]
 
-    if not drive_path.is_dir():
-        yield f"[ERROR] Directorio DRIVE no existe: {drive_path}"
+    if not stage_path.is_dir():
+        yield f"[ERROR] Directorio STAGE no existe: {stage_path}"
         return
 
     nested = [
-        d for d in sorted(drive_path.iterdir())
+        d for d in sorted(stage_path.iterdir())
         if d.is_dir() and any(sub.is_dir() for sub in d.iterdir())
     ]
 
     if not nested:
-        yield "[INFO] No se encontraron carpetas con subcarpetas anidadas en DRIVE."
+        yield "[INFO] No se encontraron carpetas con subcarpetas anidadas en STAGE."
         return
 
-    yield f"[WARN] {len(nested)} carpeta(s) con subcarpetas anidadas detectadas en DRIVE:"
+    yield f"[WARN] {len(nested)} carpeta(s) con subcarpetas anidadas detectadas en STAGE:"
     for d in nested:
         sub_names = [s.name for s in sorted(d.iterdir()) if s.is_dir()]
         yield f"[WARN] {d.name} → subcarpetas: {', '.join(sub_names)}"
-    yield "[WARN] Revisa y aplana estas carpetas antes de ejecutar RUN_STAGING."
+    yield "[WARN] Revisa y aplana estas carpetas para que los archivos queden directamente en la carpeta de factura."
 
 
 @_stage("REMOVE_NON_PDF")
