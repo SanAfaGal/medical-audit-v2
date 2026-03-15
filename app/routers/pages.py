@@ -20,3 +20,8 @@ async def audit_page(request: Request):
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     return templates.TemplateResponse("settings/index.html", {"request": request})
+
+
+@router.get("/help", response_class=HTMLResponse)
+async def help_page(request: Request):
+    return templates.TemplateResponse("help/index.html", {"request": request})

@@ -271,6 +271,16 @@
         <i class="fa-solid fa-sliders w-4 text-center opacity-80"></i>
         Configuración
       </a>
+
+      <!-- Divider -->
+      <div class="my-2 border-t border-white/5"></div>
+
+      <a href="/help"
+         class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all
+                {% if request.url.path.startswith('/help') %}bg-violet-500/15 text-violet-300 border border-violet-500/20{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
+        <i class="fa-solid fa-circle-question w-4 text-center opacity-80"></i>
+        Ayuda
+      </a>
     </nav>
 
     <!-- Footer -->

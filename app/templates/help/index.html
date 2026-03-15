@@ -1,0 +1,796 @@
+{% extends "base.html" %}
+
+{% block title %}Ayuda — Auditoría Médica{% endblock %}
+{% block page_title %}Ayuda y Tutoriales{% endblock %}
+
+{% block content %}
+<style>
+  .help-layout { display: flex; gap: 1.25rem; align-items: flex-start; min-height: calc(100vh - 10rem); }
+
+  /* ── Guide list sidebar ─────────────────────────────── */
+  .guide-nav {
+    width: 13rem; shrink: 0; position: sticky; top: 0;
+    border-radius: 0.75rem; overflow: hidden;
+    border: 1px solid var(--border); background: var(--bg-surface);
+  }
+  .guide-nav-section {
+    padding: 0.625rem 0.75rem 0.25rem;
+    font-size: 0.625rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .08em;
+    color: var(--text-3);
+  }
+  .guide-nav-item {
+    display: flex; align-items: center; gap: 0.625rem;
+    width: 100%; padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem; border-radius: 0.5rem;
+    cursor: pointer; border: none; background: transparent;
+    text-align: left; transition: background .12s, color .12s;
+    color: var(--text-2);
+  }
+  .guide-nav-item:hover { background: var(--bg-subtle); color: var(--text-1); }
+  .guide-nav-item.active {
+    background: var(--violet-soft); color: var(--violet);
+    font-weight: 600;
+  }
+  .guide-nav-item .nav-dot {
+    width: 6px; height: 6px; border-radius: 50%; shrink: 0;
+    background: var(--border);
+  }
+  .guide-nav-item.active .nav-dot { background: var(--violet); }
+
+  /* ── Content area ───────────────────────────────────── */
+  .guide-content { flex: 1; min-width: 0; }
+
+  /* ── Guide header ───────────────────────────────────── */
+  .guide-header {
+    border-radius: 0.875rem; padding: 1.5rem 1.75rem;
+    margin-bottom: 1.25rem;
+    background: linear-gradient(135deg, var(--violet-soft) 0%, var(--sky-soft) 100%);
+    border: 1px solid var(--violet-border);
+  }
+  .guide-header-eyebrow {
+    font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--violet); margin-bottom: 0.375rem;
+    display: flex; align-items: center; gap: 0.375rem;
+  }
+  .guide-header h1 { font-size: 1.1rem; font-weight: 700; color: var(--text-1); margin-bottom: 0.375rem; }
+  .guide-header p  { font-size: 0.8125rem; color: var(--text-2); line-height: 1.6; }
+
+  /* ── Prereq banner ──────────────────────────────────── */
+  .prereq {
+    display: flex; align-items: flex-start; gap: 0.75rem;
+    padding: 0.875rem 1rem; border-radius: 0.75rem;
+    border: 1px solid var(--amber-border); background: var(--amber-soft);
+    margin-bottom: 1.25rem; font-size: 0.8125rem; color: var(--text-1);
+  }
+  .prereq i { color: var(--amber); margin-top: 2px; shrink: 0; }
+  .prereq strong { color: var(--amber); }
+
+  /* ── Steps ──────────────────────────────────────────── */
+  .steps { display: flex; flex-direction: column; gap: 0.75rem; }
+
+  .step-card {
+    border-radius: 0.75rem; border: 1px solid var(--border);
+    background: var(--bg-surface); overflow: hidden;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .step-card:hover {
+    border-color: var(--sky-border);
+    box-shadow: 0 2px 12px rgba(2,132,199,.07);
+  }
+
+  .step-head {
+    display: flex; align-items: center; gap: 0.875rem;
+    padding: 0.875rem 1.125rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .step-num {
+    width: 2rem; height: 2rem; border-radius: 50%; shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700;
+    background: var(--bg-subtle); border: 1.5px solid var(--border);
+    color: var(--text-3);
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .step-card.done .step-num {
+    background: var(--emerald-soft); border-color: var(--emerald-border); color: var(--emerald);
+  }
+  .step-card.active .step-num {
+    background: var(--sky-soft); border-color: var(--sky-border); color: var(--sky);
+  }
+
+  .step-title { font-size: 0.875rem; font-weight: 600; color: var(--text-1); flex: 1; }
+  .step-title .step-sub { font-size: 0.75rem; font-weight: 400; color: var(--text-3); margin-top: 1px; }
+
+  .step-chevron {
+    color: var(--text-3); font-size: 0.7rem;
+    transition: transform .2s;
+  }
+  .step-card.open .step-chevron { transform: rotate(180deg); }
+
+  .step-body {
+    display: none; padding: 0 1.125rem 1rem 3.875rem;
+  }
+  .step-card.open .step-body { display: block; }
+
+  /* ── Field list ─────────────────────────────────────── */
+  .field-list {
+    display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.625rem;
+  }
+  .field-tag {
+    display: inline-flex; align-items: center; gap: 0.375rem;
+    padding: 0.25rem 0.625rem; border-radius: 0.375rem;
+    font-size: 0.75rem; font-weight: 500;
+    background: var(--bg-subtle); border: 1px solid var(--border); color: var(--text-2);
+  }
+  .field-tag i { font-size: 0.625rem; color: var(--text-3); }
+
+  .field-row {
+    display: flex; align-items: baseline; gap: 0.5rem;
+    padding: 0.375rem 0;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 0.8125rem;
+  }
+  .field-row:last-child { border-bottom: none; }
+  .field-key { color: var(--text-3); width: 11rem; shrink: 0; font-size: 0.75rem; }
+  .field-val { color: var(--text-1); font-weight: 500; }
+  .field-val code {
+    font-family: monospace; font-size: 0.75rem;
+    background: var(--bg-subtle); border: 1px solid var(--border);
+    padding: 1px 5px; border-radius: 4px; color: var(--sky);
+  }
+
+  /* ── Note / warning callout ─────────────────────────── */
+  .callout {
+    display: flex; align-items: flex-start; gap: 0.625rem;
+    padding: 0.625rem 0.875rem; border-radius: 0.5rem;
+    font-size: 0.8rem; margin-top: 0.625rem; line-height: 1.5;
+  }
+  .callout.info  { background: var(--sky-soft);    border: 1px solid var(--sky-border);    color: var(--sky);    }
+  .callout.warn  { background: var(--amber-soft);  border: 1px solid var(--amber-border);  color: var(--amber);  }
+  .callout.ok    { background: var(--emerald-soft);border: 1px solid var(--emerald-border);color: var(--emerald);}
+  .callout i { margin-top: 2px; shrink: 0; }
+  .callout span { color: var(--text-1); }
+  .callout strong { color: inherit; }
+
+  /* ── Download button ────────────────────────────────── */
+  .dl-btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.625rem 1.25rem; border-radius: 0.625rem;
+    font-size: 0.875rem; font-weight: 600; cursor: pointer;
+    border: none; margin-top: 0.75rem;
+    background: var(--violet); color: #fff;
+    transition: opacity .15s, transform .1s;
+    box-shadow: 0 2px 8px rgba(124,58,237,.25);
+  }
+  .dl-btn:hover { opacity: .88; transform: translateY(-1px); }
+  .dl-btn:active { transform: translateY(0); }
+
+  /* ── Nav path (breadcrumb-like) ─────────────────────── */
+  .nav-path {
+    display: inline-flex; align-items: center; gap: 0.25rem;
+    font-size: 0.8rem; color: var(--text-2); flex-wrap: wrap;
+    margin-top: 0.5rem;
+  }
+  .nav-path .crumb {
+    padding: 0.2rem 0.5rem; border-radius: 0.3rem;
+    background: var(--bg-subtle); border: 1px solid var(--border);
+    font-weight: 500; color: var(--text-1);
+  }
+  .nav-path i { color: var(--text-3); font-size: 0.6rem; }
+
+  /* ── Final CTA ──────────────────────────────────────── */
+  .guide-cta {
+    margin-top: 1.25rem; padding: 1.25rem 1.5rem;
+    border-radius: 0.875rem; border: 1px solid var(--emerald-border);
+    background: var(--emerald-soft);
+    display: flex; align-items: center; gap: 1rem;
+  }
+  .guide-cta-icon {
+    width: 2.5rem; height: 2.5rem; border-radius: 50%; shrink: 0;
+    background: var(--emerald); display: flex; align-items: center;
+    justify-content: center; color: #fff; font-size: 1rem;
+  }
+  .guide-cta h3 { font-size: 0.9rem; font-weight: 700; color: var(--text-1); margin-bottom: 0.25rem; }
+  .guide-cta p  { font-size: 0.8rem; color: var(--text-2); line-height: 1.5; }
+
+  /* ── Progress bar ───────────────────────────────────── */
+  .progress-bar-wrap {
+    height: 3px; background: var(--border); border-radius: 2px;
+    margin-bottom: 1.25rem; overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%; border-radius: 2px;
+    background: linear-gradient(90deg, var(--violet), var(--sky));
+    transition: width .4s ease;
+  }
+</style>
+
+<div class="help-layout" x-data="helpApp()">
+
+  <!-- ── Guide list nav ────────────────────────────────── -->
+  <nav class="guide-nav" style="width:13rem;shrink:0;position:sticky;top:0">
+    <div style="padding:0.75rem 0.75rem 0.375rem;border-bottom:1px solid var(--border)">
+      <p style="font-size:0.625rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3)">Tutoriales</p>
+    </div>
+    <div style="padding:0.375rem">
+      <p class="guide-nav-section">SIHOS</p>
+      <button class="guide-nav-item" :class="guide === 'sihos-report' && 'active'"
+              @click="guide = 'sihos-report'">
+        <span class="nav-dot"></span>
+        Descargar reporte
+      </button>
+    </div>
+    <div style="padding:0.375rem;border-top:1px solid var(--border)">
+      <p class="guide-nav-section" style="padding-top:0.5rem">Próximamente</p>
+      <div class="guide-nav-item" style="opacity:.4;cursor:default">
+        <span class="nav-dot"></span>
+        Organizar carpetas
+      </div>
+      <div class="guide-nav-item" style="opacity:.4;cursor:default">
+        <span class="nav-dot"></span>
+        Interpretar hallazgos
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Guide content ─────────────────────────────────── -->
+  <div class="guide-content">
+    <div x-show="guide === 'sihos-report'">
+
+      <!-- Header -->
+      <div class="guide-header">
+        <div class="guide-header-eyebrow">
+          <i class="fa-solid fa-book-open-reader"></i>
+          Tutorial · SIHOS
+        </div>
+        <h1>Descargar y preparar el reporte de SIHOS</h1>
+        <p>Aprende cómo exportar el reporte de liquidación desde el portal SIHOS, ejecutar el script de preparación y subir el archivo a la aplicación.</p>
+        <!-- Progress -->
+        <div style="margin-top:1rem">
+          <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" :style="'width:' + progress + '%'"></div>
+          </div>
+          <p style="font-size:0.7rem;color:var(--text-3)">
+            <span x-text="doneCount"></span> de <span x-text="totalSteps"></span> pasos completados
+          </p>
+        </div>
+      </div>
+
+      <!-- Prerequisite -->
+      <div class="prereq">
+        <i class="fa-solid fa-triangle-exclamation fa-sm"></i>
+        <div>
+          <strong>Antes de comenzar:</strong> debes haber iniciado sesión en el portal SIHOS correspondiente al hospital que estás auditando.
+          Si aún no lo has hecho, ingresa al portal y autentica tu cuenta antes de seguir estos pasos.
+        </div>
+      </div>
+
+      <!-- Steps -->
+      <div class="steps">
+
+        <!-- STEP 1 -->
+        <div class="step-card" :class="{ done: steps[0], open: open === 0, active: open === 0 }" @click="toggle(0)">
+          <div class="step-head">
+            <div class="step-num">
+              <template x-if="steps[0]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
+              <template x-if="!steps[0]">1</template>
+            </div>
+            <div class="step-title">
+              Navegar al reporte de liquidación
+              <div class="step-sub">Ubicar la sección correcta dentro de SIHOS</div>
+            </div>
+            <i class="fa-solid fa-chevron-down step-chevron"></i>
+          </div>
+          <div class="step-body">
+            <p style="font-size:0.8125rem;color:var(--text-2);margin-bottom:0.5rem">Dentro del portal SIHOS, navega a la siguiente ruta:</p>
+            <div class="nav-path">
+              <span class="crumb"><i class="fa-solid fa-chart-bar mr-1" style="color:var(--violet);font-size:0.7rem"></i>Reportes</span>
+              <i class="fa-solid fa-chevron-right"></i>
+              <span class="crumb">Liquidación de servicios</span>
+              <i class="fa-solid fa-chevron-right"></i>
+              <span class="crumb">Liquidación</span>
+            </div>
+            <div class="callout info" style="margin-top:0.75rem">
+              <i class="fa-solid fa-circle-info fa-sm"></i>
+              <span>El menú de <strong>Reportes</strong> suele estar en la barra de navegación superior o en el menú lateral del portal.</span>
+            </div>
+            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
+              <button @click.stop="markDone(0)" class="step-done-btn"
+                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
+                <i class="fa-solid fa-check mr-1"></i>Listo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 2 -->
+        <div class="step-card" :class="{ done: steps[1], open: open === 1, active: open === 1 }" @click="toggle(1)">
+          <div class="step-head">
+            <div class="step-num">
+              <template x-if="steps[1]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
+              <template x-if="!steps[1]">2</template>
+            </div>
+            <div class="step-title">
+              Seleccionar los campos del reporte
+              <div class="step-sub">Marcar exactamente los campos requeridos</div>
+            </div>
+            <i class="fa-solid fa-chevron-down step-chevron"></i>
+          </div>
+          <div class="step-body">
+            <p style="font-size:0.8125rem;color:var(--text-2);margin-bottom:0.5rem">En la sección de <strong>campos</strong> o <strong>columnas</strong>, selecciona únicamente los siguientes:</p>
+            <div class="field-list">
+              <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Administradora</span>
+              <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Tipo Usuario</span>
+              <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Tipo Servicio</span>
+              <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Actividad / Suministro</span>
+              <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Operario</span>
+              <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Paciente</span>
+            </div>
+            <div class="callout warn">
+              <i class="fa-solid fa-triangle-exclamation fa-sm"></i>
+              <span>No selecciones más campos de los indicados. El script de preparación espera exactamente estas columnas.</span>
+            </div>
+            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
+              <button @click.stop="markDone(1)" class="step-done-btn"
+                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
+                <i class="fa-solid fa-check mr-1"></i>Listo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 3 -->
+        <div class="step-card" :class="{ done: steps[2], open: open === 2, active: open === 2 }" @click="toggle(2)">
+          <div class="step-head">
+            <div class="step-num">
+              <template x-if="steps[2]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
+              <template x-if="!steps[2]">3</template>
+            </div>
+            <div class="step-title">
+              Configurar los filtros del reporte
+              <div class="step-sub">Estado, tipo, fechas y formato</div>
+            </div>
+            <i class="fa-solid fa-chevron-down step-chevron"></i>
+          </div>
+          <div class="step-body">
+            <p style="font-size:0.8125rem;color:var(--text-2);margin-bottom:0.625rem">Configura los filtros con los siguientes valores exactos:</p>
+            <div style="border:1px solid var(--border);border-radius:0.5rem;overflow:hidden">
+              <div class="field-row" style="padding:0.5rem 0.75rem">
+                <span class="field-key">Estado</span>
+                <span class="field-val"><code>Confirmado</code></span>
+              </div>
+              <div class="field-row" style="padding:0.5rem 0.75rem">
+                <span class="field-key">Liquidación generada</span>
+                <span class="field-val"><code>Entidad</code></span>
+              </div>
+              <div class="field-row" style="padding:0.5rem 0.75rem">
+                <span class="field-key">Fecha y hora inicial</span>
+                <span class="field-val">Primer día del período a auditar</span>
+              </div>
+              <div class="field-row" style="padding:0.5rem 0.75rem">
+                <span class="field-key">Fecha y hora final</span>
+                <span class="field-val">Último día del período a auditar</span>
+              </div>
+              <div class="field-row" style="padding:0.5rem 0.75rem">
+                <span class="field-key">Reporte</span>
+                <span class="field-val"><code>Horizontal</code></span>
+              </div>
+              <div class="field-row" style="padding:0.5rem 0.75rem;border-bottom:none">
+                <span class="field-key">Opción seleccionada</span>
+                <span class="field-val"><code>Facturadas</code></span>
+              </div>
+            </div>
+            <div class="callout info" style="margin-top:0.625rem">
+              <i class="fa-solid fa-circle-info fa-sm"></i>
+              <span>El rango de fechas debe coincidir con el período de auditoría configurado en la aplicación.</span>
+            </div>
+            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
+              <button @click.stop="markDone(2)" class="step-done-btn"
+                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
+                <i class="fa-solid fa-check mr-1"></i>Listo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 4 -->
+        <div class="step-card" :class="{ done: steps[3], open: open === 3, active: open === 3 }" @click="toggle(3)">
+          <div class="step-head">
+            <div class="step-num">
+              <template x-if="steps[3]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
+              <template x-if="!steps[3]">4</template>
+            </div>
+            <div class="step-title">
+              Generar y exportar el reporte
+              <div class="step-sub">Aceptar, exportar a Excel y descargar</div>
+            </div>
+            <i class="fa-solid fa-chevron-down step-chevron"></i>
+          </div>
+          <div class="step-body">
+            <ol style="font-size:0.8125rem;color:var(--text-2);padding-left:1.25rem;line-height:2;margin:0">
+              <li>Haz clic en <strong style="color:var(--text-1)">Aceptar</strong> para generar el reporte.</li>
+              <li>Espera a que la tabla cargue con los datos.</li>
+              <li>Busca el botón <strong style="color:var(--text-1)">Exportar a Excel</strong> y haz clic.</li>
+              <li>El archivo <code style="font-size:0.75rem;background:var(--bg-subtle);border:1px solid var(--border);padding:1px 4px;border-radius:3px">.xls</code> se descargará a tu carpeta de Descargas.</li>
+            </ol>
+            <div class="callout ok" style="margin-top:0.625rem">
+              <i class="fa-solid fa-circle-check fa-sm"></i>
+              <span>El archivo se guardará con extensión <strong>.xls</strong> (no .xlsx). Esto es normal — lo convertiremos en el siguiente paso.</span>
+            </div>
+            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
+              <button @click.stop="markDone(3)" class="step-done-btn"
+                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
+                <i class="fa-solid fa-check mr-1"></i>Listo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 5 -->
+        <div class="step-card" :class="{ done: steps[4], open: open === 4, active: open === 4 }" @click="toggle(4)">
+          <div class="step-head">
+            <div class="step-num">
+              <template x-if="steps[4]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
+              <template x-if="!steps[4]">5</template>
+            </div>
+            <div class="step-title">
+              Abrir el archivo y habilitar edición
+              <div class="step-sub">Preparar el documento en Excel</div>
+            </div>
+            <i class="fa-solid fa-chevron-down step-chevron"></i>
+          </div>
+          <div class="step-body">
+            <ol style="font-size:0.8125rem;color:var(--text-2);padding-left:1.25rem;line-height:2;margin:0">
+              <li>Abre el archivo <code style="font-size:0.75rem;background:var(--bg-subtle);border:1px solid var(--border);padding:1px 4px;border-radius:3px">.xls</code> descargado con <strong style="color:var(--text-1)">Microsoft Excel</strong>.</li>
+              <li>Si aparece la barra amarilla de <em>"Vista protegida"</em>, haz clic en <strong style="color:var(--text-1)">Habilitar edición</strong>.</li>
+              <li>Elimina la <strong style="color:var(--text-1)">imagen o logo</strong> que suele aparecer en la cabecera del documento (clic encima → tecla Suprimir).</li>
+            </ol>
+            <div class="callout warn" style="margin-top:0.625rem">
+              <i class="fa-solid fa-triangle-exclamation fa-sm"></i>
+              <span>Si no eliminas la imagen, el script puede fallar al procesar las primeras filas. Asegúrate de que no quede ningún objeto flotante.</span>
+            </div>
+            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
+              <button @click.stop="markDone(4)" class="step-done-btn"
+                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
+                <i class="fa-solid fa-check mr-1"></i>Listo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 6 — Script -->
+        <div class="step-card" :class="{ done: steps[5], open: open === 5, active: open === 5 }" @click="toggle(5)">
+          <div class="step-head">
+            <div class="step-num">
+              <template x-if="steps[5]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
+              <template x-if="!steps[5]">6</template>
+            </div>
+            <div class="step-title">
+              Ejecutar el script de preparación
+              <div class="step-sub">Requiere Microsoft 365 con Office Scripts</div>
+            </div>
+            <i class="fa-solid fa-chevron-down step-chevron"></i>
+          </div>
+          <div class="step-body">
+            <p style="font-size:0.8125rem;color:var(--text-2);margin-bottom:0.75rem">
+              El script limpia y transforma el archivo automáticamente: elimina filas y columnas innecesarias, renombra cabeceras, convierte a mayúsculas y da formato de tabla.
+            </p>
+
+            <!-- How to import -->
+            <div style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:0.625rem;padding:0.875rem;margin-bottom:0.75rem">
+              <p style="font-size:0.75rem;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:0.625rem">
+                <i class="fa-solid fa-upload mr-1.5" style="color:var(--violet)"></i>Cómo importar el script en Excel
+              </p>
+              <ol style="font-size:0.8rem;color:var(--text-2);padding-left:1.25rem;line-height:2;margin:0">
+                <li>En Excel, ve a la pestaña <strong style="color:var(--text-1)">Automatizar</strong> en la cinta de opciones.</li>
+                <li>Haz clic en <strong style="color:var(--text-1)">Nuevo script</strong>.</li>
+                <li>En el editor que se abre, <strong style="color:var(--text-1)">borra todo el contenido</strong> existente.</li>
+                <li>Descarga el archivo del script con el botón de abajo y <strong style="color:var(--text-1)">copia su contenido</strong>.</li>
+                <li>Pega el contenido en el editor y haz clic en <strong style="color:var(--text-1)">Guardar script</strong>.</li>
+                <li>Haz clic en <strong style="color:var(--text-1)">Ejecutar</strong>.</li>
+              </ol>
+            </div>
+
+            <div class="callout warn">
+              <i class="fa-solid fa-triangle-exclamation fa-sm"></i>
+              <span>La pestaña <strong>Automatizar</strong> solo aparece si tienes <strong>Microsoft 365</strong> con Office Scripts habilitado. No funciona con versiones antiguas de Office.</span>
+            </div>
+
+            <!-- Download button -->
+            <button class="dl-btn" @click.stop="downloadScript()">
+              <i class="fa-solid fa-download"></i>
+              Descargar script (.ts)
+            </button>
+
+            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
+              <button @click.stop="markDone(5)" class="step-done-btn"
+                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
+                <i class="fa-solid fa-check mr-1"></i>Listo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 7 -->
+        <div class="step-card" :class="{ done: steps[6], open: open === 6, active: open === 6 }" @click="toggle(6)">
+          <div class="step-head">
+            <div class="step-num">
+              <template x-if="steps[6]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
+              <template x-if="!steps[6]">7</template>
+            </div>
+            <div class="step-title">
+              Guardar el archivo como .xlsx
+              <div class="step-sub">Convertir al formato requerido por la app</div>
+            </div>
+            <i class="fa-solid fa-chevron-down step-chevron"></i>
+          </div>
+          <div class="step-body">
+            <ol style="font-size:0.8125rem;color:var(--text-2);padding-left:1.25rem;line-height:2;margin:0">
+              <li>Ve a <strong style="color:var(--text-1)">Archivo → Guardar como</strong>.</li>
+              <li>En el tipo de archivo, selecciona <strong style="color:var(--text-1)">Libro de Excel (.xlsx)</strong>.</li>
+              <li>Guarda el archivo.</li>
+            </ol>
+            <div class="callout info" style="margin-top:0.625rem">
+              <i class="fa-solid fa-circle-info fa-sm"></i>
+              <span>La app solo acepta archivos <strong>.xlsx</strong>. El archivo original <strong>.xls</strong> no es compatible.</span>
+            </div>
+            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
+              <button @click.stop="markDone(6)" class="step-done-btn"
+                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
+                <i class="fa-solid fa-check mr-1"></i>Listo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 8 -->
+        <div class="step-card" :class="{ done: steps[7], open: open === 7, active: open === 7 }" @click="toggle(7)">
+          <div class="step-head">
+            <div class="step-num">
+              <template x-if="steps[7]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
+              <template x-if="!steps[7]">8</template>
+            </div>
+            <div class="step-title">
+              Subir el archivo a la aplicación
+              <div class="step-sub">Etapa "Cargar reporte de SIHOS" en el Pipeline</div>
+            </div>
+            <i class="fa-solid fa-chevron-down step-chevron"></i>
+          </div>
+          <div class="step-body">
+            <ol style="font-size:0.8125rem;color:var(--text-2);padding-left:1.25rem;line-height:2;margin:0">
+              <li>Ve a la sección <strong style="color:var(--text-1)">Pipeline</strong> en el menú lateral.</li>
+              <li>Asegúrate de tener seleccionado el hospital y período correctos.</li>
+              <li>Busca la etapa <strong style="color:var(--text-1)">Cargar reporte de SIHOS</strong>.</li>
+              <li>Haz clic en el botón de carga y selecciona el archivo <code style="font-size:0.75rem;background:var(--bg-subtle);border:1px solid var(--border);padding:1px 4px;border-radius:3px">.xlsx</code> que guardaste.</li>
+              <li>Espera a que el proceso finalice. Las facturas quedarán registradas en el sistema.</li>
+            </ol>
+            <div class="callout ok" style="margin-top:0.625rem">
+              <i class="fa-solid fa-circle-check fa-sm"></i>
+              <span>Si la carga fue exitosa, verás el conteo de facturas importadas y podrás continuar con las siguientes etapas del pipeline.</span>
+            </div>
+            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
+              <button @click.stop="markDone(7)" class="step-done-btn"
+                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
+                <i class="fa-solid fa-check mr-1"></i>Listo
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /steps -->
+
+      <!-- Final CTA -->
+      <div class="guide-cta" x-show="doneCount === totalSteps" x-transition>
+        <div class="guide-cta-icon"><i class="fa-solid fa-trophy"></i></div>
+        <div>
+          <h3>¡Tutorial completado!</h3>
+          <p>Ya tienes el reporte listo. Dirígete al Pipeline para continuar con las demás etapas de auditoría.</p>
+        </div>
+        <a href="/" style="margin-left:auto;display:inline-flex;align-items:center;gap:0.375rem;padding:0.5rem 1rem;border-radius:0.625rem;background:var(--emerald);color:#fff;font-size:0.8125rem;font-weight:600;text-decoration:none;shrink:0">
+          Ir al Pipeline <i class="fa-solid fa-arrow-right"></i>
+        </a>
+      </div>
+
+      <!-- Reset -->
+      <div style="margin-top:0.875rem;display:flex;justify-content:flex-end" x-show="doneCount > 0">
+        <button @click="resetSteps()" style="font-size:0.75rem;color:var(--text-3);background:none;border:none;cursor:pointer;padding:0.25rem 0.5rem">
+          <i class="fa-solid fa-rotate-left mr-1"></i>Reiniciar progreso
+        </button>
+      </div>
+
+    </div><!-- /sihos-report -->
+  </div><!-- /guide-content -->
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const OFFICE_SCRIPT = `function main(workbook: ExcelScript.Workbook): void {
+    const sheet = workbook.getActiveWorksheet();
+
+    // 1. Eliminar primeras 11 filas
+    const initialColCount = sheet.getUsedRange().getColumnCount();
+    sheet.getRangeByIndexes(0, 0, 11, initialColCount).delete(
+        ExcelScript.DeleteShiftDirection.up
+    );
+
+    // 2. Separar celdas combinadas y nombrar sub-columnas de Paciente
+    const usedRange2 = sheet.getUsedRange();
+    sheet.getRangeByIndexes(0, 0, 1, usedRange2.getColumnCount()).unmerge();
+
+    const headersAfterUnmerge = sheet.getRangeByIndexes(0, 0, 1, usedRange2.getColumnCount()).getValues()[0];
+    let pacienteSourceIdx = -1;
+    for (let c = 0; c < headersAfterUnmerge.length; c++) {
+        if (String(headersAfterUnmerge[c]).trim().toLowerCase().includes("paciente")) {
+            pacienteSourceIdx = c;
+            break;
+        }
+    }
+    if (pacienteSourceIdx >= 0) {
+        sheet.getCell(0, pacienteSourceIdx).setValue("Documento");
+        sheet.getCell(0, pacienteSourceIdx + 1).setValue("Numero");
+        sheet.getCell(0, pacienteSourceIdx + 2).setValue("Paciente");
+    }
+
+    // 3. Identificar y eliminar columnas no requeridas
+    const headersToKeep: string[] = [
+        "Fecha","Num Factura","Administradora","Tipo Usuario","Tipo Servicio",
+        "Actividad/Suministro","Operario","Documento","Numero","Paciente",
+    ];
+    const usedRange3 = sheet.getUsedRange();
+    const totalRows3 = usedRange3.getRowCount();
+    const totalCols3 = usedRange3.getColumnCount();
+    const headerValues3 = usedRange3.getValues()[0];
+    const colsToDelete: number[] = [];
+    for (let c = totalCols3 - 1; c >= 0; c--) {
+        const cellValue = String(headerValues3[c]).trim();
+        const shouldKeep = headersToKeep.some(h => cellValue.toLowerCase().includes(h.toLowerCase()));
+        if (!shouldKeep) colsToDelete.push(c);
+    }
+    for (const colIdx of colsToDelete) {
+        sheet.getRangeByIndexes(0, colIdx, totalRows3, 1).delete(ExcelScript.DeleteShiftDirection.left);
+    }
+
+    // 4. Renombrar encabezados
+    const renameMap: { [key: string]: string } = {
+        "num factura":"Factura","tipo usuario":"Contrato","tipo servicio":"Servicio",
+        "actividad/suministro":"Actividad","operario":"Operario","paciente":"Paciente",
+        "fecha":"Fecha","administradora":"Administradora","documento":"Documento","numero":"Numero",
+    };
+    const usedRange4 = sheet.getUsedRange();
+    const colCount4 = usedRange4.getColumnCount();
+    const rawHeaders4 = usedRange4.getValues()[0];
+    const newHeaderRow: (string | number | boolean)[][] = [[]];
+    for (let c = 0; c < colCount4; c++) {
+        const normalized = String(rawHeaders4[c]).trim().toLowerCase();
+        const renamed = renameMap[normalized];
+        newHeaderRow[0].push(renamed !== undefined ? renamed : String(rawHeaders4[c]).trim());
+    }
+    sheet.getRangeByIndexes(0, 0, 1, colCount4).setValues(newHeaderRow);
+
+    // 5. Eliminar filas donde Factura sea 0 o vacía
+    const usedRange5 = sheet.getUsedRange();
+    const allRows5 = usedRange5.getRowCount();
+    const allCols5 = usedRange5.getColumnCount();
+    const allData5 = usedRange5.getValues();
+    let facturaColIdx = -1;
+    for (let c = 0; c < allCols5; c++) {
+        if (String(allData5[0][c]).trim().toLowerCase() === "factura") { facturaColIdx = c; break; }
+    }
+    if (facturaColIdx >= 0) {
+        const rowsToDelete: number[] = [];
+        for (let r = 1; r < allRows5; r++) {
+            const cellVal = allData5[r][facturaColIdx];
+            const isEmpty = cellVal === null || String(cellVal).trim() === "";
+            const isZero = !isEmpty && (Number(cellVal) === 0 || String(cellVal).trim() === "0");
+            if (isEmpty || isZero) rowsToDelete.push(r);
+        }
+        for (let i = rowsToDelete.length - 1; i >= 0; i--) {
+            sheet.getRangeByIndexes(rowsToDelete[i], 0, 1, allCols5).delete(ExcelScript.DeleteShiftDirection.up);
+        }
+    }
+
+    // 6. Borrar formato y centrar
+    const usedRange6 = sheet.getUsedRange();
+    usedRange6.clear(ExcelScript.ClearApplyTo.formats);
+    usedRange6.getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.center);
+    usedRange6.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+
+    // 7. Convertir todo a mayúsculas
+    const usedRange8 = sheet.getUsedRange();
+    const rowCount8 = usedRange8.getRowCount();
+    const colCount8 = usedRange8.getColumnCount();
+    const allValues8 = usedRange8.getValues();
+    for (let r = 0; r < rowCount8; r++) {
+        for (let c = 0; c < colCount8; c++) {
+            const v = allValues8[r][c];
+            if (typeof v === "string" && v.trim() !== "") allValues8[r][c] = v.toUpperCase();
+        }
+    }
+    usedRange8.setValues(allValues8);
+
+    // 8. Reordenar columnas
+    const desiredOrder: string[] = [
+        "FACTURA","FECHA","DOCUMENTO","NUMERO","PACIENTE",
+        "ADMINISTRADORA","CONTRATO","SERVICIO","ACTIVIDAD","OPERARIO",
+    ];
+    const usedRange9 = sheet.getUsedRange();
+    const rowCount9 = usedRange9.getRowCount();
+    const colCount9 = usedRange9.getColumnCount();
+    const allData9 = usedRange9.getValues();
+    const headerIndexMap: { [key: string]: number } = {};
+    for (let c = 0; c < colCount9; c++) headerIndexMap[String(allData9[0][c]).trim()] = c;
+    const reorderedData: (string | number | boolean)[][] = [];
+    for (let r = 0; r < rowCount9; r++) {
+        const newRow: (string | number | boolean)[] = [];
+        for (const colName of desiredOrder) {
+            const srcCol = headerIndexMap[colName];
+            newRow.push(srcCol !== undefined ? (allData9[r][srcCol] as string | number | boolean) : "");
+        }
+        reorderedData.push(newRow);
+    }
+    sheet.getRangeByIndexes(0, 0, rowCount9, desiredOrder.length).setValues(reorderedData);
+    const extraCount = colCount9 - desiredOrder.length;
+    if (extraCount > 0) {
+        sheet.getRangeByIndexes(0, desiredOrder.length, rowCount9, extraCount).delete(ExcelScript.DeleteShiftDirection.left);
+    }
+
+    // 9. Formato de fecha dd/mm/yyyy
+    const fechaFinalIdx = desiredOrder.indexOf("FECHA");
+    const finalRowCount = sheet.getUsedRange().getRowCount();
+    if (fechaFinalIdx >= 0 && finalRowCount > 1) {
+        sheet.getRangeByIndexes(1, fechaFinalIdx, finalRowCount - 1, 1).setNumberFormat("dd/mm/yyyy");
+    }
+
+    // 10. Reaplicar alineación y dar formato de tabla
+    const finalUsed = sheet.getUsedRange();
+    finalUsed.getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.center);
+    finalUsed.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+    const finalRowCount2 = sheet.getUsedRange().getRowCount();
+    const finalColCount2 = sheet.getUsedRange().getColumnCount();
+    const table = sheet.addTable(sheet.getRangeByIndexes(0, 0, finalRowCount2, finalColCount2), true);
+    table.setName("TblFacturas");
+    table.setPredefinedTableStyle("TableStyleMedium2");
+    sheet.getUsedRange().getFormat().autofitColumns();
+    sheet.getUsedRange().getFormat().autofitRows();
+}`;
+
+function helpApp() {
+  return {
+    guide: 'sihos-report',
+    open: 0,
+    totalSteps: 8,
+    steps: Array(8).fill(false),
+
+    get doneCount() { return this.steps.filter(Boolean).length; },
+    get progress() { return Math.round((this.doneCount / this.totalSteps) * 100); },
+
+    toggle(idx) {
+      this.open = this.open === idx ? -1 : idx;
+    },
+    markDone(idx) {
+      this.steps[idx] = true;
+      // Auto-open next step
+      const next = idx + 1;
+      if (next < this.totalSteps) this.open = next;
+    },
+    resetSteps() {
+      this.steps = Array(this.totalSteps).fill(false);
+      this.open = 0;
+    },
+    downloadScript() {
+      const blob = new Blob([OFFICE_SCRIPT], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'preparar_sihos.ts';
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+  };
+}
+</script>
+{% endblock %}
