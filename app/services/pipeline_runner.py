@@ -94,11 +94,9 @@ async def execute(
         yield f"[ERROR] Etapa desconocida: {stage}"
         return
 
-    yield f"[INFO] Iniciando etapa: {stage}"
     try:
         async for line in handler_fn(ctx):
             yield line
-        yield f"[INFO] Etapa completada: {stage}"
     except Exception as exc:
         logger.exception("Pipeline stage %s failed", stage)
         exc_desc = f"{type(exc).__name__}: {exc}" if str(exc).strip() else type(exc).__name__
@@ -926,15 +924,14 @@ async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
         # Find source — exact match first, then prefix-aware fallback
         source = staging_index.get(folder_name.upper())
         if source is None:
-            # Fallback: folder name starts with expected name (covers _SINCUFE, extra text, etc.)
-            # e.g. "HSL359919_SINCUFE" or "HSL359919 CUFE" both match folder_name "HSL359919"
+            # Fallback: folder name starts with expected name followed by any non-alphanumeric
+            # separator (covers _SINCUFE, " CUFE", "-EXTRA", etc.) without false-positives
+            # like HSL1234567 matching HSL123456.
             key = folder_name.upper()
             source = next(
                 (
                     p for name, p in staging_index.items()
-                    if name == key
-                    or name.startswith(key + "_")
-                    or name.startswith(key + " ")
+                    if (name.startswith(key) and (len(name) == len(key) or not name[len(key)].isalnum()))
                     or (id_prefix and name.endswith(inv.invoice_number.upper()))
                 ),
                 None,
