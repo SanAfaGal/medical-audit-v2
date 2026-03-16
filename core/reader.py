@@ -1,10 +1,14 @@
 """PDF validity checking and text extraction using PyMuPDF (fitz) and pdfplumber."""
 
 import logging
+import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import fitz
 import pdfplumber
+
+_PDF_CHECK_WORKERS = min(16, (os.cpu_count() or 4) * 2)
 
 logger = logging.getLogger(__name__)
 
@@ -107,20 +111,28 @@ class DocumentReader:
 
     @staticmethod
     def find_unreadable(files: list[Path]) -> list[Path]:
-        """Return files that could not be opened as valid PDFs."""
-        return [f for f in files if not DocumentReader._can_open(f)]
+        """Return files that could not be opened as valid PDFs (parallel)."""
+        if not files:
+            return []
+        with ThreadPoolExecutor(max_workers=_PDF_CHECK_WORKERS) as pool:
+            results = pool.map(DocumentReader._can_open, files)
+        return [f for f, ok in zip(files, results) if not ok]
 
     @staticmethod
     def find_needing_ocr(files: list[Path]) -> list[Path]:
-        """Return valid PDFs that contain no readable text layer."""
-        needing_ocr: list[Path] = []
-        for f in files:
+        """Return valid PDFs that contain no readable text layer (parallel)."""
+        if not files:
+            return []
+
+        def _needs_ocr(f: Path) -> bool:
             try:
                 with fitz.open(f) as doc:
-                    if doc.page_count > 0 and not any(
+                    return doc.page_count > 0 and not any(
                         page.get_text().strip() for page in doc
-                    ):
-                        needing_ocr.append(f)
+                    )
             except (fitz.FileDataError, OSError, RuntimeError):
-                pass
-        return needing_ocr
+                return False
+
+        with ThreadPoolExecutor(max_workers=_PDF_CHECK_WORKERS) as pool:
+            results = pool.map(_needs_ocr, files)
+        return [f for f, needs in zip(files, results) if needs]
