@@ -8,8 +8,30 @@
      style="margin:-1.5rem; height:calc(100vh - 58px); background:var(--bg-page); padding:14px;">
 
   <!-- ═══════════════════════════ LEFT PANEL ═══════════════════════════ -->
-  <div class="w-[264px] shrink-0 flex flex-col rounded-xl overflow-hidden"
+  <div :class="$store.ui.flowOpen ? 'w-[264px]' : 'w-[36px]'"
+       class="shrink-0 flex flex-col rounded-xl overflow-hidden transition-all duration-300"
        style="background:var(--bg-surface); border:1px solid var(--border); box-shadow:0 1px 8px rgba(0,0,0,0.06)">
+
+    <!-- Collapsed strip (solo botón para expandir) -->
+    <template x-if="!$store.ui.flowOpen">
+      <div class="flex flex-col items-center py-3 h-full gap-2">
+        <button @click="$store.ui.flowOpen = true"
+                class="p-1.5 rounded-md transition-colors"
+                style="color:var(--text-3)"
+                onmouseover="this.style.color='var(--sky)'" onmouseout="this.style.color='var(--text-3)'"
+                title="Mostrar flujo de auditoría">
+          <i class="fa-solid fa-chevron-right text-[10px]"></i>
+        </button>
+        <div class="flex-1 flex items-center">
+          <span class="text-[9px] font-bold uppercase tracking-widest whitespace-nowrap"
+                style="color:var(--text-3);writing-mode:vertical-rl;transform:rotate(180deg)">Flujo de auditoría</span>
+        </div>
+      </div>
+    </template>
+
+    <!-- Expanded content -->
+    <template x-if="$store.ui.flowOpen">
+      <div class="flex flex-col h-full overflow-hidden">
 
     <!-- Header -->
     <div class="shrink-0 px-4 pt-4 pb-3" style="border-bottom:1px solid var(--border)">
@@ -22,14 +44,20 @@
       <div class="flex items-center justify-between mb-2">
         <span class="text-[10px] font-semibold uppercase tracking-widest" style="color:var(--text-3)">Flujo de auditoría</span>
         <div class="flex gap-1">
-          <button @click="selectAll(true)"
-                  class="text-[9px] px-2 py-0.5 rounded-md transition-all font-medium"
-                  style="border:1px solid var(--border);color:var(--text-2);background:var(--bg-subtle)"
-                  onmouseover="this.style.color='var(--text-1)'" onmouseout="this.style.color='var(--text-2)'">Todo</button>
           <button @click="selectAll(false)"
                   class="text-[9px] px-2 py-0.5 rounded-md transition-all font-medium"
                   style="border:1px solid var(--border);color:var(--text-2);background:var(--bg-subtle)"
-                  onmouseover="this.style.color='var(--text-1)'" onmouseout="this.style.color='var(--text-2)'">Nada</button>
+                  onmouseover="this.style.color='var(--red)';this.style.borderColor='var(--red-border)'" onmouseout="this.style.color='var(--text-2)';this.style.borderColor='var(--border)'"
+                  title="Deseleccionar todas las etapas">
+            <i class="fa-solid fa-xmark text-[9px]"></i>
+          </button>
+          <button @click="$store.ui.flowOpen = false"
+                  class="text-[9px] px-1.5 py-0.5 rounded-md transition-all"
+                  style="border:1px solid var(--border);color:var(--text-3);background:var(--bg-subtle)"
+                  onmouseover="this.style.color='var(--text-1)'" onmouseout="this.style.color='var(--text-3)'"
+                  title="Ocultar flujo">
+            <i class="fa-solid fa-chevron-left text-[9px]"></i>
+          </button>
         </div>
       </div>
       <!-- Progress -->
@@ -214,6 +242,9 @@
         <i class="fa-solid fa-trash-can text-[10px]"></i>
       </button>
     </div>
+
+      </div><!-- /expanded flex col -->
+    </template><!-- /x-if flowOpen -->
 
   </div><!-- /LEFT PANEL -->
 

@@ -83,6 +83,7 @@
     document.addEventListener('alpine:init', () => {
       Alpine.store('ui', {
         consoleOpen: true,
+        flowOpen: true,
       });
     });
   </script>
@@ -92,7 +93,7 @@
     document.addEventListener('alpine:init', () => {
       Alpine.data('explorerApp', () => ({
         explorerOpen: false,
-        rootFolder: 'DRIVE',
+        rootFolder: 'STAGE',
         currentPath: '',
         entries: [],
         selectedEntry: null,
@@ -162,6 +163,7 @@
           this.selectedEntry = null;
           this.previewUrl = null;
           this.pdfMode = 'none';
+          this.filterText = '';
           this.load();
         },
 
