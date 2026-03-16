@@ -623,36 +623,41 @@ function pipeline() {
       { type:'stage',  id:'RECATEGORIZE_SERVICES',         label:'Re-categorizar servicios',      icon:'fa-solid fa-arrows-rotate',        phaseColor:'#0284c7' },
       { type:'stage',  id:'LOAD_DRIVE_ZIP',               label:'Cargar archivos comprimidos',   icon:'fa-solid fa-file-zipper',          phaseColor:'#0284c7' },
 
-      { type:'phase',  label:'Archivos',       color:'#7c3aed', icon:'fa-solid fa-folder' },
+      { type:'phase',  label:'Carpetas',       color:'#7c3aed', icon:'fa-solid fa-folder' },
       { type:'stage',  id:'RUN_STAGING',                   label:'Mover BASE → STAGE',            icon:'fa-solid fa-truck-moving',         phaseColor:'#7c3aed' },
       { type:'stage',  id:'CHECK_NESTED_FOLDERS',          label:'Detectar carpetas anidadas',    icon:'fa-solid fa-folder-tree',          phaseColor:'#7c3aed' },
-      { type:'stage',  id:'REMOVE_NON_PDF',                label:'Eliminar no-PDF y corruptos',   icon:'fa-solid fa-file-circle-xmark',    phaseColor:'#7c3aed' },
+      { type:'stage',  id:'CHECK_FOLDERS_WITH_EXTRA_TEXT', label:'Detectar carpetas con extra',   icon:'fa-solid fa-folder-open',          phaseColor:'#b45309' },
+      { type:'stage',  id:'NORMALIZE_DIR_NAMES',           label:'Normalizar carpetas',           icon:'fa-solid fa-folder',               phaseColor:'#b45309' },
+      
+      { type:'phase',  label:'Archivos',       color:'#7c3aed', icon:'fa-solid fa-file' },
       { type:'stage',  id:'NORMALIZE_FILES',               label:'Renombrar archivos',            icon:'fa-solid fa-tag',                  phaseColor:'#7c3aed' },
-
+      { type:'stage',  id:'REMOVE_NON_PDF',                label:'Eliminar no-PDF y corruptos',   icon:'fa-solid fa-file-circle-xmark',    phaseColor:'#7c3aed' },
+      { type:'stage',  id:'CHECK_INVOICE_NUMBER_ON_FILES', label:'Verificar nombres archivos',    icon:'fa-solid fa-file-circle-check',    phaseColor:'#b45309' },
+      
       { type:'phase',  label:'PDFs',           color:'#4338ca', icon:'fa-solid fa-file-pdf' },
       { type:'stage',  id:'LIST_UNREADABLE_PDFS',          label:'Listar PDFs sin texto',         icon:'fa-solid fa-list-check',           phaseColor:'#4338ca' },
       { type:'branch', label:'Opción A — eliminar + descargar desde SIHOS' },
       { type:'stage',  id:'DELETE_UNREADABLE_PDFS',        label:'Eliminar PDFs sin texto',       icon:'fa-solid fa-file-circle-minus',    phaseColor:'#4338ca' },
-      { type:'stage',  id:'DOWNLOAD_INVOICES_FROM_SIHOS',  label:'Descargar facturas SIHOS',      icon:'fa-solid fa-cloud-arrow-down',     phaseColor:'#4338ca' },
-      { type:'stage',  id:'DOWNLOAD_MEDICATION_SHEETS',   label:'Descargar hojas de medicamentos', icon:'fa-solid fa-pills',               phaseColor:'#4338ca' },
       { type:'branch', label:'Opción B — aplicar OCR' },
       { type:'stage',  id:'CHECK_INVOICES',                label:'Aplicar OCR a facturas',        icon:'fa-solid fa-wand-magic-sparkles',  phaseColor:'#4338ca' },
       { type:'stage',  id:'VERIFY_INVOICE_CODE',           label:'Verificar número en PDF',       icon:'fa-solid fa-magnifying-glass',     phaseColor:'#4338ca' },
-
+      
       { type:'phase',  label:'Verificación',   color:'#b45309', icon:'fa-solid fa-magnifying-glass-chart' },
-      { type:'stage',  id:'CHECK_FOLDERS_WITH_EXTRA_TEXT', label:'Detectar carpetas con extra',   icon:'fa-solid fa-folder-open',          phaseColor:'#b45309' },
-      { type:'stage',  id:'NORMALIZE_DIR_NAMES',           label:'Normalizar carpetas',           icon:'fa-solid fa-folder',               phaseColor:'#b45309' },
-      { type:'stage',  id:'CHECK_INVOICE_NUMBER_ON_FILES', label:'Verificar nombres archivos',    icon:'fa-solid fa-file-circle-check',    phaseColor:'#b45309' },
       { type:'stage',  id:'CHECK_DIRS',                    label:'Detectar directorios faltantes',icon:'fa-solid fa-folder-minus',         phaseColor:'#b45309' },
       { type:'stage',  id:'CHECK_REQUIRED_DOCS',           label:'Verificar docs requeridos',     icon:'fa-solid fa-file-circle-question', phaseColor:'#b45309' },
       { type:'stage',  id:'REVISAR_SOBRANTES',             label:'Revisar sobrantes',           icon:'fa-solid fa-file-circle-exclamation',phaseColor:'#b45309' },
+      
+      { type:'phase',  label:'Últimos pasos',   color:'#059669', icon:'fa-solid fa-box-archive' },
       { type:'stage',  id:'VERIFY_CUFE',                   label:'Verificar y etiquetar CUFE',    icon:'fa-solid fa-qrcode',               phaseColor:'#b45309' },
-
-      { type:'phase',  label:'Organización',   color:'#059669', icon:'fa-solid fa-box-archive' },
       { type:'stage',  id:'ORGANIZE',                      label:'Organizar en AUDIT',            icon:'fa-solid fa-boxes-stacked',        phaseColor:'#059669' },
       { type:'note',   text:'⚠ Las etapas Drive requieren repetir ciclo desde "Eliminar no-PDF"' },
+
+      { type:'phase',  label:'Descargas',   color:'#059669', icon:'fa-solid fa-cloud-arrow-down' },
+      { type:'stage',  id:'DOWNLOAD_INVOICES_FROM_SIHOS',  label:'Descargar facturas SIHOS',      icon:'fa-solid fa-cloud-arrow-down',     phaseColor:'#059669' },
+      { type:'stage',  id:'DOWNLOAD_MEDICATION_SHEETS',   label:'Descargar hojas de medicamentos', icon:'fa-solid fa-pills',               phaseColor:'#059669' },
       { type:'stage',  id:'DOWNLOAD_DRIVE',                label:'Descargar carpetas desde Drive', icon:'fa-brands fa-google-drive',       phaseColor:'#059669' },
       { type:'stage',  id:'DOWNLOAD_MISSING_DOCS',         label:'Descargar docs faltantes Drive', icon:'fa-solid fa-file-arrow-down',     phaseColor:'#059669' },
+      
     ],
 
     stages: [

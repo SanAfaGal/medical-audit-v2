@@ -400,8 +400,6 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
                     return atype
             return ""
 
-        import re as _re
-        _re_pref = _re.compile(r"Prefix '(\w+)'")
         success = 0
         for r in results:
             original_path = Path(r.original_path)
@@ -413,10 +411,15 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
                 success += 1
                 yield f"[INFO] Renombrado: [{folder}] {old_name} → {r.new_name}"
             elif r.status == "REJECTED":
-                if _re_pref.search(r.reason):
-                    yield f"[WARN] Prefijo no reconocido: [{folder}]{admin_suffix} {old_name}"
-                elif "Could not find" in r.reason:
+                if "Could not find" in r.reason:
                     yield f"[WARN] Sin ID de factura extraíble: [{folder}]{admin_suffix} {old_name}"
+                elif "already exists" in r.reason:
+                    yield f"[WARN] Destino ya existe: [{folder}]{admin_suffix} {old_name} → {r.new_name}"
+                else:
+                    # Covers empty prefix (starts with digit) and unrecognised prefixes
+                    yield f"[WARN] Prefijo no reconocido: [{folder}]{admin_suffix} {old_name}"
+            elif r.status == "ERROR":
+                yield f"[ERROR] No se pudo renombrar: [{folder}]{admin_suffix} {old_name} — {r.reason}"
         yield f"[INFO] Archivos renombrados: {success}/{len(invalid)}"
 
 
