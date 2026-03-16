@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from playwright.async_api import Error as PlaywrightError
@@ -69,6 +70,20 @@ class SihosDownloader:
         invoice_list = read_lines_from_file(list_path)
         self._download_invoices(invoice_list)
 
+    def run_medication_sheets(self, targets: list[tuple[str, str, str]], file_prefix: str) -> None:
+        """Download medication sheet PDFs for the given targets.
+
+        Args:
+            targets: List of ``(invoice_number, admission, id_number)`` tuples.
+            file_prefix: Prefix used in the output filename (e.g. the doc type prefix).
+        """
+        self._output_dir.mkdir(parents=True, exist_ok=True)
+        loop = asyncio.ProactorEventLoop() if sys.platform == "win32" else asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(self._async_download_medication_sheets(targets, file_prefix))
+        finally:
+            loop.close()
+
     def _download_invoices(self, invoice_list: list[str]) -> None:
         """Open a browser session and download each invoice."""
         loop = asyncio.ProactorEventLoop() if sys.platform == "win32" else asyncio.new_event_loop()
@@ -77,13 +92,17 @@ class SihosDownloader:
         finally:
             loop.close()
 
-    async def _async_download_invoices(self, invoice_list: list[str]) -> None:
-        """Async implementation of the browser-based invoice download."""
+    @asynccontextmanager
+    async def _browser_session(self):
+        """Async context manager that yields an authenticated SIHOS page.
+
+        Yields the page on successful login, or ``None`` if login fails.
+        The browser is always closed on exit.
+        """
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=False)
             context = await browser.new_context()
             page = await context.new_page()
-
             try:
                 logger.info("Logging into SIHOS as user %s", self._user)
                 await page.goto(self._base_url)
@@ -94,8 +113,18 @@ class SihosDownloader:
             except (PlaywrightTimeoutError, PlaywrightError) as exc:
                 logger.error("SIHOS login failed: %s", exc)
                 await browser.close()
+                yield None
                 return
+            try:
+                yield page
+            finally:
+                await browser.close()
 
+    async def _async_download_invoices(self, invoice_list: list[str]) -> None:
+        """Async implementation of the browser-based invoice download."""
+        async with self._browser_session() as page:
+            if page is None:
+                return
             for invoice_number in invoice_list:
                 url = (
                     "{}/modulos/facturacion/imprifact.php"
@@ -121,4 +150,28 @@ class SihosDownloader:
                         "Failed to download invoice %s: %s", invoice_number, exc
                     )
 
-            await browser.close()
+    async def _async_download_medication_sheets(
+        self, targets: list[tuple[str, str, str]], file_prefix: str
+    ) -> None:
+        """Async implementation of medication sheet download."""
+        async with self._browser_session() as page:
+            if page is None:
+                return
+            for invoice_number, admission, id_number in targets:
+                url = (
+                    "{}/modulos/comun/medicamentos/impriconso.php"
+                    "?ConsAdmi={}&TipoDocu=PE&NumeUsua={}&SinModu=1".format(
+                        self._base_url.rstrip("/"), admission, id_number
+                    )
+                )
+                invoice_folder = self._output_dir / f"{self._invoice_id_prefix}{invoice_number}"
+                invoice_folder.mkdir(parents=True, exist_ok=True)
+                out_path = invoice_folder / (
+                    f"{file_prefix}_{self._hospital_nit}_{self._invoice_id_prefix}{invoice_number}.pdf"
+                )
+                try:
+                    await page.goto(url)
+                    await page.pdf(path=str(out_path), format=_INVOICE_PAGE_FORMAT)
+                    logger.info("Downloaded %s → %s", invoice_number, out_path)
+                except (PlaywrightTimeoutError, PlaywrightError) as exc:
+                    logger.error("Failed %s: %s", invoice_number, exc)

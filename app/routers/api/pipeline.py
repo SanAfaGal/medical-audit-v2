@@ -26,12 +26,14 @@ async def run_stage(
     institution_id: int,
     period_id: int,
     invoice_numbers: str = "",
+    doc_type_id: int = 0,
     db: AsyncSession = Depends(get_db),
 ):
     """Stream SSE log lines from a pipeline stage.
 
-    Optional query param ``invoice_numbers``: comma-separated list of invoice
-    numbers, used by stages such as DOWNLOAD_INVOICES_FROM_SIHOS.
+    Optional query params:
+    - ``invoice_numbers``: comma-separated list, used by DOWNLOAD_INVOICES_FROM_SIHOS.
+    - ``doc_type_id``: doc type to target, used by DOWNLOAD_MEDICATION_SHEETS.
     """
     inst_repo = InstitutionRepo(db)
     institution = await inst_repo.get_by_id(institution_id)
@@ -46,6 +48,8 @@ async def run_stage(
     extra: dict = {}
     if invoice_numbers:
         extra["invoice_numbers"] = [n.strip() for n in invoice_numbers.split(",") if n.strip()]
+    if doc_type_id:
+        extra["doc_type_id"] = doc_type_id
 
     async def event_gen():
         async for line in pipeline_runner.execute(stage, institution, period, db, extra):

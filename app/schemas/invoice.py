@@ -39,6 +39,7 @@ class InvoiceOut(BaseModel):
     contract_id: int | None
     service_type_id: int
     employee: str | None
+    admission: str | None = None
     folder_status_id: int
     created_at: datetime.datetime
     updated_at: datetime.datetime

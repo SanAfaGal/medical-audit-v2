@@ -28,9 +28,12 @@ _DEFAULT_FOLDER_STATUS = "PRESENTE"
 def load_excel(file_bytes: bytes) -> pd.DataFrame:
     """Read SIHOS Excel from raw bytes into a DataFrame."""
     buf = io.BytesIO(file_bytes)
-    df = pd.read_excel(buf, dtype=str)
-    available = [c for c in _SIHOS_COLUMNS if c in df.columns]
-    return df[available].copy()
+    raw_df = pd.read_excel(buf, dtype=str)
+    available = [c for c in _SIHOS_COLUMNS if c in raw_df.columns]
+    df = raw_df[available].copy()
+    if "ADMISION" in raw_df.columns:
+        df["ADMISION"] = raw_df["ADMISION"]
+    return df
 
 
 def _normalize(df: pd.DataFrame) -> pd.DataFrame:
@@ -163,12 +166,20 @@ async def ingest(
         service_type_id = service.service_type_id if service else None
 
         if invoice_number not in invoice_map:
+            def _str(val, maxlen=None):
+                """Convert a pandas cell to str, returning None for NaN/empty."""
+                if val is None or (not isinstance(val, str) and pd.isna(val)):
+                    return None
+                s = str(val).strip()
+                return (s[:maxlen] if maxlen else s) or None
+
             invoice_map[invoice_number] = {
                 "date":             invoice_date,
-                "id_type":          str(row.get("DOCUMENTO", "") or "")[:10],
-                "id_number":        str(row.get("NUMERO", "") or "")[:50],
-                "patient_name":     str(row.get("PACIENTE", "") or "")[:300],
-                "employee":         str(row.get("OPERARIO", "") or "")[:200] or None,
+                "id_type":          _str(row.get("DOCUMENTO"), 10),
+                "id_number":        _str(row.get("NUMERO"), 50),
+                "patient_name":     _str(row.get("PACIENTE"), 300),
+                "employee":         _str(row.get("OPERARIO"), 200),
+                "admission":        _str(row.get("ADMISION")),
                 "admin_id":         admin.id if admin else None,
                 "contract_id":      contract.id if contract else None,
                 "folder_status_id": default_fs.id,

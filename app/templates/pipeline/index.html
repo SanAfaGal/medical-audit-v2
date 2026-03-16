@@ -219,6 +219,22 @@
                 onblur="this.style.borderColor='var(--border)';this.style.background='var(--bg-subtle)'"></textarea>
     </div>
 
+    <!-- Medication sheet doc type selector -->
+    <div x-show="selectedStages.includes('DOWNLOAD_MEDICATION_SHEETS')" x-transition
+         class="shrink-0 px-3 pb-2" style="border-top:1px solid var(--border);padding-top:10px">
+      <p class="text-[9px] font-semibold uppercase tracking-widest mb-1.5" style="color:var(--text-3)">
+        <i class="fa-solid fa-pills mr-1" style="color:#4338ca"></i>Tipo de documento a descargar
+      </p>
+      <select x-model="medSheetDocTypeId"
+              class="w-full text-[10px] rounded-lg px-2.5 py-2 outline-none transition-all"
+              style="background:var(--bg-subtle);border:1px solid var(--border);color:var(--text-1)">
+        <option value="">— Seleccionar tipo —</option>
+        <template x-for="dt in docTypes" :key="dt.id">
+          <option :value="dt.id" x-text="`${dt.code} — ${dt.description}`"></option>
+        </template>
+      </select>
+    </div>
+
     <!-- Run button -->
     <div class="shrink-0 px-3 py-3 flex gap-2" style="border-top:1px solid var(--border)">
       <button @click="runPipeline()"
@@ -593,6 +609,8 @@ function pipeline() {
     zipFile: null,
     zipDragOver: false,
     sihosInvoiceNumbers: '',
+    medSheetDocTypeId: '',
+    docTypes: [],
     unmappedConfirm: null,
     surplusData: null,
     stageStatuses: {},
@@ -616,6 +634,7 @@ function pipeline() {
       { type:'branch', label:'Opción A — eliminar + descargar desde SIHOS' },
       { type:'stage',  id:'DELETE_UNREADABLE_PDFS',        label:'Eliminar PDFs sin texto',       icon:'fa-solid fa-file-circle-minus',    phaseColor:'#4338ca' },
       { type:'stage',  id:'DOWNLOAD_INVOICES_FROM_SIHOS',  label:'Descargar facturas SIHOS',      icon:'fa-solid fa-cloud-arrow-down',     phaseColor:'#4338ca' },
+      { type:'stage',  id:'DOWNLOAD_MEDICATION_SHEETS',   label:'Descargar hojas de medicamentos', icon:'fa-solid fa-pills',               phaseColor:'#4338ca' },
       { type:'branch', label:'Opción B — aplicar OCR' },
       { type:'stage',  id:'CHECK_INVOICES',                label:'Aplicar OCR a facturas',        icon:'fa-solid fa-wand-magic-sparkles',  phaseColor:'#4338ca' },
       { type:'stage',  id:'VERIFY_INVOICE_CODE',           label:'Verificar número en PDF',       icon:'fa-solid fa-magnifying-glass',     phaseColor:'#4338ca' },
@@ -647,6 +666,7 @@ function pipeline() {
       { id:'LIST_UNREADABLE_PDFS',    label:'Listar PDFs sin texto',          description:'Busca los PDFs de factura en STAGE y verifica cuáles no tienen capa de texto extraíble (escaneados sin OCR). Lista cada archivo con [WARN] pero NO los elimina ni modifica.' },
       { id:'DELETE_UNREADABLE_PDFS',  label:'Eliminar PDFs sin texto',        description:'Elimina permanentemente los PDFs de factura sin capa de texto. Úsala cuando los archivos son irrecuperables y deben volver a descargarse desde SIHOS.' },
       { id:'DOWNLOAD_INVOICES_FROM_SIHOS', label:'Descargar facturas SIHOS', description:'Usa Playwright para iniciar sesión en el portal SIHOS y descarga los PDFs de las facturas indicadas. Los números de factura se ingresan en el campo de texto antes de ejecutar.' },
+      { id:'DOWNLOAD_MEDICATION_SHEETS', label:'Descargar hojas de medicamentos', description:'Busca facturas PENDIENTE con hallazgo HOJ_MED sin resolver y número de admisión registrado. Inicia sesión en SIHOS y descarga el PDF de hoja de medicamentos para cada una.' },
       { id:'CHECK_INVOICES',          label:'Aplicar OCR a facturas',         description:'Busca los PDFs de factura sin capa de texto en STAGE y les aplica OCR con ocrmypdf (8 hilos). Solo procesa los que lo necesitan. El resultado es un PDF/A con texto extraíble.' },
       { id:'VERIFY_INVOICE_CODE',     label:'Verificar número en PDF',        description:'Lee el texto de cada PDF de factura y verifica que el número de la carpeta aparezca dentro del documento. Reporta con [WARN] las facturas cuyo PDF no contiene su propio número.' },
       { id:'CHECK_INVOICE_NUMBER_ON_FILES', label:'Verificar nombres archivos', description:'Recorre cada carpeta de factura en STAGE y verifica que todos los archivos contengan el número de factura de la carpeta en su nombre. Reporta los archivos desajustados.' },
@@ -748,6 +768,7 @@ function pipeline() {
       this.$watch('selectedStages',    v => sessionStorage.setItem('pipeline_selectedStages',    JSON.stringify(v)));
       this.$watch('stageStatuses',     v => sessionStorage.setItem('pipeline_stageStatuses',     JSON.stringify(v)));
       this.$watch('stageResults',      v => sessionStorage.setItem('pipeline_stageResults',      JSON.stringify(v)));
+      fetch('/api/settings/doc-types').then(r => r.json()).then(d => { this.docTypes = d; });
     },
 
     async runPipeline() {
@@ -867,6 +888,9 @@ function pipeline() {
             if (stageId === 'DOWNLOAD_INVOICES_FROM_SIHOS' && this.sihosInvoiceNumbers.trim()) {
               const nums = this.sihosInvoiceNumbers.split(/[\n,]+/).map(s => s.trim()).filter(Boolean).join(',');
               url += `&invoice_numbers=${encodeURIComponent(nums)}`;
+            }
+            if (stageId === 'DOWNLOAD_MEDICATION_SHEETS' && this.medSheetDocTypeId) {
+              url += `&doc_type_id=${encodeURIComponent(this.medSheetDocTypeId)}`;
             }
             const evtSource = new EventSource(url);
 
