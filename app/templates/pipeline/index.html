@@ -825,7 +825,7 @@ function pipeline() {
               };
               evtSource.onerror = () => {
                 evtSource.close();
-                const msg = `[ERROR] Conexión interrumpida en etapa ${stageId}`;
+                const msg = `[ERROR] Conexión interrumpida en etapa ${stageInfo?.label || stageId}`;
                 this.logLines.push(msg); this._markLine(stageId, msg); resolve();
               };
             });

@@ -94,11 +94,9 @@ async def execute(
         yield f"[ERROR] Etapa desconocida: {stage}"
         return
 
-    yield f"[INFO] Iniciando etapa: {stage}"
     try:
         async for line in handler_fn(ctx):
             yield line
-        yield f"[INFO] Etapa completada: {stage}"
     except Exception as exc:
         logger.exception("Pipeline stage %s failed", stage)
         exc_desc = f"{type(exc).__name__}: {exc}" if str(exc).strip() else type(exc).__name__
