@@ -732,6 +732,7 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
     from sqlalchemy.orm import selectinload
 
     from app.models.finding import MissingFile
+    from app.models.institution import Admin
     from app.models.invoice import Invoice
     from app.repositories.invoice_repo import InvoiceRepo
     from app.repositories.rules_repo import RulesRepo
@@ -754,6 +755,7 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
         select(Invoice)
         .where(Invoice.audit_period_id == period.id)
         .options(
+            selectinload(Invoice.admin),
             selectinload(Invoice.service_type),
             selectinload(Invoice.missing_files).selectinload(MissingFile.doc_type),
         )
@@ -811,6 +813,8 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
         items.append({
             "invoice_id": invoice.id,
             "invoice_number": invoice.invoice_number,
+            "admin_type": invoice.admin.type if invoice.admin else None,
+            "service_type": invoice.service_type.display_name if invoice.service_type else None,
             "folder_path": str(folder),
             "sobrantes": [
                 {
