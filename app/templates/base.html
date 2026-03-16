@@ -84,6 +84,7 @@
       Alpine.store('ui', {
         consoleOpen: true,
         flowOpen: true,
+        sidebarOpen: true,
       });
     });
   </script>
@@ -460,24 +461,34 @@
   <!-- ================================================================ -->
   <!--  SIDEBAR                                                         -->
   <!-- ================================================================ -->
-  <aside class="w-64 bg-slate-900 flex flex-col shrink-0" style="box-shadow: 4px 0 24px rgba(0,0,0,0.25)">
+  <aside :class="$store.ui.sidebarOpen ? 'w-64' : 'w-[52px]'"
+         class="bg-slate-900 flex flex-col shrink-0 transition-all duration-300 overflow-hidden"
+         style="box-shadow: 4px 0 24px rgba(0,0,0,0.25)">
 
-    <!-- Brand -->
-    <div class="px-5 py-4 border-b border-white/10">
-      <span class="text-white font-bold text-sm tracking-wide flex items-center gap-2.5">
-        <span class="w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-400/30 flex items-center justify-center">
+    <!-- Brand / collapsed toggle -->
+    <div class="px-3 py-4 border-b border-white/10 flex items-center"
+         :class="$store.ui.sidebarOpen ? 'justify-between' : 'justify-center'">
+      <span x-show="$store.ui.sidebarOpen"
+            class="text-white font-bold text-sm tracking-wide flex items-center gap-2.5">
+        <span class="w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-400/30 flex items-center justify-center shrink-0">
           <i class="fa-solid fa-stethoscope text-sky-400 text-xs"></i>
         </span>
         Auditoría Médica
       </span>
+      <button @click="$store.ui.sidebarOpen = !$store.ui.sidebarOpen"
+              class="w-7 h-7 flex items-center justify-center rounded-lg transition-colors hover:bg-white/10 shrink-0"
+              :title="$store.ui.sidebarOpen ? 'Colapsar barra' : 'Expandir barra'">
+        <i class="fa-solid text-slate-400 text-[10px]"
+           :class="$store.ui.sidebarOpen ? 'fa-chevron-left' : 'fa-stethoscope'"></i>
+      </button>
     </div>
 
-    <!-- ── Context card ── -->
-    <div class="px-4 pt-4 pb-3 border-b border-white/10 space-y-3">
+    <!-- ── Context card (solo visible expandido) ── -->
+    <div x-show="$store.ui.sidebarOpen"
+         class="px-4 pt-4 pb-3 border-b border-white/10 space-y-3">
 
       <!-- Hospital logo + name row -->
       <div class="flex items-center gap-3">
-        <!-- Logo box -->
         <div class="w-11 h-11 rounded-xl bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-sm"
              style="box-shadow: 0 0 0 1px rgba(255,255,255,0.12)">
           <template x-if="$store.ctx.institution && $store.ctx.institution.logo_url">
@@ -489,8 +500,6 @@
             <i class="fa-solid fa-hospital-user text-slate-400 text-sm"></i>
           </template>
         </div>
-
-        <!-- Name + period -->
         <div class="min-w-0 flex-1">
           <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Hospital</div>
           <div class="text-sm font-semibold text-white leading-tight truncate"
@@ -529,7 +538,6 @@
           </select>
           <i class="fa-solid fa-chevron-down text-slate-500 text-[9px] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
         </div>
-
         <div class="relative">
           <select @change="$store.ctx.selectPeriod($event.target.value)"
                   :disabled="!$store.ctx.institutionId || $store.ctx.periods.length === 0"
@@ -547,44 +555,55 @@
           <i class="fa-solid fa-chevron-down text-slate-500 text-[9px] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
         </div>
       </div>
-
     </div>
     <!-- ── /Context card ── -->
 
     <!-- Nav -->
-    <nav class="flex-1 px-3 py-4 space-y-0.5">
+    <nav class="flex-1 px-2 py-4 space-y-0.5">
+      <!-- Pipeline -->
       <a href="/"
-         class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all
-                {% if request.url.path == '/' %}bg-sky-500/15 text-sky-300 border border-sky-500/20{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
-        <i class="fa-solid fa-gears w-4 text-center opacity-80"></i>
-        Pipeline
+         :title="$store.ui.sidebarOpen ? '' : 'Pipeline'"
+         class="flex items-center rounded-lg font-medium transition-all
+                {% if request.url.path == '/' %}bg-sky-500/15 text-sky-300 border border-sky-500/20{% else %}text-slate-400 hover:bg-white/5 hover:text-white border border-transparent{% endif %}"
+         :class="$store.ui.sidebarOpen ? 'gap-3 px-3 py-2.5 text-sm' : 'justify-center p-2.5'">
+        <i class="fa-solid fa-gears w-4 text-center opacity-80 shrink-0"></i>
+        <span x-show="$store.ui.sidebarOpen">Pipeline</span>
       </a>
+      <!-- Auditoría -->
       <a href="/audit"
-         class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all
-                {% if request.url.path == '/audit' %}bg-sky-500/15 text-sky-300 border border-sky-500/20{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
-        <i class="fa-solid fa-magnifying-glass-chart w-4 text-center opacity-80"></i>
-        Auditoría
+         :title="$store.ui.sidebarOpen ? '' : 'Auditoría'"
+         class="flex items-center rounded-lg font-medium transition-all
+                {% if request.url.path == '/audit' %}bg-sky-500/15 text-sky-300 border border-sky-500/20{% else %}text-slate-400 hover:bg-white/5 hover:text-white border border-transparent{% endif %}"
+         :class="$store.ui.sidebarOpen ? 'gap-3 px-3 py-2.5 text-sm' : 'justify-center p-2.5'">
+        <i class="fa-solid fa-magnifying-glass-chart w-4 text-center opacity-80 shrink-0"></i>
+        <span x-show="$store.ui.sidebarOpen">Auditoría</span>
       </a>
+      <!-- Configuración -->
       <a href="/settings"
-         class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all
-                {% if request.url.path == '/settings' %}bg-sky-500/15 text-sky-300 border border-sky-500/20{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
-        <i class="fa-solid fa-sliders w-4 text-center opacity-80"></i>
-        Configuración
+         :title="$store.ui.sidebarOpen ? '' : 'Configuración'"
+         class="flex items-center rounded-lg font-medium transition-all
+                {% if request.url.path == '/settings' %}bg-sky-500/15 text-sky-300 border border-sky-500/20{% else %}text-slate-400 hover:bg-white/5 hover:text-white border border-transparent{% endif %}"
+         :class="$store.ui.sidebarOpen ? 'gap-3 px-3 py-2.5 text-sm' : 'justify-center p-2.5'">
+        <i class="fa-solid fa-sliders w-4 text-center opacity-80 shrink-0"></i>
+        <span x-show="$store.ui.sidebarOpen">Configuración</span>
       </a>
 
-      <!-- Divider -->
       <div class="my-2 border-t border-white/5"></div>
 
+      <!-- Ayuda -->
       <a href="/help"
-         class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all
-                {% if request.url.path.startswith('/help') %}bg-violet-500/15 text-violet-300 border border-violet-500/20{% else %}text-slate-400 hover:bg-white/5 hover:text-white{% endif %}">
-        <i class="fa-solid fa-circle-question w-4 text-center opacity-80"></i>
-        Ayuda
+         :title="$store.ui.sidebarOpen ? '' : 'Ayuda'"
+         class="flex items-center rounded-lg font-medium transition-all
+                {% if request.url.path.startswith('/help') %}bg-violet-500/15 text-violet-300 border border-violet-500/20{% else %}text-slate-400 hover:bg-white/5 hover:text-white border border-transparent{% endif %}"
+         :class="$store.ui.sidebarOpen ? 'gap-3 px-3 py-2.5 text-sm' : 'justify-center p-2.5'">
+        <i class="fa-solid fa-circle-question w-4 text-center opacity-80 shrink-0"></i>
+        <span x-show="$store.ui.sidebarOpen">Ayuda</span>
       </a>
     </nav>
 
     <!-- Footer -->
-    <div class="px-4 py-3 border-t border-white/10 text-[11px] text-slate-600">
+    <div x-show="$store.ui.sidebarOpen"
+         class="px-4 py-3 border-t border-white/10 text-[11px] text-slate-600">
       Auditoría Médica v2
     </div>
   </aside>
