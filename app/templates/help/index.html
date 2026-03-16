@@ -670,169 +670,191 @@
 const OFFICE_SCRIPT = `function main(workbook: ExcelScript.Workbook): void {
     const sheet = workbook.getActiveWorksheet();
 
-    // 1. Eliminar primeras 11 filas
-    const initialColCount = sheet.getUsedRange().getColumnCount();
-    sheet.getRangeByIndexes(0, 0, 11, initialColCount).delete(
+    // ─── 1. Eliminar primeras 11 filas ───────────────────────────────────────────
+    // Única operación de delete necesaria — no hay forma de evitarla.
+    const initUsed = sheet.getUsedRange();
+    sheet.getRangeByIndexes(0, 0, 11, initUsed.getColumnCount()).delete(
         ExcelScript.DeleteShiftDirection.up
     );
 
-    // 2. Separar celdas combinadas y nombrar sub-columnas de Paciente
-    const usedRange2 = sheet.getUsedRange();
-    sheet.getRangeByIndexes(0, 0, 1, usedRange2.getColumnCount()).unmerge();
+    // ─── 2. Lectura única de toda la hoja ────────────────────────────────────────
+    // Se lee TODO de una sola vez. El resto del script opera en memoria
+    // y solo escribe al final, minimizando viajes a Excel.
+    const fullRange = sheet.getUsedRange();
+    const totalRows = fullRange.getRowCount();
+    const totalCols = fullRange.getColumnCount();
+    let data = fullRange.getValues();
 
-    const headersAfterUnmerge = sheet.getRangeByIndexes(0, 0, 1, usedRange2.getColumnCount()).getValues()[0];
+    // ─── 3. Separar celda combinada "Paciente" y nombrar sub-columnas ────────────
+    // El unmerge es necesario hacerlo en Excel (no se puede en memoria),
+    // pero solo se ejecuta una vez sobre la fila de encabezados.
+    sheet.getRangeByIndexes(0, 0, 1, totalCols).unmerge();
+
+    // Localizar "Paciente" en los encabezados y asignar sub-columnas por posición
     let pacienteSourceIdx = -1;
-    for (let c = 0; c < headersAfterUnmerge.length; c++) {
-        if (String(headersAfterUnmerge[c]).trim().toLowerCase().includes("paciente")) {
+    for (let c = 0; c < totalCols; c++) {
+        if (String(data[0][c]).trim().toLowerCase().includes("paciente")) {
             pacienteSourceIdx = c;
             break;
         }
     }
     if (pacienteSourceIdx >= 0) {
-        sheet.getCell(0, pacienteSourceIdx).setValue("Documento");
-        sheet.getCell(0, pacienteSourceIdx + 1).setValue("Numero");
-        sheet.getCell(0, pacienteSourceIdx + 2).setValue("Paciente");
+        data[0][pacienteSourceIdx] = "Documento";
+        data[0][pacienteSourceIdx + 1] = "Numero";
+        data[0][pacienteSourceIdx + 2] = "Paciente";
     }
 
-    // 3. Identificar y eliminar columnas no requeridas
-    const headersToKeep: string[] = [
-        "Fecha","Num Factura","Administradora","Tipo Usuario","Tipo Servicio",
-        "Actividad/Suministro","Operario","Documento","Numero","Paciente",
-    ];
-    const usedRange3 = sheet.getUsedRange();
-    const totalRows3 = usedRange3.getRowCount();
-    const totalCols3 = usedRange3.getColumnCount();
-    const headerValues3 = usedRange3.getValues()[0];
-    const colsToDelete: number[] = [];
-    for (let c = totalCols3 - 1; c >= 0; c--) {
-        const cellValue = String(headerValues3[c]).trim();
-        const shouldKeep = headersToKeep.some(h => cellValue.toLowerCase().includes(h.toLowerCase()));
-        if (!shouldKeep) colsToDelete.push(c);
-    }
-    for (const colIdx of colsToDelete) {
-        sheet.getRangeByIndexes(0, colIdx, totalRows3, 1).delete(ExcelScript.DeleteShiftDirection.left);
-    }
-
-    // 4. Renombrar encabezados
+    // ─── 4. Renombrar encabezados en memoria ─────────────────────────────────────
     const renameMap: { [key: string]: string } = {
-        "num factura":"Factura","tipo usuario":"Contrato","tipo servicio":"Servicio",
-        "actividad/suministro":"Actividad","operario":"Operario","paciente":"Paciente",
-        "fecha":"Fecha","administradora":"Administradora","documento":"Documento","numero":"Numero",
+        "num factura": "Factura",
+        "admisión": "Admision",
+        "tipo usuario": "Contrato",
+        "tipo servicio": "Servicio",
+        "actividad/suministro": "Actividad",
+        "operario": "Operario",
+        "paciente": "Paciente",
+        "fecha": "Fecha",
+        "administradora": "Administradora",
+        "documento": "Documento",
+        "numero": "Numero",
     };
-    const usedRange4 = sheet.getUsedRange();
-    const colCount4 = usedRange4.getColumnCount();
-    const rawHeaders4 = usedRange4.getValues()[0];
-    const newHeaderRow: (string | number | boolean)[][] = [[]];
-    for (let c = 0; c < colCount4; c++) {
-        const normalized = String(rawHeaders4[c]).trim().toLowerCase();
-        const renamed = renameMap[normalized];
-        newHeaderRow[0].push(renamed !== undefined ? renamed : String(rawHeaders4[c]).trim());
+    for (let c = 0; c < totalCols; c++) {
+        const normalized = String(data[0][c]).trim().toLowerCase();
+        if (renameMap[normalized] !== undefined) {
+            data[0][c] = renameMap[normalized];
+        }
     }
-    sheet.getRangeByIndexes(0, 0, 1, colCount4).setValues(newHeaderRow);
 
-    // 5. Eliminar filas donde Factura sea 0 o vacía
-    const usedRange5 = sheet.getUsedRange();
-    const allRows5 = usedRange5.getRowCount();
-    const allCols5 = usedRange5.getColumnCount();
-    const allData5 = usedRange5.getValues();
+    // ─── 5. Identificar columnas a conservar por nombre ──────────────────────────
+    const headersToKeep: string[] = [
+        "Fecha", "Factura", "Admision", "Administradora",
+        "Contrato", "Servicio", "Actividad", "Operario",
+        "Documento", "Numero", "Paciente",
+    ];
+
+    // Construir mapa de columnas a conservar y sus índices destino
+    const keepColIndices: number[] = [];
+    for (let c = 0; c < totalCols; c++) {
+        const hVal = String(data[0][c]).trim();
+        if (headersToKeep.includes(hVal)) keepColIndices.push(c);
+    }
+
+    // Filtrar columnas en memoria: conservar solo las necesarias
+    const dataFiltered: (string | number | boolean)[][] = [];
+    for (let r = 0; r < totalRows; r++) {
+        const newRow: (string | number | boolean)[] = [];
+        for (const c of keepColIndices) {
+            newRow.push(data[r][c] as string | number | boolean);
+        }
+        dataFiltered.push(newRow);
+    }
+    data = dataFiltered;
+    const filteredCols = keepColIndices.length;
+
+    // ─── 6. Eliminar filas donde Factura sea 0 o vacía ───────────────────────────
+    // Se hace filtrando la matriz en memoria — sin ningún delete() en loop.
     let facturaColIdx = -1;
-    for (let c = 0; c < allCols5; c++) {
-        if (String(allData5[0][c]).trim().toLowerCase() === "factura") { facturaColIdx = c; break; }
-    }
-    if (facturaColIdx >= 0) {
-        const rowsToDelete: number[] = [];
-        for (let r = 1; r < allRows5; r++) {
-            const cellVal = allData5[r][facturaColIdx];
-            const isEmpty = cellVal === null || String(cellVal).trim() === "";
-            const isZero = !isEmpty && (Number(cellVal) === 0 || String(cellVal).trim() === "0");
-            if (isEmpty || isZero) rowsToDelete.push(r);
-        }
-        for (let i = rowsToDelete.length - 1; i >= 0; i--) {
-            sheet.getRangeByIndexes(rowsToDelete[i], 0, 1, allCols5).delete(ExcelScript.DeleteShiftDirection.up);
-        }
+    for (let c = 0; c < filteredCols; c++) {
+        if (String(data[0][c]).trim() === "Factura") { facturaColIdx = c; break; }
     }
 
-    // 6. Borrar formato y centrar
-    const usedRange6 = sheet.getUsedRange();
-    usedRange6.clear(ExcelScript.ClearApplyTo.formats);
-    usedRange6.getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.center);
-    usedRange6.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
-
-    // 7. Convertir todo a mayúsculas
-    const usedRange8 = sheet.getUsedRange();
-    const rowCount8 = usedRange8.getRowCount();
-    const colCount8 = usedRange8.getColumnCount();
-    const allValues8 = usedRange8.getValues();
-    for (let r = 0; r < rowCount8; r++) {
-        for (let c = 0; c < colCount8; c++) {
-            const v = allValues8[r][c];
-            if (typeof v === "string" && v.trim() !== "") allValues8[r][c] = v.toUpperCase();
-        }
+    const dataNoEmpty: (string | number | boolean)[][] = [data[0]]; // conservar encabezado
+    for (let r = 1; r < data.length; r++) {
+        const cellVal = data[r][facturaColIdx];
+        const isEmpty = cellVal === null || String(cellVal).trim() === "";
+        const isZero = !isEmpty && (Number(cellVal) === 0 || String(cellVal).trim() === "0");
+        if (!isEmpty && !isZero) dataNoEmpty.push(data[r]);
     }
-    usedRange8.setValues(allValues8);
+    data = dataNoEmpty;
 
-    // 8. Renombrar SERVICIO a "TOMA Y ENVIO" donde ACTIVIDAD contenga "TOMA Y"
-    const usedRangeTY = sheet.getUsedRange();
-    const rowCountTY = usedRangeTY.getRowCount();
-    const colCountTY = usedRangeTY.getColumnCount();
-    const allDataTY = usedRangeTY.getValues();
-    let actividadIdx = -1, servicioIdx = -1;
-    for (let c = 0; c < colCountTY; c++) {
-        const h = String(allDataTY[0][c]).trim();
-        if (h === "ACTIVIDAD") actividadIdx = c;
-        if (h === "SERVICIO") servicioIdx = c;
-    }
-    if (actividadIdx >= 0 && servicioIdx >= 0) {
-        for (let r = 1; r < rowCountTY; r++) {
-            const actividad = String(allDataTY[r][actividadIdx]).trim();
-            if (actividad.includes("TOMA Y")) {
-                sheet.getCell(r, servicioIdx).setValue("TOMA Y ENVIO");
+    // ─── 7. Convertir todo a mayúsculas en memoria ───────────────────────────────
+    for (let r = 0; r < data.length; r++) {
+        for (let c = 0; c < data[r].length; c++) {
+            const v = data[r][c];
+            if (typeof v === "string" && v.trim() !== "") {
+                data[r][c] = v.toUpperCase();
             }
         }
     }
 
-    // 9. Reordenar columnas
+    // ─── 8. Normalizar "TOMA Y*" → "TOMA Y ENVIO" en columna SERVICIO ────────────
+    let actividadIdx = -1;
+    let servicioIdx = -1;
+    for (let c = 0; c < data[0].length; c++) {
+        const h = String(data[0][c]).trim();
+        if (h === "ACTIVIDAD") actividadIdx = c;
+        if (h === "SERVICIO") servicioIdx = c;
+    }
+    if (actividadIdx >= 0 && servicioIdx >= 0) {
+        for (let r = 1; r < data.length; r++) {
+            if (String(data[r][actividadIdx]).includes("TOMA Y")) {
+                data[r][servicioIdx] = "TOMA Y ENVIO";
+            }
+        }
+    }
+
+    // ─── 9. Reordenar columnas en memoria ─────────────────────────────────────────
     const desiredOrder: string[] = [
-        "FACTURA","FECHA","DOCUMENTO","NUMERO","PACIENTE",
-        "ADMINISTRADORA","CONTRATO","SERVICIO","ACTIVIDAD","OPERARIO",
+        "FACTURA", "ADMISION", "FECHA", "DOCUMENTO", "NUMERO",
+        "PACIENTE", "ADMINISTRADORA", "CONTRATO", "SERVICIO",
+        "ACTIVIDAD", "OPERARIO",
     ];
-    const usedRange9 = sheet.getUsedRange();
-    const rowCount9 = usedRange9.getRowCount();
-    const colCount9 = usedRange9.getColumnCount();
-    const allData9 = usedRange9.getValues();
+
     const headerIndexMap: { [key: string]: number } = {};
-    for (let c = 0; c < colCount9; c++) headerIndexMap[String(allData9[0][c]).trim()] = c;
-    const reorderedData: (string | number | boolean)[][] = [];
-    for (let r = 0; r < rowCount9; r++) {
+    for (let c = 0; c < data[0].length; c++) {
+        headerIndexMap[String(data[0][c]).trim()] = c;
+    }
+
+    const dataReordered: (string | number | boolean)[][] = [];
+    for (let r = 0; r < data.length; r++) {
         const newRow: (string | number | boolean)[] = [];
         for (const colName of desiredOrder) {
             const srcCol = headerIndexMap[colName];
-            newRow.push(srcCol !== undefined ? (allData9[r][srcCol] as string | number | boolean) : "");
+            newRow.push(srcCol !== undefined ? data[r][srcCol] : "");
         }
-        reorderedData.push(newRow);
+        dataReordered.push(newRow);
     }
-    sheet.getRangeByIndexes(0, 0, rowCount9, desiredOrder.length).setValues(reorderedData);
-    const extraCount = colCount9 - desiredOrder.length;
-    if (extraCount > 0) {
-        sheet.getRangeByIndexes(0, desiredOrder.length, rowCount9, extraCount).delete(ExcelScript.DeleteShiftDirection.left);
+    data = dataReordered;
+
+    // ─── 10. ESCRITURA ÚNICA en Excel ────────────────────────────────────────────
+    // Limpiar hoja y escribir toda la matriz de una sola vez.
+    sheet.getUsedRange().clear(ExcelScript.ClearApplyTo.all);
+    const outputRows = data.length;
+    const outputCols = desiredOrder.length;
+    sheet.getRangeByIndexes(0, 0, outputRows, outputCols).setValues(data);
+
+    // ─── 11. Formatos de columna ─────────────────────────────────────────────────
+    if (outputRows > 1) {
+        const fechaIdx = desiredOrder.indexOf("FECHA");
+        const admisionIdx = desiredOrder.indexOf("ADMISION");
+
+        if (fechaIdx >= 0) {
+            sheet.getRangeByIndexes(1, fechaIdx, outputRows - 1, 1)
+                .setNumberFormat("dd/mm/yyyy");
+        }
+        if (admisionIdx >= 0) {
+            sheet.getRangeByIndexes(1, admisionIdx, outputRows - 1, 1)
+                .setNumberFormat("0");
+        }
     }
 
-    // 10. Formato de fecha dd/mm/yyyy
-    const fechaFinalIdx = desiredOrder.indexOf("FECHA");
-    const finalRowCount = sheet.getUsedRange().getRowCount();
-    if (fechaFinalIdx >= 0 && finalRowCount > 1) {
-        sheet.getRangeByIndexes(1, fechaFinalIdx, finalRowCount - 1, 1).setNumberFormat("dd/mm/yyyy");
-    }
-
-    // 11. Reaplicar alineación y dar formato de tabla
+    // ─── 12. Alineación ──────────────────────────────────────────────────────────
     const finalUsed = sheet.getUsedRange();
     finalUsed.getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.center);
     finalUsed.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
-    const finalRowCount2 = sheet.getUsedRange().getRowCount();
-    const finalColCount2 = sheet.getUsedRange().getColumnCount();
-    const table = sheet.addTable(sheet.getRangeByIndexes(0, 0, finalRowCount2, finalColCount2), true);
+
+    // ─── 13. Formato de tabla ─────────────────────────────────────────────────────
+    const existingTable = workbook.getTable("TblFacturas");
+    if (existingTable) existingTable.delete();
+
+    const table = sheet.addTable(
+        sheet.getRangeByIndexes(0, 0, outputRows, outputCols),
+        true
+    );
     table.setName("TblFacturas");
     table.setPredefinedTableStyle("TableStyleMedium2");
+
+    // ─── 14. Autofit ──────────────────────────────────────────────────────────────
     sheet.getUsedRange().getFormat().autofitColumns();
     sheet.getUsedRange().getFormat().autofitRows();
 }`;
