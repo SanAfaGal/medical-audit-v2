@@ -237,19 +237,25 @@ async def _check_nested_folders(ctx: dict) -> AsyncGenerator[str, None]:
         yield f"[ERROR] Directorio STAGE no existe: {stage_path}"
         return
 
-    nested = [
-        d for d in sorted(stage_path.iterdir())
-        if d.is_dir() and any(sub.is_dir() for sub in d.iterdir())
-    ]
+    def _find_nested(path: Path) -> list[tuple[str, list[str]]]:
+        result = []
+        for d in sorted(path.iterdir()):
+            if d.is_dir():
+                subs = [s.name for s in sorted(d.iterdir()) if s.is_dir()]
+                if subs:
+                    result.append((d.name, subs))
+        return result
+
+    executor = _get_executor()
+    nested = await executor(_find_nested, stage_path)
 
     if not nested:
         yield "[INFO] No se encontraron carpetas con subcarpetas anidadas en STAGE."
         return
 
     yield f"[WARN] {len(nested)} carpeta(s) con subcarpetas anidadas detectadas en STAGE:"
-    for d in nested:
-        sub_names = [s.name for s in sorted(d.iterdir()) if s.is_dir()]
-        yield f"[WARN] {d.name} → subcarpetas: {', '.join(sub_names)}"
+    for name, subs in nested:
+        yield f"[WARN] {name} → subcarpetas: {', '.join(subs)}"
     yield "[WARN] Revisa y aplana estas carpetas para que los archivos queden directamente en la carpeta de factura."
 
 
@@ -720,31 +726,48 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
     presente_invoices = await inv_repo.get_invoices_by_status_code(period.id, "PRESENTE")
     yield f"[INFO] Facturas PRESENTE a verificar: {len(presente_invoices)}"
 
-    inspector = FolderInspector(stage_path, institution.invoice_id_prefix or "")
-    total_findings = 0
-    invoices_with_findings: list[str] = []
+    id_prefix = institution.invoice_id_prefix or ""
+    inspector = FolderInspector(stage_path, id_prefix)
 
-    for invoice in presente_invoices:
-        required_dt_ids = std_map.get(invoice.service_type_id, [])
-        if not required_dt_ids:
-            continue
+    # Snapshot data needed in executor (avoids passing SQLAlchemy objects to thread)
+    invoice_data = [
+        (inv.id, inv.invoice_number, inv.service_type_id)
+        for inv in presente_invoices
+    ]
 
-        required_prefixes = {
-            str(dt_id): prefix_map.get(dt_id, [])
-            for dt_id in required_dt_ids
-        }
+    def _check_all_folders(
+        inv_data: list[tuple[int, str, int | None]],
+    ) -> dict[int, tuple[str, list[int]]]:
+        """Returns {invoice_id: (invoice_number, [missing_doc_type_ids])}"""
+        results: dict[int, tuple[str, list[int]]] = {}
+        for inv_id, inv_number, svc_type_id in inv_data:
+            required_dt_ids = std_map.get(svc_type_id, [])
+            if not required_dt_ids:
+                continue
+            required_prefixes = {
+                str(dt_id): prefix_map.get(dt_id, [])
+                for dt_id in required_dt_ids
+            }
+            folder = stage_path / (id_prefix + inv_number)
+            missing_codes = inspector.check_required_docs(folder, required_prefixes)
+            if missing_codes:
+                results[inv_id] = (inv_number, [int(c) for c in missing_codes])
+        return results
 
-        prefix = institution.invoice_id_prefix or ""
-        folder = stage_path / (prefix + invoice.invoice_number)
-        missing_codes = await executor(inspector.check_required_docs, folder, required_prefixes)
+    findings_map = await executor(_check_all_folders, invoice_data)
 
-        for code in missing_codes:
-            await finding_repo.upsert_finding(invoice.id, int(code))
-            total_findings += 1
+    # Bulk upsert all findings in one DB call
+    all_findings: list[tuple[int, int]] = [
+        (inv_id, dt_id)
+        for inv_id, (_, dt_ids) in findings_map.items()
+        for dt_id in dt_ids
+    ]
+    total_findings = len(all_findings)
+    await finding_repo.bulk_upsert_findings(all_findings)
 
-        if missing_codes:
-            invoices_with_findings.append(invoice.invoice_number)
-            yield f"[WARN] Faltantes en {invoice.invoice_number}: doc_type_ids {missing_codes}"
+    invoices_with_findings = [inv_number for _, (inv_number, _) in findings_map.items()]
+    for inv_number, (_, dt_ids) in findings_map.items():
+        yield f"[WARN] Faltantes en {dt_ids[0] if len(dt_ids)==1 else str(len(dt_ids))+' docs'}: {inv_number}"
 
     if invoices_with_findings:
         updated = await inv_repo.batch_update_folder_status(
@@ -835,81 +858,140 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
     invoices = list(result.scalars().all())
     invoice_by_number = {inv.invoice_number.upper(): inv for inv in invoices}
 
-    items = []
-    total_sobrantes = 0
-
-    for folder in sorted(stage_path.iterdir()):
-        if not folder.is_dir():
-            continue
-
-        folder_key = folder.name.upper()
-        invoice = invoice_by_number.get(folder_key)
-        if invoice is None:
-            invoice = next(
-                (inv for num, inv in invoice_by_number.items()
-                 if folder_key == num
-                 or folder_key.startswith(num + "_")
-                 or folder_key.startswith(num + " ")
-                 or folder_key.endswith(num)),
-                None,
-            )
-        if invoice is None:
-            continue
-
-        required_dt_ids = std_map.get(invoice.service_type_id, [])
-        required_prefixes = [
-            prefix_map[dt_id]
-            for dt_id in required_dt_ids
-            if dt_id in prefix_map and prefix_map[dt_id]
-        ]
-
-        all_files = [f for f in folder.iterdir() if f.is_file()]
-        sobrantes = [
-            f for f in all_files
-            if not any(
-                f.name.upper().startswith(p.upper())
-                for p in required_prefixes
-            )
-        ]
-        if not sobrantes:
-            continue
-
-        faltantes = [
-            mf for mf in invoice.missing_files
-            if mf.resolved_at is None and mf.doc_type
-        ]
-
-        suggestions = _compute_surplus_suggestions(sobrantes, faltantes, SequenceMatcher)
-
-        items.append({
-            "invoice_id": invoice.id,
-            "invoice_number": invoice.invoice_number,
-            "admin_type": invoice.admin.type if invoice.admin else None,
-            "service_type": invoice.service_type.display_name if invoice.service_type else None,
-            "folder_path": str(folder),
-            "sobrantes": [
-                {
-                    "filename": f.name,
-                    **suggestions.get(f.name, {
-                        "suggested_doc_type_id": None,
-                        "suggested_code": None,
-                        "suggested_prefix": None,
-                        "confidence": None,
-                    }),
-                }
-                for f in sobrantes
-            ],
+    # Snapshot invoice data to pass to executor (avoid passing SQLAlchemy ORM objects)
+    invoice_snapshot = {
+        num: {
+            "id": inv.id,
+            "invoice_number": inv.invoice_number,
+            "service_type_id": inv.service_type_id,
+            "admin_type": inv.admin.type if inv.admin else None,
+            "service_type": inv.service_type.display_name if inv.service_type else None,
             "faltantes": [
                 {
                     "doc_type_id": mf.doc_type.id,
                     "code": mf.doc_type.code,
                     "description": mf.doc_type.description,
+                    "prefix": mf.doc_type.prefix if hasattr(mf.doc_type, "prefix") else None,
+                    "_prefix_for_suggestion": mf.doc_type.prefix if hasattr(mf.doc_type, "prefix") else None,
                 }
-                for mf in faltantes
+                for mf in inv.missing_files
+                if mf.resolved_at is None and mf.doc_type
             ],
-        })
-        total_sobrantes += len(sobrantes)
-        yield f"[INFO] {folder.name}: {len(sobrantes)} sobrante(s), {len(faltantes)} faltante(s)"
+        }
+        for num, inv in invoice_by_number.items()
+    }
+
+    executor = _get_executor()
+
+    def _scan_folders(
+        s_path: Path,
+        inv_snap: dict,
+        s_std_map: dict,
+        s_prefix_map: dict,
+    ) -> tuple[list[dict], list[str], int]:
+        from difflib import SequenceMatcher as SM
+        items_out: list[dict] = []
+        log_lines: list[str] = []
+        total = 0
+
+        for folder in sorted(s_path.iterdir()):
+            if not folder.is_dir():
+                continue
+
+            folder_key = folder.name.upper()
+            inv_data = inv_snap.get(folder_key)
+            if inv_data is None:
+                inv_data = next(
+                    (v for k, v in inv_snap.items()
+                     if folder_key == k
+                     or folder_key.startswith(k + "_")
+                     or folder_key.startswith(k + " ")
+                     or folder_key.endswith(k)),
+                    None,
+                )
+            if inv_data is None:
+                continue
+
+            required_dt_ids = s_std_map.get(inv_data["service_type_id"], [])
+            required_prefixes = [
+                s_prefix_map[dt_id]
+                for dt_id in required_dt_ids
+                if dt_id in s_prefix_map and s_prefix_map[dt_id]
+            ]
+
+            all_files = [f for f in folder.iterdir() if f.is_file()]
+            sobrantes = [
+                f for f in all_files
+                if not any(f.name.upper().startswith(p.upper()) for p in required_prefixes)
+            ]
+            if not sobrantes:
+                continue
+
+            faltantes_data = inv_data["faltantes"]
+
+            # Compute suggestions inline (reimplemented to avoid passing SequenceMatcher objects)
+            suggestions: dict = {}
+            if faltantes_data:
+                if len(sobrantes) == 1 and len(faltantes_data) == 1:
+                    ft = faltantes_data[0]
+                    suggestions[sobrantes[0].name] = {
+                        "suggested_doc_type_id": ft["doc_type_id"],
+                        "suggested_code": ft["code"],
+                        "suggested_prefix": ft.get("_prefix_for_suggestion"),
+                        "confidence": "high",
+                    }
+                else:
+                    for f in sobrantes:
+                        best_score, best_ft = 0.0, None
+                        for ft in faltantes_data:
+                            prefix = ft.get("_prefix_for_suggestion") or ""
+                            if not prefix:
+                                continue
+                            score = SM(None, f.name.upper(), prefix.upper()).ratio()
+                            if score > best_score:
+                                best_score, best_ft = score, ft
+                        if best_ft and best_score > 0.3:
+                            suggestions[f.name] = {
+                                "suggested_doc_type_id": best_ft["doc_type_id"],
+                                "suggested_code": best_ft["code"],
+                                "suggested_prefix": best_ft.get("_prefix_for_suggestion"),
+                                "confidence": "low",
+                            }
+
+            items_out.append({
+                "invoice_id": inv_data["id"],
+                "invoice_number": inv_data["invoice_number"],
+                "admin_type": inv_data["admin_type"],
+                "service_type": inv_data["service_type"],
+                "folder_path": str(folder),
+                "sobrantes": [
+                    {
+                        "filename": f.name,
+                        **suggestions.get(f.name, {
+                            "suggested_doc_type_id": None,
+                            "suggested_code": None,
+                            "suggested_prefix": None,
+                            "confidence": None,
+                        }),
+                    }
+                    for f in sobrantes
+                ],
+                "faltantes": [
+                    {"doc_type_id": ft["doc_type_id"], "code": ft["code"], "description": ft["description"]}
+                    for ft in faltantes_data
+                ],
+            })
+            total += len(sobrantes)
+            log_lines.append(f"[INFO] {folder.name}: {len(sobrantes)} sobrante(s), {len(faltantes_data)} faltante(s)")
+
+        return items_out, log_lines, total
+
+    items, log_lines, total_sobrantes = await executor(
+        _scan_folders, stage_path, invoice_snapshot, std_map, prefix_map
+    )
+
+    for line in log_lines:
+        yield line
 
     yield f"[INFO] Total: {total_sobrantes} archivos sobrantes en {len(items)} carpetas"
     if items:
@@ -988,20 +1070,14 @@ async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
     staging_index = await executor(_build_staging_index, stage_path)
     id_prefix = (institution.invoice_id_prefix or "").upper()
 
-    moved_numbers: list[str] = []
+    # Build all (source, dest, invoice_number) triples first — no I/O yet
+    planned: list[tuple[Path, Path, str]] = []
     not_found = 0
-    failed = 0
 
     for inv in organizable:
-        # Folder on disk: PREFIX + invoice_number (e.g. HSL359918)
         folder_name = (institution.invoice_id_prefix or "") + inv.invoice_number
-
-        # Find source — exact match first, then prefix-aware fallback
         source = staging_index.get(folder_name.upper())
         if source is None:
-            # Fallback: folder name starts with expected name followed by any non-alphanumeric
-            # separator (covers _SINCUFE, " CUFE", "-EXTRA", etc.) without false-positives
-            # like HSL1234567 matching HSL123456.
             key = folder_name.upper()
             source = next(
                 (
@@ -1011,13 +1087,11 @@ async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
                 ),
                 None,
             )
-
         if source is None:
             yield f"[WARN] Carpeta no encontrada en STAGE: {folder_name}"
             not_found += 1
             continue
 
-        # Build destination: AUDIT / ADMIN (TYPE) / [CONTRACT /] folder_name
         if inv.admin and inv.admin.canonical_admin:
             admin_name = (
                 f"{inv.admin.canonical_admin} ({inv.admin.type})"
@@ -1031,21 +1105,40 @@ async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
             if inv.contract and inv.contract.canonical_contract
             else None
         )
+        dest = (
+            audit_path / admin_name / contract_name / source.name
+            if contract_name
+            else audit_path / admin_name / source.name
+        )
+        planned.append((source, dest, inv.invoice_number))
 
-        if contract_name:
-            dest = audit_path / admin_name / contract_name / source.name
-        else:
-            dest = audit_path / admin_name / source.name
+    def _batch_move(
+        moves: list[tuple[Path, Path, str]],
+    ) -> tuple[list[tuple[str, str]], list[str]]:
+        """Returns ([(src_name, rel_dest), ...], [failed_src_names])."""
+        moved, failed = [], []
+        for src, dest, _ in moves:
+            if safe_move(src, dest):
+                moved.append((src.name, str(dest.relative_to(audit_path))))
+            else:
+                failed.append(src.name)
+        return moved, failed
 
-        ok = await executor(safe_move, source, dest)
-        if ok:
-            moved_numbers.append(inv.invoice_number)
-            yield f"[INFO] Movida: {source.name} → {dest.relative_to(audit_path)}"
-        else:
-            failed += 1
-            yield f"[WARN] Error al mover: {source.name}"
+    moved_pairs, failed_names = await executor(_batch_move, planned)
+    moved_numbers = [inv_number for _, _, inv_number in planned if
+                     any(src == name for name, _ in moved_pairs
+                         for src, _, _ in [p for p in planned if p[2] == inv_number])]
 
-    yield f"[INFO] Movidas: {len(moved_numbers)}, no encontradas: {not_found}, fallidas: {failed}"
+    # Simpler: derive moved_numbers from planned vs failed
+    failed_set = set(failed_names)
+    moved_numbers = [inv_number for src, _, inv_number in planned if src.name not in failed_set]
+
+    for src_name, rel_dest in moved_pairs:
+        yield f"[INFO] Movida: {src_name} → {rel_dest}"
+    for src_name in failed_names:
+        yield f"[WARN] Error al mover: {src_name}"
+
+    yield f"[INFO] Movidas: {len(moved_numbers)}, no encontradas: {not_found}, fallidas: {len(failed_names)}"
 
     if moved_numbers:
         updated = await inv_repo.batch_update_to_auditada(period.id, moved_numbers)

@@ -1,8 +1,12 @@
 """PDF content analysis: CUFE extraction, invoice code validation, and text search."""
 
 import logging
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+_PDF_WORKERS = min(16, (os.cpu_count() or 4) * 2)
 
 from core.helpers import remove_accents
 from core.reader import DocumentReader
@@ -108,27 +112,28 @@ class InvoiceValidator:
     def validate_invoice_files(
         self, file_paths: list[Path]
     ) -> tuple[list[Path], list[Path]]:
-        """Check invoice code and CUFE presence in a single read pass per file.
+        """Check invoice code and CUFE presence in a single read pass per file (parallel)."""
+        if not file_paths:
+            return [], []
 
-        Returns:
-            A tuple ``(missing_invoice_code, missing_cufe)``.
-        """
-        missing_invoice_code: list[Path] = []
-        missing_cufe: list[Path] = []
+        re_invoice_code = self._re_invoice_code
+        read_text = self._read_text
 
-        for f in file_paths:
-            content = self._read_text(f)
+        def _check(f: Path) -> tuple[bool, bool]:
+            content = read_text(f)
             if not content:
-                continue
-
+                return False, True
             normalised = _collapse_inline_whitespace(content.upper())
+            invoice_match = re_invoice_code.search(f.stem.upper())
+            missing_code = bool(invoice_match and invoice_match.group(1) not in normalised)
+            cufe = _RE_CUFE.search(normalised)
+            cufe_val = cufe.group(1).strip() if cufe else None
+            missing_cufe = not (cufe_val and len(cufe_val) >= _MIN_CUFE_LENGTH)
+            return missing_code, missing_cufe
 
-            invoice_match = self._re_invoice_code.search(f.stem.upper())
-            if invoice_match and invoice_match.group(1) not in normalised:
-                missing_invoice_code.append(f)
+        with ThreadPoolExecutor(max_workers=_PDF_WORKERS) as pool:
+            results = list(pool.map(_check, file_paths))
 
-            cufe = self.extract_cufe_code(normalised)
-            if not (cufe and len(cufe) >= _MIN_CUFE_LENGTH):
-                missing_cufe.append(f)
-
+        missing_invoice_code = [f for f, (mc, _) in zip(file_paths, results) if mc]
+        missing_cufe = [f for f, (_, mc) in zip(file_paths, results) if mc]
         return missing_invoice_code, missing_cufe

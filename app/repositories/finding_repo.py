@@ -85,6 +85,20 @@ class MissingFileRepo:
         """Insert a missing-file record; no-op if already exists."""
         await self.record_missing_file(invoice_id, doc_type_id, expected_path="")
 
+    async def bulk_upsert_findings(self, findings: list[tuple[int, int]]) -> None:
+        """Bulk insert (invoice_id, doc_type_id) pairs; no-op for already-existing records."""
+        if not findings:
+            return
+        await self.db.execute(
+            pg_insert(MissingFile)
+            .values([
+                {"invoice_id": inv_id, "doc_type_id": dt_id, "expected_path": ""}
+                for inv_id, dt_id in findings
+            ])
+            .on_conflict_do_nothing(index_elements=["invoice_id", "doc_type_id"])
+        )
+        await self.db.flush()
+
     async def get_findings_grouped_by_invoice(
         self, period_id: int
     ) -> dict[str, list[str]]:
