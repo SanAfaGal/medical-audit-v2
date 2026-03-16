@@ -493,7 +493,7 @@ async def _delete_unreadable_pdfs(ctx: dict) -> AsyncGenerator[str, None]:
 
 @_stage("DOWNLOAD_INVOICES_FROM_SIHOS")
 async def _download_invoices_from_sihos(ctx: dict) -> AsyncGenerator[str, None]:
-    """Download PDFs for PENDIENTE invoices with an unresolved finding of the chosen doc type."""
+    """Download the factura PDF from SIHOS for PENDIENTE invoices with an unresolved finding of the chosen doc type."""
     from sqlalchemy import select
 
     from core.downloader import SihosDownloader

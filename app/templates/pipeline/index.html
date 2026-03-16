@@ -680,7 +680,7 @@ function pipeline() {
 
       // ── 6. DESCARGAS — SIHOS ────────────────────────────────────────────
       { type:'phase', label:'Descargas · SIHOS', color:'#0369a1', icon:'fa-solid fa-hospital' },
-      { type:'stage', id:'DOWNLOAD_INVOICES_FROM_SIHOS', label:'Descargar PDFs desde SIHOS',       icon:'fa-solid fa-cloud-arrow-down',  phaseColor:'#0369a1', heavy:true },
+      { type:'stage', id:'DOWNLOAD_INVOICES_FROM_SIHOS', label:'Descargar facturas desde SIHOS',    icon:'fa-solid fa-cloud-arrow-down',  phaseColor:'#0369a1', heavy:true },
       { type:'stage', id:'DOWNLOAD_MEDICATION_SHEETS',   label:'Descargar hojas de medicamentos',  icon:'fa-solid fa-pills',             phaseColor:'#0369a1', heavy:true },
 
       // ── 7. DESCARGAS — DRIVE ────────────────────────────────────────────
@@ -711,7 +711,7 @@ function pipeline() {
       { id:'REVISAR_SOBRANTES',       label:'Revisar archivos sobrantes',         description:'Detecta archivos cuyo nombre no coincide con ningún prefijo requerido. Sugiere renombrarlos al tipo de documento faltante y permite confirmar o corregir cada sugerencia antes de aplicar el cambio en disco.' },
       { id:'VERIFY_CUFE',             label:'Verificar CUFE',                     description:'Valida que cada PDF de factura contenga un código CUFE válido. Las carpetas sin CUFE se renombran añadiendo el sufijo _SINCUFE para identificación visual.' },
       { id:'ORGANIZE',                label:'Organizar en AUDIT',                 description:'Mueve de STAGE a AUDIT las carpetas de facturas PRESENTE sin hallazgos pendientes, organizándolas en subcarpetas por administradora y contrato. Actualiza su estado a AUDITADA en la base de datos.' },
-      { id:'DOWNLOAD_INVOICES_FROM_SIHOS', label:'Descargar PDFs desde SIHOS',   description:'⏱ Proceso intensivo — requiere sesión en SIHOS. Consulta las facturas PENDIENTE con hallazgo sin resolver del tipo seleccionado e inicia sesión en el portal para descargar cada PDF con Playwright.' },
+      { id:'DOWNLOAD_INVOICES_FROM_SIHOS', label:'Descargar facturas desde SIHOS', description:'⏱ Proceso intensivo — requiere sesión en SIHOS. Descarga el PDF de factura de cada factura PENDIENTE con hallazgo sin resolver del tipo de documento seleccionado. Solo descarga la factura en sí; no otros documentos del expediente.' },
       { id:'DOWNLOAD_MEDICATION_SHEETS',   label:'Descargar hojas de medicamentos', description:'⏱ Proceso intensivo — requiere sesión en SIHOS. Descarga las hojas de medicamentos de facturas PENDIENTE con hallazgo sin resolver del tipo seleccionado y número de admisión registrado.' },
       { id:'DOWNLOAD_DRIVE',          label:'Descargar carpetas (Drive)',          description:'⏱ Puede tardar varios minutos. Busca en Google Drive las carpetas de facturas marcadas como FALTANTE y las descarga a STAGE. Su estado se actualiza automáticamente a PRESENTE.' },
       { id:'DOWNLOAD_MISSING_DOCS',   label:'Descargar documentos faltantes',     description:'⏱ Puede tardar varios minutos. Para cada hallazgo pendiente, busca en Google Drive el archivo esperado ({prefijo}_{NIT}_{factura}.pdf) y lo descarga a la carpeta correspondiente en STAGE.' },
