@@ -5,9 +5,11 @@ import io
 import logging
 
 import pandas as pd
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.institution import Institution
+from app.models.institution import Admin, Contract, Institution, Service
+from app.models.invoice import Invoice
 from app.repositories.institution_repo import InstitutionRepo
 from app.repositories.invoice_repo import InvoiceRepo
 from app.repositories.rules_repo import RulesRepo
@@ -52,78 +54,75 @@ async def ingest(
     """
     Full ingestion pipeline for SIHOS Excel (new uppercase format).
 
-    1. Parse Excel
-    2. For each row: upsert Admin, Contract, Service
-    3. Group rows by invoice number; pick the service type with the highest
-       priority among all service rows for that invoice
-    4. Upsert one Invoice record per invoice number
-    5. Return summary dict
+    Optimized to minimize DB round-trips:
+    1. Parse + normalize Excel
+    2. Pre-load existing admins/contracts/services into memory (3 queries)
+    3. Bulk-insert only the NEW admins/contracts/services (3 queries max)
+    4. Build invoice_map entirely in memory (0 DB calls)
+    5. Bulk-insert all invoices in one statement
     """
     inst_repo = InstitutionRepo(db)
-    inv_repo = InvoiceRepo(db)
     rules_repo = RulesRepo(db)
 
-    # Look up default folder status
     default_fs = await rules_repo.get_folder_status_by_status(_DEFAULT_FOLDER_STATUS)
     if not default_fs:
         raise RuntimeError(f"Folder status '{_DEFAULT_FOLDER_STATUS}' not found — run seeds first.")
 
     raw_df = load_excel(file_bytes)
     df = _normalize(raw_df)
+    skipped = int(df["FECHA"].isna().sum())
 
-    skipped = 0
-    unknown_admins: list[str] = []
-    unknown_contracts: list[str] = []
-    unknown_services: list[str] = []
+    # ── Phase 1: collect unique raw strings from the Excel ────────────────
+    col = lambda name: df[name].str.strip().dropna() if name in df.columns else pd.Series(dtype=str)
 
-    # invoice_number → {base fields dict, service_type_ids: set[int]}
-    invoice_map: dict[str, dict] = {}
+    raw_admins: set[str]    = set(col("ADMINISTRADORA").unique()) - {""}
+    raw_contracts: set[str] = set(col("CONTRATO").unique()) - {""}
+    raw_services: set[str]  = set(col("SERVICIO").unique()) - {""}
 
-    for _, row in df.iterrows():
-        raw_admin = str(row.get("ADMINISTRADORA", "") or "").strip()
-        raw_contract = str(row.get("CONTRATO", "") or "").strip()
-        raw_service = str(row.get("SERVICIO", "") or "").strip()
-        invoice_number = str(row["FACTURA"])
-        invoice_date = row.get("FECHA")
+    # ── Phase 2: pre-load existing rows (3 queries total) ────────────────
+    adm_cache: dict[str, Admin]    = {a.raw_admin:    a for a in await inst_repo.get_admins(institution.id)}
+    ctr_cache: dict[str, Contract] = {c.raw_contract: c for c in await inst_repo.get_contracts(institution.id)}
+    svc_cache: dict[str, Service]  = {s.raw_service:  s for s in await inst_repo.get_services(institution.id)}
 
-        if not invoice_date:
-            skipped += 1
-            continue
+    # ── Phase 3: bulk-insert only new entries ────────────────────────────
+    new_admins    = raw_admins    - adm_cache.keys()
+    new_contracts = raw_contracts - ctr_cache.keys()
+    new_services  = raw_services  - svc_cache.keys()
 
-        # Upsert admin — record unmapped but always continue
-        admin = await inst_repo.upsert_admin(institution.id, raw_admin)
-        if admin.canonical_admin is None and raw_admin not in unknown_admins:
-            unknown_admins.append(raw_admin)
+    if new_admins:
+        await db.execute(
+            pg_insert(Admin)
+            .values([{"institution_id": institution.id, "raw_admin": r} for r in new_admins])
+            .on_conflict_do_nothing()
+        )
+        await db.flush()
+        adm_cache = {a.raw_admin: a for a in await inst_repo.get_admins(institution.id)}
 
-        # Upsert contract — record unmapped but always continue
-        contract = await inst_repo.upsert_contract(institution.id, raw_contract) if raw_contract else None
-        if contract and contract.canonical_contract is None and raw_contract not in unknown_contracts:
-            unknown_contracts.append(raw_contract)
+    if new_contracts:
+        await db.execute(
+            pg_insert(Contract)
+            .values([{"institution_id": institution.id, "raw_contract": r} for r in new_contracts])
+            .on_conflict_do_nothing()
+        )
+        await db.flush()
+        ctr_cache = {c.raw_contract: c for c in await inst_repo.get_contracts(institution.id)}
 
-        # Upsert service — record unmapped but always continue
-        service = await inst_repo.upsert_service(institution.id, raw_service) if raw_service else None
-        service_type_id = service.service_type_id if service else None
-        if service and service_type_id is None and raw_service not in unknown_services:
-            unknown_services.append(raw_service)
+    if new_services:
+        await db.execute(
+            pg_insert(Service)
+            .values([
+                {"institution_id": institution.id, "raw_service": r, "service_type_id": None}
+                for r in new_services
+            ])
+            .on_conflict_do_nothing()
+        )
+        await db.flush()
+        svc_cache = {s.raw_service: s for s in await inst_repo.get_services(institution.id)}
 
-        if scan_only:
-            continue
-
-        if invoice_number not in invoice_map:
-            invoice_map[invoice_number] = {
-                "date":             invoice_date,
-                "id_type":          str(row.get("DOCUMENTO", "") or "")[:10],
-                "id_number":        str(row.get("NUMERO", "") or "")[:50],
-                "patient_name":     str(row.get("PACIENTE", "") or "")[:300],
-                "employee":         str(row.get("OPERARIO", "") or "")[:200] or None,
-                "admin_id":         admin.id,
-                "contract_id":      contract.id if contract else None,
-                "folder_status_id": default_fs.id,
-                "_service_type_ids": set(),
-            }
-
-        if service_type_id is not None:
-            invoice_map[invoice_number]["_service_type_ids"].add(service_type_id)
+    # Track unknowns for the summary report
+    unknown_admins    = [r for r in raw_admins    if adm_cache.get(r) and adm_cache[r].canonical_admin is None]
+    unknown_contracts = [r for r in raw_contracts if ctr_cache.get(r) and ctr_cache[r].canonical_contract is None]
+    unknown_services  = [r for r in raw_services  if svc_cache.get(r) and svc_cache[r].service_type_id is None]
 
     if scan_only:
         if save_mappings_only:
@@ -142,22 +141,63 @@ async def ingest(
             "unknown_services": unknown_services,
         }
 
-    # Build priority map: service_type_id → priority
+    # ── Phase 4: build invoice_map entirely in memory ────────────────────
     service_types = await rules_repo.get_service_types()
     priority_map: dict[int, int] = {st.id: st.priority for st in service_types}
 
-    inserted = 0
+    invoice_map: dict[str, dict] = {}
+
+    for _, row in df.iterrows():
+        invoice_date = row.get("FECHA")
+        if not invoice_date:
+            continue
+
+        invoice_number = str(row["FACTURA"])
+        raw_admin    = str(row.get("ADMINISTRADORA", "") or "").strip()
+        raw_contract = str(row.get("CONTRATO", "") or "").strip()
+        raw_service  = str(row.get("SERVICIO", "") or "").strip()
+
+        admin    = adm_cache.get(raw_admin)
+        contract = ctr_cache.get(raw_contract) if raw_contract else None
+        service  = svc_cache.get(raw_service)  if raw_service  else None
+        service_type_id = service.service_type_id if service else None
+
+        if invoice_number not in invoice_map:
+            invoice_map[invoice_number] = {
+                "date":             invoice_date,
+                "id_type":          str(row.get("DOCUMENTO", "") or "")[:10],
+                "id_number":        str(row.get("NUMERO", "") or "")[:50],
+                "patient_name":     str(row.get("PACIENTE", "") or "")[:300],
+                "employee":         str(row.get("OPERARIO", "") or "")[:200] or None,
+                "admin_id":         admin.id if admin else None,
+                "contract_id":      contract.id if contract else None,
+                "folder_status_id": default_fs.id,
+                "_service_type_ids": set(),
+            }
+
+        if service_type_id is not None:
+            invoice_map[invoice_number]["_service_type_ids"].add(service_type_id)
+
+    # ── Phase 5: bulk-insert all invoices in one statement ───────────────
+    invoice_values = []
     for invoice_number, data in invoice_map.items():
-        service_type_ids: set[int] = data.pop("_service_type_ids")
-
-        # Pick the service type with the highest priority
-        best_st_id: int | None = None
-        if service_type_ids:
-            best_st_id = max(service_type_ids, key=lambda sid: priority_map.get(sid, 0))
-
+        st_ids: set[int] = data.pop("_service_type_ids")
+        best_st_id = max(st_ids, key=lambda sid: priority_map.get(sid, 0)) if st_ids else None
         data["service_type_id"] = best_st_id
-        await inv_repo.upsert_invoice(period_id, invoice_number, data)
-        inserted += 1
+        invoice_values.append({
+            "audit_period_id": period_id,
+            "invoice_number":  invoice_number,
+            **data,
+        })
+
+    inserted = 0
+    if invoice_values:
+        await db.execute(
+            pg_insert(Invoice)
+            .values(invoice_values)
+            .on_conflict_do_nothing(index_elements=["audit_period_id", "invoice_number"])
+        )
+        inserted = len(invoice_values)
 
     await db.commit()
     logger.info(
