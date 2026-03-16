@@ -6,20 +6,19 @@
   <title>{% block title %}Auditoría Médica{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Fonts (local) -->
+  <link rel="stylesheet" href="/static/vendor/fonts/plus-jakarta-sans/plus-jakarta-sans.css">
 
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Font Awesome 6 Free CDN -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-  <!-- HTMX CDN -->
-  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
-  <!-- HTMX SSE extension -->
-  <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/sse.js" defer></script>
-  <!-- Alpine.js CDN -->
-  <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <!-- Tailwind CSS (local) -->
+  <script src="/static/vendor/tailwind.min.js"></script>
+  <!-- Font Awesome 6 Free (local) -->
+  <link rel="stylesheet" href="/static/vendor/fa6/css/all.min.css" />
+  <!-- HTMX (local) -->
+  <script src="/static/vendor/htmx.min.js" defer></script>
+  <!-- HTMX SSE extension (local) -->
+  <script src="/static/vendor/htmx-sse.js" defer></script>
+  <!-- Alpine.js (local) -->
+  <script src="/static/vendor/alpine.min.js" defer></script>
 
   <script>
     tailwind.config = {
