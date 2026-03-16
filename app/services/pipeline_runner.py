@@ -130,6 +130,77 @@ async def _load_and_process(ctx: dict) -> AsyncGenerator[str, None]:
     for service in result["unknown_services"]:
         yield f"[WARN] Servicio sin reclasificar (GENERAL): {service}"
 
+    # Guardar el Excel para permitir re-categorización posterior
+    base_path: Path = ctx["base_path"]
+    executor = _get_executor()
+    def _save_excel(path: Path, data: bytes) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    await executor(_save_excel, base_path / "sihos.xlsx", file_bytes)
+    yield "[INFO] Excel guardado para futuras re-categorizaciones."
+
+
+@_stage("RECATEGORIZE_SERVICES")
+async def _recategorize_services(ctx: dict) -> AsyncGenerator[str, None]:
+    """Re-apply current service mappings to all invoices in the period without reloading from SIHOS."""
+    from app.repositories.institution_repo import InstitutionRepo
+    from app.repositories.invoice_repo import InvoiceRepo
+    from app.repositories.rules_repo import RulesRepo
+    from app.services.billing import load_excel, _normalize
+
+    base_path: Path = ctx["base_path"]
+    institution = ctx["institution"]
+    period = ctx["period"]
+    db: AsyncSession = ctx["db"]
+
+    excel_path = base_path / "sihos.xlsx"
+    if not excel_path.exists():
+        yield "[ERROR] No se encontró el Excel guardado. Ejecuta primero 'Cargar reporte SIHOS'."
+        return
+
+    yield f"[INFO] Leyendo Excel guardado: {excel_path.name}"
+    executor = _get_executor()
+    file_bytes = await executor(excel_path.read_bytes)
+    raw_df = await executor(load_excel, file_bytes)
+    df = await executor(_normalize, raw_df)
+
+    # Cargar mapeos actuales de servicios
+    inst_repo = InstitutionRepo(db)
+    rules_repo = RulesRepo(db)
+
+    from sqlalchemy import select as sa_select
+    from app.models.institution import Service as ServiceModel
+    result = await db.execute(
+        sa_select(ServiceModel).where(ServiceModel.institution_id == institution.id)
+    )
+    service_map: dict[str, int | None] = {
+        s.raw_service: s.service_type_id for s in result.scalars().all()
+    }
+
+    service_types = await rules_repo.get_service_types()
+    priority_map: dict[int, int] = {st.id: st.priority for st in service_types}
+
+    # Recalcular service_type_id por factura
+    invoice_service_ids: dict[str, set[int]] = {}
+    for _, row in df.iterrows():
+        raw_service = str(row.get("SERVICIO", "") or "").strip()
+        invoice_number = str(row["FACTURA"])
+        st_id = service_map.get(raw_service)
+        if st_id is not None:
+            invoice_service_ids.setdefault(invoice_number, set()).add(st_id)
+
+    updates: dict[str, int | None] = {}
+    for invoice_number, st_ids in invoice_service_ids.items():
+        best = max(st_ids, key=lambda sid: priority_map.get(sid, 0)) if st_ids else None
+        updates[invoice_number] = best
+
+    yield f"[INFO] Facturas a actualizar: {len(updates)}"
+
+    inv_repo = InvoiceRepo(db)
+    updated = await inv_repo.batch_update_service_type(period.id, updates)
+    await db.commit()
+    yield f"[OK] Tipos de servicio actualizados: {updated} factura(s)."
+
 
 @_stage("RUN_STAGING")
 async def _run_staging(ctx: dict) -> AsyncGenerator[str, None]:

@@ -602,6 +602,7 @@ function pipeline() {
     stageFlow: [
       { type:'phase',  label:'SIHOS',         color:'#0284c7', icon:'fa-solid fa-database' },
       { type:'stage',  id:'LOAD_AND_PROCESS',              label:'Cargar reporte SIHOS',          icon:'fa-solid fa-file-excel',           phaseColor:'#0284c7' },
+      { type:'stage',  id:'RECATEGORIZE_SERVICES',         label:'Re-categorizar servicios',      icon:'fa-solid fa-arrows-rotate',        phaseColor:'#0284c7' },
       { type:'stage',  id:'LOAD_DRIVE_ZIP',               label:'Cargar archivos comprimidos',   icon:'fa-solid fa-file-zipper',          phaseColor:'#0284c7' },
 
       { type:'phase',  label:'Archivos',       color:'#7c3aed', icon:'fa-solid fa-folder' },
@@ -636,7 +637,8 @@ function pipeline() {
     ],
 
     stages: [
-      { id:'LOAD_AND_PROCESS',        label:'Cargar reporte SIHOS',           description:'Lee el Excel exportado desde SIHOS e inserta las facturas del período en la BD. Registra administradoras, contratos y servicios nuevos en crudo (sin mapeo). Los campos sin mapeo canónico quedan en null. Filas sin fecha válida son omitidas.' },
+      { id:'LOAD_AND_PROCESS',        label:'Cargar reporte SIHOS',           description:'Lee el Excel exportado desde SIHOS e inserta las facturas del período en la BD. Registra administradoras, contratos y servicios nuevos en crudo (sin mapeo). Los campos sin mapeo canónico quedan en null. Filas sin fecha válida son omitidas. Guarda el Excel en disco para re-categorización futura.' },
+      { id:'RECATEGORIZE_SERVICES',   label:'Re-categorizar servicios',       description:'Re-lee el Excel SIHOS guardado y aplica los mapeos de servicios actuales (Configuración → Servicios) a todas las facturas del período. No elimina facturas ni toca los archivos. Útil tras corregir mapeos de servicio sin tener que recargar SIHOS.' },
       { id:'LOAD_DRIVE_ZIP',          label:'Cargar archivos comprimidos',    description:'Descomprime un archivo .zip, .7z o .rar directamente en la carpeta DRIVE del hospital y período seleccionado. Útil para cargar de una vez las carpetas de facturas descargadas manualmente.' },
       { id:'RUN_STAGING',             label:'Mover BASE → STAGE',             description:'Busca las carpetas hoja (sin subcarpetas) dentro del directorio DRIVE del período y las mueve a STAGE. STAGE es el directorio de trabajo donde se realizan todas las operaciones de auditoría.' },
       { id:'CHECK_NESTED_FOLDERS',   label:'Detectar carpetas anidadas',     description:'Escanea el directorio STAGE y lista las carpetas de factura que contienen subcarpetas anidadas. Los archivos dentro de subcarpetas no son procesados correctamente; deben moverse al nivel raíz de la carpeta de factura.' },

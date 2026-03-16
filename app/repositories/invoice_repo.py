@@ -184,6 +184,21 @@ class InvoiceRepo:
         )
         await self.db.flush()
 
+    async def batch_update_service_type(
+        self, period_id: int, updates: dict[str, int | None]
+    ) -> int:
+        """Update service_type_id for invoices by invoice_number. Returns count updated."""
+        count = 0
+        for invoice_number, service_type_id in updates.items():
+            result = await self.db.execute(
+                update(Invoice)
+                .where(Invoice.audit_period_id == period_id, Invoice.invoice_number == invoice_number)
+                .values(service_type_id=service_type_id)
+            )
+            count += result.rowcount
+        await self.db.flush()
+        return count
+
     async def delete_invoice(self, invoice_id: int) -> bool:
         invoice = await self.db.get(Invoice, invoice_id)
         if not invoice:
