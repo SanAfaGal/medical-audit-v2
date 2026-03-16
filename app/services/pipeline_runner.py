@@ -493,32 +493,56 @@ async def _delete_unreadable_pdfs(ctx: dict) -> AsyncGenerator[str, None]:
 
 @_stage("DOWNLOAD_INVOICES_FROM_SIHOS")
 async def _download_invoices_from_sihos(ctx: dict) -> AsyncGenerator[str, None]:
-    """Download invoices from SIHOS portal via Playwright.
+    """Download PDFs for PENDIENTE invoices with an unresolved finding of the chosen doc type."""
+    from sqlalchemy import select
 
-    Requires ctx['invoice_numbers'] — a list of invoice number strings provided
-    by the user through the UI textarea before running this stage.
-    """
     from core.downloader import SihosDownloader
 
     from app.crypto import decrypt
-    from app.repositories.rules_repo import RulesRepo
+    from app.models.finding import MissingFile
+    from app.models.invoice import Invoice
+    from app.models.rules import DocType, FolderStatus
 
     institution = ctx["institution"]
     stage_path: Path = ctx["stage_path"]
     db = ctx["db"]
-    invoice_numbers: list[str] = ctx.get("invoice_numbers", [])
+    period = ctx["period"]
+    doc_type_id: int = ctx.get("doc_type_id", 0)
 
-    if not invoice_numbers:
-        yield "[WARN] No se especificaron facturas para descargar. Ingresa los números en el campo de texto antes de ejecutar esta etapa."
+    if not doc_type_id:
+        yield "[ERROR] No se seleccionó un tipo de documento. Elige uno en el panel antes de ejecutar esta etapa."
         return
 
     if not institution.sihos_user or not institution.sihos_password:
         yield "[ERROR] Credenciales SIHOS no configuradas en la institución."
         return
 
-    rules_repo = RulesRepo(db)
-    invoice_doc = await rules_repo.get_doc_type_by_code("FACTURA")
-    invoice_prefix = invoice_doc.prefix if invoice_doc and invoice_doc.prefix else ""
+    doc_type_result = await db.execute(select(DocType).where(DocType.id == doc_type_id))
+    doc_type = doc_type_result.scalar_one_or_none()
+    if not doc_type:
+        yield f"[ERROR] Tipo de documento con id={doc_type_id} no encontrado."
+        return
+
+    yield f"[INFO] Tipo de documento: {doc_type.code} — prefijo {doc_type.prefix or '(sin prefijo)'}"
+
+    stmt = (
+        select(Invoice.invoice_number)
+        .join(FolderStatus, Invoice.folder_status_id == FolderStatus.id)
+        .join(MissingFile, MissingFile.invoice_id == Invoice.id)
+        .where(Invoice.audit_period_id == period.id)
+        .where(FolderStatus.status == "PENDIENTE")
+        .where(MissingFile.doc_type_id == doc_type_id)
+        .where(MissingFile.resolved_at.is_(None))
+        .distinct()
+    )
+    result = await db.execute(stmt)
+    invoice_numbers = [row.invoice_number for row in result.all()]
+
+    if not invoice_numbers:
+        yield f"[INFO] No hay facturas PENDIENTE con hallazgo {doc_type.code} sin resolver."
+        return
+
+    yield f"[INFO] Descargando {len(invoice_numbers)} factura(s) desde SIHOS..."
 
     executor = _get_executor()
     password = decrypt(institution.sihos_password)
@@ -527,15 +551,14 @@ async def _download_invoices_from_sihos(ctx: dict) -> AsyncGenerator[str, None]:
         password=password,
         base_url=institution.sihos_base_url or "",
         hospital_nit=institution.nit,
-        invoice_prefix=invoice_prefix,
+        invoice_prefix=doc_type.prefix or "",
         invoice_id_prefix=institution.invoice_id_prefix or "",
         invoice_doc_code=institution.sihos_doc_code or "",
         output_dir=stage_path,
     )
 
-    yield f"[INFO] Descargando {len(invoice_numbers)} factura(s) desde SIHOS..."
     await executor(downloader.run_from_list, invoice_numbers)
-    yield f"[INFO] Descarga SIHOS completada."
+    yield "[INFO] Descarga SIHOS completada."
 
 
 @_stage("DOWNLOAD_MEDICATION_SHEETS")

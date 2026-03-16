@@ -91,11 +91,25 @@
             </div>
           </template>
 
-          <!-- Branch hint -->
-          <template x-if="item.type === 'branch'">
-            <div class="flex items-center gap-2 px-3 py-0.5 ml-2">
-              <div class="w-2 h-px" style="background:var(--border)"></div>
-              <span class="text-[8.5px] italic" style="color:var(--text-3)" x-text="item.label"></span>
+          <!-- Decision point -->
+          <template x-if="item.type === 'decision'">
+            <div class="mx-1 my-2 px-2.5 py-2 rounded-lg" style="background:#eef2ff;border:1px solid #c7d2fe">
+              <div class="flex items-center gap-1.5 mb-1">
+                <i class="fa-solid fa-code-fork text-[9px]" style="color:#4338ca"></i>
+                <span class="text-[8.5px] font-extrabold uppercase tracking-wider" style="color:#4338ca">Punto de decisión</span>
+              </div>
+              <p class="text-[9px] leading-relaxed" style="color:#6366f1" x-text="item.label"></p>
+            </div>
+          </template>
+
+          <!-- Fork path separator (replaces branch) -->
+          <template x-if="item.type === 'fork'">
+            <div class="flex items-center gap-1.5 px-2 pt-2 pb-0.5 ml-2">
+              <div class="w-1 h-3.5 rounded-full shrink-0"
+                   :style="`background:${item.path==='A'?'#dc2626':'#2563eb'}`"></div>
+              <span class="text-[8.5px] font-extrabold uppercase tracking-wider"
+                    :style="`color:${item.path==='A'?'#dc2626':'#2563eb'}`"
+                    x-text="item.label"></span>
             </div>
           </template>
 
@@ -110,7 +124,7 @@
           <!-- Stage card -->
           <template x-if="item.type === 'stage'">
             <label class="stage-card relative flex items-center gap-2.5 px-3 py-2 my-0.5 rounded-lg cursor-pointer select-none"
-                   :class="selectedStages.includes(item.id) ? 'stage-sel' : ''"
+                   :class="[selectedStages.includes(item.id) ? 'stage-sel' : '', item.path ? 'ml-4' : '']"
                    @mouseenter="hoveredStage=item.id"
                    @mouseleave="hoveredStage=null">
 
@@ -125,9 +139,15 @@
                  :style="`color:${selectedStages.includes(item.id) ? item.phaseColor : item.phaseColor+'88'}`"></i>
 
               <div class="flex-1 min-w-0">
-                <p class="text-[11.5px] font-medium leading-tight transition-colors"
-                   :style="selectedStages.includes(item.id) ? 'color:var(--text-1)' : 'color:var(--text-2)'"
-                   x-text="item.label"></p>
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <p class="text-[11.5px] font-medium leading-snug transition-colors"
+                     :style="selectedStages.includes(item.id) ? 'color:var(--text-1)' : 'color:var(--text-2)'"
+                     x-text="item.label"></p>
+                  <template x-if="item.heavy">
+                    <span class="shrink-0 text-[7px] font-bold px-1 py-px rounded leading-none"
+                          style="background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber-border)">⏱</span>
+                  </template>
+                </div>
                 <template x-if="stageResults[item.id]">
                   <p class="text-[9px] mt-0.5 truncate" style="color:var(--text-3)" x-text="stageResults[item.id]"></p>
                 </template>
@@ -205,18 +225,20 @@
       </div>
     </div>
 
-    <!-- SIHOS invoice numbers -->
+    <!-- Invoice doc type selector -->
     <div x-show="selectedStages.includes('DOWNLOAD_INVOICES_FROM_SIHOS')" x-transition
          class="shrink-0 px-3 pb-2" style="border-top:1px solid var(--border);padding-top:10px">
       <p class="text-[9px] font-semibold uppercase tracking-widest mb-1.5" style="color:var(--text-3)">
-        <i class="fa-solid fa-cloud-arrow-down mr-1" style="color:var(--sky)"></i>Números de factura
+        <i class="fa-solid fa-cloud-arrow-down mr-1" style="color:var(--sky)"></i>Tipo de documento a descargar
       </p>
-      <textarea x-model="sihosInvoiceNumbers" rows="2"
-                placeholder="Una por línea o separadas por coma"
-                class="w-full text-[10px] font-mono rounded-lg px-2.5 py-2 resize-none outline-none transition-all"
-                style="background:var(--bg-subtle);border:1px solid var(--border);color:var(--text-1);line-height:1.6"
-                onfocus="this.style.borderColor='var(--sky-border)';this.style.background='var(--sky-soft)'"
-                onblur="this.style.borderColor='var(--border)';this.style.background='var(--bg-subtle)'"></textarea>
+      <select x-model="invoiceDocTypeId"
+              class="w-full text-[10px] rounded-lg px-2.5 py-2 outline-none transition-all"
+              style="background:var(--bg-subtle);border:1px solid var(--border);color:var(--text-1)">
+        <option value="">— Seleccionar tipo —</option>
+        <template x-for="dt in docTypes" :key="dt.id">
+          <option :value="dt.id" x-text="dt.prefix ? `${dt.code} — ${dt.prefix}` : dt.code"></option>
+        </template>
+      </select>
     </div>
 
     <!-- Medication sheet doc type selector -->
@@ -230,7 +252,7 @@
               style="background:var(--bg-subtle);border:1px solid var(--border);color:var(--text-1)">
         <option value="">— Seleccionar tipo —</option>
         <template x-for="dt in docTypes" :key="dt.id">
-          <option :value="dt.id" x-text="`${dt.code} — ${dt.description}`"></option>
+          <option :value="dt.id" x-text="dt.prefix ? `${dt.code} — ${dt.prefix}` : dt.code"></option>
         </template>
       </select>
     </div>
@@ -608,7 +630,7 @@ function pipeline() {
     dragOver: false,
     zipFile: null,
     zipDragOver: false,
-    sihosInvoiceNumbers: '',
+    invoiceDocTypeId: '',
     medSheetDocTypeId: '',
     docTypes: [],
     unmappedConfirm: null,
@@ -618,72 +640,81 @@ function pipeline() {
     hoveredStage: null,
 
     stageFlow: [
-      { type:'phase',  label:'SIHOS',         color:'#0284c7', icon:'fa-solid fa-database' },
-      { type:'stage',  id:'LOAD_AND_PROCESS',              label:'Cargar reporte SIHOS',          icon:'fa-solid fa-file-excel',           phaseColor:'#0284c7' },
-      { type:'stage',  id:'RECATEGORIZE_SERVICES',         label:'Re-categorizar servicios',      icon:'fa-solid fa-arrows-rotate',        phaseColor:'#0284c7' },
-      { type:'stage',  id:'LOAD_DRIVE_ZIP',               label:'Cargar archivos comprimidos',   icon:'fa-solid fa-file-zipper',          phaseColor:'#0284c7' },
 
-      { type:'phase',  label:'Carpetas',       color:'#7c3aed', icon:'fa-solid fa-folder' },
-      { type:'stage',  id:'RUN_STAGING',                   label:'Mover BASE → STAGE',            icon:'fa-solid fa-truck-moving',         phaseColor:'#7c3aed' },
-      { type:'stage',  id:'CHECK_NESTED_FOLDERS',          label:'Detectar carpetas anidadas',    icon:'fa-solid fa-folder-tree',          phaseColor:'#7c3aed' },
-      { type:'stage',  id:'CHECK_FOLDERS_WITH_EXTRA_TEXT', label:'Detectar carpetas con extra',   icon:'fa-solid fa-folder-open',          phaseColor:'#b45309' },
-      { type:'stage',  id:'NORMALIZE_DIR_NAMES',           label:'Normalizar carpetas',           icon:'fa-solid fa-folder',               phaseColor:'#b45309' },
-      
-      { type:'phase',  label:'Archivos',       color:'#7c3aed', icon:'fa-solid fa-file' },
-      { type:'stage',  id:'NORMALIZE_FILES',               label:'Renombrar archivos',            icon:'fa-solid fa-tag',                  phaseColor:'#7c3aed' },
-      { type:'stage',  id:'REMOVE_NON_PDF',                label:'Eliminar no-PDF y corruptos',   icon:'fa-solid fa-file-circle-xmark',    phaseColor:'#7c3aed' },
-      { type:'stage',  id:'CHECK_INVOICE_NUMBER_ON_FILES', label:'Verificar nombres archivos',    icon:'fa-solid fa-file-circle-check',    phaseColor:'#b45309' },
-      
-      { type:'phase',  label:'PDFs',           color:'#4338ca', icon:'fa-solid fa-file-pdf' },
-      { type:'stage',  id:'LIST_UNREADABLE_PDFS',          label:'Listar PDFs sin texto',         icon:'fa-solid fa-list-check',           phaseColor:'#4338ca' },
-      { type:'branch', label:'Opción A — eliminar + descargar desde SIHOS' },
-      { type:'stage',  id:'DELETE_UNREADABLE_PDFS',        label:'Eliminar PDFs sin texto',       icon:'fa-solid fa-file-circle-minus',    phaseColor:'#4338ca' },
-      { type:'branch', label:'Opción B — aplicar OCR' },
-      { type:'stage',  id:'CHECK_INVOICES',                label:'Aplicar OCR a facturas',        icon:'fa-solid fa-wand-magic-sparkles',  phaseColor:'#4338ca' },
-      { type:'stage',  id:'VERIFY_INVOICE_CODE',           label:'Verificar número en PDF',       icon:'fa-solid fa-magnifying-glass',     phaseColor:'#4338ca' },
-      
-      { type:'phase',  label:'Verificación',   color:'#b45309', icon:'fa-solid fa-magnifying-glass-chart' },
-      { type:'stage',  id:'CHECK_DIRS',                    label:'Detectar directorios faltantes',icon:'fa-solid fa-folder-minus',         phaseColor:'#b45309' },
-      { type:'stage',  id:'CHECK_REQUIRED_DOCS',           label:'Verificar docs requeridos',     icon:'fa-solid fa-file-circle-question', phaseColor:'#b45309' },
-      { type:'stage',  id:'REVISAR_SOBRANTES',             label:'Revisar sobrantes',           icon:'fa-solid fa-file-circle-exclamation',phaseColor:'#b45309' },
-      
-      { type:'phase',  label:'Últimos pasos',   color:'#059669', icon:'fa-solid fa-box-archive' },
-      { type:'stage',  id:'VERIFY_CUFE',                   label:'Verificar y etiquetar CUFE',    icon:'fa-solid fa-qrcode',               phaseColor:'#b45309' },
-      { type:'stage',  id:'ORGANIZE',                      label:'Organizar en AUDIT',            icon:'fa-solid fa-boxes-stacked',        phaseColor:'#059669' },
-      { type:'note',   text:'⚠ Las etapas Drive requieren repetir ciclo desde "Eliminar no-PDF"' },
+      // ── 1. CARGA DE DATOS ────────────────────────────────────────────────
+      { type:'phase', label:'Carga de datos', color:'#0284c7', icon:'fa-solid fa-database' },
+      { type:'stage', id:'LOAD_AND_PROCESS',    label:'Ingestar reporte SIHOS',    icon:'fa-solid fa-file-excel',    phaseColor:'#0284c7' },
+      { type:'stage', id:'RECATEGORIZE_SERVICES', label:'Re-categorizar servicios', icon:'fa-solid fa-arrows-rotate', phaseColor:'#0284c7' },
+      { type:'stage', id:'LOAD_DRIVE_ZIP',      label:'Descomprimir archivos',     icon:'fa-solid fa-file-zipper',   phaseColor:'#0284c7' },
+      { type:'stage', id:'RUN_STAGING',         label:'Mover archivos a STAGE',    icon:'fa-solid fa-truck-moving',  phaseColor:'#0284c7' },
 
-      { type:'phase',  label:'Descargas',   color:'#059669', icon:'fa-solid fa-cloud-arrow-down' },
-      { type:'stage',  id:'DOWNLOAD_INVOICES_FROM_SIHOS',  label:'Descargar facturas SIHOS',      icon:'fa-solid fa-cloud-arrow-down',     phaseColor:'#059669' },
-      { type:'stage',  id:'DOWNLOAD_MEDICATION_SHEETS',   label:'Descargar hojas de medicamentos', icon:'fa-solid fa-pills',               phaseColor:'#059669' },
-      { type:'stage',  id:'DOWNLOAD_DRIVE',                label:'Descargar carpetas desde Drive', icon:'fa-brands fa-google-drive',       phaseColor:'#059669' },
-      { type:'stage',  id:'DOWNLOAD_MISSING_DOCS',         label:'Descargar docs faltantes Drive', icon:'fa-solid fa-file-arrow-down',     phaseColor:'#059669' },
-      
+      // ── 2. LIMPIEZA ──────────────────────────────────────────────────────
+      { type:'phase', label:'Limpieza', color:'#7c3aed', icon:'fa-solid fa-broom' },
+      { type:'stage', id:'REMOVE_NON_PDF',                label:'Eliminar archivos inválidos',        icon:'fa-solid fa-file-circle-xmark',      phaseColor:'#7c3aed' },
+      { type:'stage', id:'CHECK_NESTED_FOLDERS',          label:'Detectar subcarpetas',               icon:'fa-solid fa-folder-tree',            phaseColor:'#7c3aed' },
+      { type:'stage', id:'CHECK_FOLDERS_WITH_EXTRA_TEXT', label:'Detectar carpetas con texto extra',  icon:'fa-solid fa-folder-open',            phaseColor:'#7c3aed' },
+      { type:'stage', id:'NORMALIZE_DIR_NAMES',           label:'Corregir nombres de carpetas',       icon:'fa-solid fa-folder',                 phaseColor:'#7c3aed' },
+      { type:'stage', id:'NORMALIZE_FILES',               label:'Corregir nombres de archivos',       icon:'fa-solid fa-tag',                    phaseColor:'#7c3aed' },
+
+      // ── 3. CALIDAD DE PDFs ───────────────────────────────────────────────
+      { type:'phase', label:'Calidad de PDFs', color:'#4338ca', icon:'fa-solid fa-file-pdf' },
+      { type:'stage', id:'LIST_UNREADABLE_PDFS', label:'Detectar PDFs ilegibles', icon:'fa-solid fa-list-check', phaseColor:'#4338ca' },
+      { type:'decision', label:'Según los PDFs ilegibles encontrados, elige cómo proceder antes de continuar.' },
+      { type:'fork', path:'A', label:'Opción A — Eliminar y re-descargar' },
+      { type:'stage', id:'DELETE_UNREADABLE_PDFS', label:'Eliminar PDFs ilegibles',   icon:'fa-solid fa-file-circle-minus',    phaseColor:'#dc2626', path:'A' },
+      { type:'fork', path:'B', label:'Opción B — Aplicar OCR' },
+      { type:'stage', id:'CHECK_INVOICES',      label:'Aplicar OCR a los PDFs',     icon:'fa-solid fa-wand-magic-sparkles',  phaseColor:'#2563eb', path:'B', heavy:true },
+
+      // ── 4. AUDITORÍA ─────────────────────────────────────────────────────
+      { type:'phase', label:'Auditoría', color:'#b45309', icon:'fa-solid fa-magnifying-glass-chart' },
+      { type:'stage', id:'VERIFY_INVOICE_CODE',           label:'Verificar número en PDF',         icon:'fa-solid fa-magnifying-glass',       phaseColor:'#b45309' },
+      { type:'stage', id:'CHECK_INVOICE_NUMBER_ON_FILES', label:'Verificar nombres de archivos',   icon:'fa-solid fa-file-circle-check',      phaseColor:'#b45309' },
+      { type:'stage', id:'CHECK_DIRS',                    label:'Detectar carpetas faltantes',     icon:'fa-solid fa-folder-minus',           phaseColor:'#b45309' },
+      { type:'stage', id:'CHECK_REQUIRED_DOCS',           label:'Verificar documentos requeridos', icon:'fa-solid fa-file-circle-question',   phaseColor:'#b45309' },
+      { type:'stage', id:'REVISAR_SOBRANTES',             label:'Revisar archivos sobrantes',      icon:'fa-solid fa-file-circle-exclamation',phaseColor:'#b45309' },
+      { type:'stage', id:'VERIFY_CUFE',                   label:'Verificar CUFE',                  icon:'fa-solid fa-qrcode',                 phaseColor:'#b45309' },
+
+      // ── 5. CIERRE ────────────────────────────────────────────────────────
+      { type:'phase', label:'Cierre', color:'#059669', icon:'fa-solid fa-box-archive' },
+      { type:'stage', id:'ORGANIZE', label:'Organizar en AUDIT', icon:'fa-solid fa-boxes-stacked', phaseColor:'#059669' },
+
+      // ── 6. DESCARGAS — SIHOS ────────────────────────────────────────────
+      { type:'phase', label:'Descargas · SIHOS', color:'#0369a1', icon:'fa-solid fa-hospital' },
+      { type:'stage', id:'DOWNLOAD_INVOICES_FROM_SIHOS', label:'Descargar PDFs desde SIHOS',       icon:'fa-solid fa-cloud-arrow-down',  phaseColor:'#0369a1', heavy:true },
+      { type:'stage', id:'DOWNLOAD_MEDICATION_SHEETS',   label:'Descargar hojas de medicamentos',  icon:'fa-solid fa-pills',             phaseColor:'#0369a1', heavy:true },
+
+      // ── 7. DESCARGAS — DRIVE ────────────────────────────────────────────
+      { type:'phase', label:'Descargas · Drive', color:'#166534', icon:'fa-brands fa-google-drive' },
+      { type:'note', text:'⚠ Los archivos descargados desde Drive no han sido procesados. Tras ejecutar estas etapas, vuelve a correr el ciclo desde Limpieza para normalizarlos, verificarlos y auditarlos.' },
+      { type:'stage', id:'DOWNLOAD_DRIVE',               label:'Descargar carpetas faltantes',     icon:'fa-brands fa-google-drive',     phaseColor:'#166534', heavy:true },
+      { type:'stage', id:'DOWNLOAD_MISSING_DOCS',        label:'Descargar documentos faltantes',   icon:'fa-solid fa-file-arrow-down',   phaseColor:'#166534', heavy:true },
+
     ],
 
     stages: [
-      { id:'LOAD_AND_PROCESS',        label:'Cargar reporte SIHOS',           description:'Lee el Excel exportado desde SIHOS e inserta las facturas del período en la BD. Registra administradoras, contratos y servicios nuevos en crudo (sin mapeo). Los campos sin mapeo canónico quedan en null. Filas sin fecha válida son omitidas. Guarda el Excel en disco para re-categorización futura.' },
-      { id:'RECATEGORIZE_SERVICES',   label:'Re-categorizar servicios',       description:'Re-lee el Excel SIHOS guardado y aplica los mapeos de servicios actuales (Configuración → Servicios) a todas las facturas del período. No elimina facturas ni toca los archivos. Útil tras corregir mapeos de servicio sin tener que recargar SIHOS.' },
-      { id:'LOAD_DRIVE_ZIP',          label:'Cargar archivos comprimidos',    description:'Descomprime un archivo .zip, .7z o .rar directamente en la carpeta DRIVE del hospital y período seleccionado. Útil para cargar de una vez las carpetas de facturas descargadas manualmente.' },
-      { id:'RUN_STAGING',             label:'Mover BASE → STAGE',             description:'Busca las carpetas hoja (sin subcarpetas) dentro del directorio DRIVE del período y las mueve a STAGE. STAGE es el directorio de trabajo donde se realizan todas las operaciones de auditoría.' },
-      { id:'CHECK_NESTED_FOLDERS',   label:'Detectar carpetas anidadas',     description:'Escanea el directorio STAGE y lista las carpetas de factura que contienen subcarpetas anidadas. Los archivos dentro de subcarpetas no son procesados correctamente; deben moverse al nivel raíz de la carpeta de factura.' },
-      { id:'REMOVE_NON_PDF',          label:'Eliminar no-PDF y corruptos',    description:'Recorre todas las carpetas en STAGE y elimina: (1) archivos que no son PDF; (2) PDFs corruptos o dañados que no pueden abrirse. Limpia la carpeta antes del procesamiento.' },
-      { id:'NORMALIZE_FILES',         label:'Renombrar archivos',             description:'Paso 1: aplica correcciones de prefijo configuradas (ej. FVE→FEV). Paso 2: detecta archivos con nombre inválido y los renombra extrayendo NIT y número de factura. Reporta los que no se pueden renombrar.' },
-      { id:'LIST_UNREADABLE_PDFS',    label:'Listar PDFs sin texto',          description:'Busca los PDFs de factura en STAGE y verifica cuáles no tienen capa de texto extraíble (escaneados sin OCR). Lista cada archivo con [WARN] pero NO los elimina ni modifica.' },
-      { id:'DELETE_UNREADABLE_PDFS',  label:'Eliminar PDFs sin texto',        description:'Elimina permanentemente los PDFs de factura sin capa de texto. Úsala cuando los archivos son irrecuperables y deben volver a descargarse desde SIHOS.' },
-      { id:'DOWNLOAD_INVOICES_FROM_SIHOS', label:'Descargar facturas SIHOS', description:'Usa Playwright para iniciar sesión en el portal SIHOS y descarga los PDFs de las facturas indicadas. Los números de factura se ingresan en el campo de texto antes de ejecutar.' },
-      { id:'DOWNLOAD_MEDICATION_SHEETS', label:'Descargar hojas de medicamentos', description:'Busca facturas PENDIENTE con hallazgo HOJ_MED sin resolver y número de admisión registrado. Inicia sesión en SIHOS y descarga el PDF de hoja de medicamentos para cada una.' },
-      { id:'CHECK_INVOICES',          label:'Aplicar OCR a facturas',         description:'Busca los PDFs de factura sin capa de texto en STAGE y les aplica OCR con ocrmypdf (8 hilos). Solo procesa los que lo necesitan. El resultado es un PDF/A con texto extraíble.' },
-      { id:'VERIFY_INVOICE_CODE',     label:'Verificar número en PDF',        description:'Lee el texto de cada PDF de factura y verifica que el número de la carpeta aparezca dentro del documento. Reporta con [WARN] las facturas cuyo PDF no contiene su propio número.' },
-      { id:'CHECK_INVOICE_NUMBER_ON_FILES', label:'Verificar nombres archivos', description:'Recorre cada carpeta de factura en STAGE y verifica que todos los archivos contengan el número de factura de la carpeta en su nombre. Reporta los archivos desajustados.' },
-      { id:'CHECK_FOLDERS_WITH_EXTRA_TEXT', label:'Detectar carpetas con extra', description:'Detecta carpetas en STAGE con texto adicional más allá del número de factura (ej. "360052_SINCUFE", "360099 copia"). Solo lista; no renombra. Revisa las que dicen "ANULAR".' },
-      { id:'NORMALIZE_DIR_NAMES',     label:'Normalizar carpetas',            description:'Renombra las carpetas malformadas en STAGE eliminando el texto adicional. Si tiene _SINCUFE se renombra igual (el CUFE se verifica en etapa posterior).' },
-      { id:'CHECK_DIRS',              label:'Detectar directorios faltantes', description:'Consulta todas las facturas PRESENTE en la BD y verifica que cada una tenga su carpeta en STAGE. Las que no tienen carpeta se marcan como FALTANTE para recuperarlas desde Drive.' },
-      { id:'CHECK_REQUIRED_DOCS',     label:'Verificar docs requeridos',      description:'Para cada factura PRESENTE, verifica que su carpeta en STAGE contenga todos los documentos exigidos según el tipo de servicio. Registra un hallazgo por cada documento faltante y cambia el estado a PENDIENTE.' },
-      { id:'REVISAR_SOBRANTES',       label:'Revisar sobrantes',           description:'Detecta archivos cuyo nombre no coincide con ningún prefijo requerido y sugiere renombrarlos al tipo de documento faltante. Permite confirmar o corregir la sugerencia antes de renombrar el archivo en disco.' },
-      { id:'VERIFY_CUFE',             label:'Verificar y etiquetar CUFE',     description:'Lee el texto de cada PDF de factura y valida que contenga un código CUFE válido. Las carpetas sin CUFE son renombradas añadiendo el sufijo _SINCUFE.' },
-      { id:'ORGANIZE',                label:'Organizar en AUDIT',             description:'Mueve de STAGE a AUDIT las carpetas de facturas PRESENTE sin hallazgos pendientes: AUDIT/ADMINISTRADORA/[CONTRATO]/carpeta. Actualiza su estado a AUDITADA en la BD.' },
-      { id:'DOWNLOAD_DRIVE',          label:'Descargar carpetas desde Drive', description:'Consulta las facturas FALTANTE en la BD y las busca en Google Drive. Las carpetas encontradas se descargan a STAGE y se actualizan a PRESENTE.' },
-      { id:'DOWNLOAD_MISSING_DOCS',   label:'Descargar docs faltantes Drive', description:'Para cada hallazgo pendiente, construye el nombre esperado del archivo ({prefijo}_{NIT}_{factura}.pdf) y lo busca en Google Drive. Los archivos encontrados se descargan a la carpeta correspondiente en STAGE.' },
+      { id:'LOAD_AND_PROCESS',        label:'Ingestar reporte SIHOS',           description:'Lee el Excel exportado desde SIHOS e inserta las facturas del período en la base de datos. Registra administradoras, contratos y servicios nuevos en crudo. Filas sin número de factura o fecha válida son omitidas.' },
+      { id:'RECATEGORIZE_SERVICES',   label:'Re-categorizar servicios',          description:'Reaplica los mapeos de servicios actuales a todas las facturas del período sin volver a cargar el Excel. Útil tras corregir un mapeo en Configuración → Servicios.' },
+      { id:'LOAD_DRIVE_ZIP',          label:'Descomprimir archivos',             description:'Extrae un archivo .zip, .7z o .rar directamente en la carpeta DRIVE del período. Ideal para cargar en bloque las carpetas de facturas descargadas manualmente desde Drive.' },
+      { id:'RUN_STAGING',             label:'Mover archivos a STAGE',            description:'Mueve las carpetas hoja (sin subcarpetas) de DRIVE a STAGE. STAGE es el área de trabajo donde ocurren todas las operaciones de auditoría.' },
+      { id:'REMOVE_NON_PDF',          label:'Eliminar archivos inválidos',        description:'Elimina de cada carpeta en STAGE: (1) archivos que no son PDF, y (2) PDFs corruptos o dañados que no se pueden abrir. Deja las carpetas listas para el procesamiento.' },
+      { id:'CHECK_NESTED_FOLDERS',    label:'Detectar subcarpetas',              description:'Lista las carpetas de STAGE que contienen subcarpetas. Los archivos dentro de subcarpetas no se procesan correctamente; deben moverse al nivel raíz de la carpeta de factura.' },
+      { id:'CHECK_FOLDERS_WITH_EXTRA_TEXT', label:'Detectar carpetas con texto extra', description:'Detecta carpetas con texto adicional en el nombre más allá del número de factura (ej. "360052_SINCUFE", "360099 copia"). Solo lista; no modifica nada. Presta atención a las que dicen "ANULAR".' },
+      { id:'NORMALIZE_DIR_NAMES',     label:'Corregir nombres de carpetas',      description:'Renombra las carpetas con texto adicional eliminando el texto sobrante. Las carpetas _SINCUFE se renombran conservando ese sufijo; el CUFE se verificará en la etapa correspondiente.' },
+      { id:'NORMALIZE_FILES',         label:'Corregir nombres de archivos',      description:'Corrige nombres en dos pasos: (1) aplica sustituciones de prefijo configuradas (ej. FVE→FEV); (2) renombra archivos con nombre inválido al formato {PREFIJO}_{NIT}_{FACTURA}.pdf. Reporta los que no se pueden renombrar.' },
+      { id:'LIST_UNREADABLE_PDFS',    label:'Detectar PDFs ilegibles',           description:'Detecta PDFs de factura sin capa de texto (escaneados sin OCR). Solo lista los archivos afectados; no los modifica. Úsala para decidir entre la Opción A (eliminar + re-descargar) o la Opción B (aplicar OCR).' },
+      { id:'DELETE_UNREADABLE_PDFS',  label:'Eliminar PDFs ilegibles',           description:'[Opción A] Elimina permanentemente los PDFs detectados sin capa de texto. Combínala con "Descargar PDFs desde SIHOS" para reemplazarlos con versiones digitales correctas.' },
+      { id:'CHECK_INVOICES',          label:'Aplicar OCR a los PDFs',            description:'[Opción B] ⏱ Proceso intensivo — puede tardar varios minutos. Aplica OCR con ocrmypdf (8 hilos en paralelo) a los PDFs sin capa de texto y los convierte a PDF/A con texto extraíble.' },
+      { id:'VERIFY_INVOICE_CODE',     label:'Verificar número en PDF',           description:'Lee el texto de cada PDF de factura y verifica que el número de la carpeta aparezca dentro del documento. Reporta con [WARN] las facturas cuyo PDF no contiene su propio número.' },
+      { id:'CHECK_INVOICE_NUMBER_ON_FILES', label:'Verificar nombres de archivos', description:'Recorre cada carpeta de STAGE y verifica que todos los archivos contengan el número de factura de la carpeta en su nombre. Reporta los archivos desajustados.' },
+      { id:'CHECK_DIRS',              label:'Detectar carpetas faltantes',        description:'Comprueba que cada factura en estado PRESENTE tenga su carpeta en STAGE. Las que no la tienen se marcan como FALTANTE para recuperarlas desde Drive.' },
+      { id:'CHECK_REQUIRED_DOCS',     label:'Verificar documentos requeridos',   description:'Para cada factura PRESENTE, verifica que su carpeta contenga todos los documentos exigidos según el tipo de servicio. Registra un hallazgo por cada documento faltante y cambia el estado de la factura a PENDIENTE.' },
+      { id:'REVISAR_SOBRANTES',       label:'Revisar archivos sobrantes',         description:'Detecta archivos cuyo nombre no coincide con ningún prefijo requerido. Sugiere renombrarlos al tipo de documento faltante y permite confirmar o corregir cada sugerencia antes de aplicar el cambio en disco.' },
+      { id:'VERIFY_CUFE',             label:'Verificar CUFE',                     description:'Valida que cada PDF de factura contenga un código CUFE válido. Las carpetas sin CUFE se renombran añadiendo el sufijo _SINCUFE para identificación visual.' },
+      { id:'ORGANIZE',                label:'Organizar en AUDIT',                 description:'Mueve de STAGE a AUDIT las carpetas de facturas PRESENTE sin hallazgos pendientes, organizándolas en subcarpetas por administradora y contrato. Actualiza su estado a AUDITADA en la base de datos.' },
+      { id:'DOWNLOAD_INVOICES_FROM_SIHOS', label:'Descargar PDFs desde SIHOS',   description:'⏱ Proceso intensivo — requiere sesión en SIHOS. Consulta las facturas PENDIENTE con hallazgo sin resolver del tipo seleccionado e inicia sesión en el portal para descargar cada PDF con Playwright.' },
+      { id:'DOWNLOAD_MEDICATION_SHEETS',   label:'Descargar hojas de medicamentos', description:'⏱ Proceso intensivo — requiere sesión en SIHOS. Descarga las hojas de medicamentos de facturas PENDIENTE con hallazgo sin resolver del tipo seleccionado y número de admisión registrado.' },
+      { id:'DOWNLOAD_DRIVE',          label:'Descargar carpetas (Drive)',          description:'⏱ Puede tardar varios minutos. Busca en Google Drive las carpetas de facturas marcadas como FALTANTE y las descarga a STAGE. Su estado se actualiza automáticamente a PRESENTE.' },
+      { id:'DOWNLOAD_MISSING_DOCS',   label:'Descargar documentos faltantes',     description:'⏱ Puede tardar varios minutos. Para cada hallazgo pendiente, busca en Google Drive el archivo esperado ({prefijo}_{NIT}_{factura}.pdf) y lo descarga a la carpeta correspondiente en STAGE.' },
     ],
 
     get completedCount() {
@@ -890,9 +921,8 @@ function pipeline() {
 
           } else {
             let url = `/api/pipeline/run/${stageId}?institution_id=${encodeURIComponent(institutionId)}&period_id=${encodeURIComponent(periodId)}`;
-            if (stageId === 'DOWNLOAD_INVOICES_FROM_SIHOS' && this.sihosInvoiceNumbers.trim()) {
-              const nums = this.sihosInvoiceNumbers.split(/[\n,]+/).map(s => s.trim()).filter(Boolean).join(',');
-              url += `&invoice_numbers=${encodeURIComponent(nums)}`;
+            if (stageId === 'DOWNLOAD_INVOICES_FROM_SIHOS' && this.invoiceDocTypeId) {
+              url += `&doc_type_id=${encodeURIComponent(this.invoiceDocTypeId)}`;
             }
             if (stageId === 'DOWNLOAD_MEDICATION_SHEETS' && this.medSheetDocTypeId) {
               url += `&doc_type_id=${encodeURIComponent(this.medSheetDocTypeId)}`;
