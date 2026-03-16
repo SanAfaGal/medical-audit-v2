@@ -482,7 +482,7 @@
                       <span x-text="inv.missing_file_count"></span>
                     </span>
                   </template>
-                  <template x-if="inv.missing_file_count === 0">
+                  <template x-if="inv.folder_status === 'PRESENTE'">
                     <i class="fa-solid fa-circle-check text-emerald-400 text-xs"></i>
                   </template>
                 </td>

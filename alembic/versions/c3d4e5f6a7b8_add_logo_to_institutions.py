@@ -14,8 +14,9 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column('institutions', sa.Column('logo_bytes', sa.LargeBinary(), nullable=True))
-    op.add_column('institutions', sa.Column('logo_content_type', sa.String(50), nullable=True))
+    # Columns may already exist if added manually — use IF NOT EXISTS to be safe
+    op.execute("ALTER TABLE institutions ADD COLUMN IF NOT EXISTS logo_bytes BYTEA")
+    op.execute("ALTER TABLE institutions ADD COLUMN IF NOT EXISTS logo_content_type VARCHAR(50)")
 
 
 def downgrade():
