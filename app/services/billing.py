@@ -47,6 +47,7 @@ async def ingest(
     period_id: int,
     db: AsyncSession,
     scan_only: bool = False,
+    save_mappings_only: bool = False,
 ) -> dict:
     """
     Full ingestion pipeline for SIHOS Excel (new uppercase format).
@@ -125,8 +126,15 @@ async def ingest(
             invoice_map[invoice_number]["_service_type_ids"].add(service_type_id)
 
     if scan_only:
+        if save_mappings_only:
+            await db.commit()
+            logger.info(
+                "ingest (mappings-only): institution=%s saved raw admins/contracts/services",
+                institution.name,
+            )
         return {
             "scan_only": True,
+            "save_mappings_only": save_mappings_only,
             "inserted": 0,
             "skipped": skipped,
             "unknown_admins": unknown_admins,

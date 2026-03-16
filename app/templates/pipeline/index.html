@@ -331,7 +331,9 @@
           <div>
             <p class="font-semibold mb-1" style="font-size:13px;color:var(--amber)">Registros sin mapear detectados</p>
             <p class="leading-relaxed" style="font-size:11px;color:var(--text-2)">
-              Ve a <strong style="color:var(--text-1)">Configuración → Mapeos</strong> para asignar nombres canónicos, luego confirma aquí.
+              <strong style="color:var(--text-1)">Corregir</strong> guarda estos valores en la BD para que puedas mapearlos en
+              <strong style="color:var(--text-1)">Configuración → Mapeos</strong>, sin insertar facturas.
+              <strong style="color:var(--text-1)">Continuar</strong> inserta las facturas aunque queden campos sin mapear.
             </p>
           </div>
         </div>
@@ -360,17 +362,23 @@
         </div>
 
         <div class="flex items-center gap-3">
-          <button @click="unmappedConfirm && unmappedConfirm.resolve(true)"
-                  class="flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-colors"
-                  style="background:var(--amber);color:#fff;font-size:13px"
-                  onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
-            <i class="fa-solid fa-circle-check text-xs"></i> Corregidos — continuar
-          </button>
-          <button @click="unmappedConfirm && unmappedConfirm.resolve(false)"
+          <button @click="unmappedConfirm && unmappedConfirm.resolve('cancel')"
                   class="flex items-center gap-2 px-4 py-2 rounded-lg transition-all"
                   style="border:1px solid var(--border);color:var(--text-2);font-size:13px"
                   onmouseover="this.style.color='var(--text-1)'" onmouseout="this.style.color='var(--text-2)'">
             <i class="fa-solid fa-arrow-left text-xs"></i> Cancelar
+          </button>
+          <button @click="unmappedConfirm && unmappedConfirm.resolve('save')"
+                  class="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors"
+                  style="background:var(--sky-soft);color:var(--sky);border:1px solid var(--sky-border);font-size:13px"
+                  onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+            <i class="fa-solid fa-floppy-disk text-xs"></i> Corregir
+          </button>
+          <button @click="unmappedConfirm && unmappedConfirm.resolve('continue')"
+                  class="flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-colors"
+                  style="background:var(--amber);color:#fff;font-size:13px"
+                  onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+            <i class="fa-solid fa-circle-check text-xs"></i> Continuar
           </button>
         </div>
       </div>
@@ -728,7 +736,7 @@ function pipeline() {
 
             const hasUnmapped = scan.unknown_admins?.length || scan.unknown_contracts?.length || scan.unknown_services?.length;
             if (hasUnmapped) {
-              const confirmed = await new Promise(resolve => {
+              const action = await new Promise(resolve => {
                 this.unmappedConfirm = {
                   admins: scan.unknown_admins || [],
                   contracts: scan.unknown_contracts || [],
@@ -736,11 +744,32 @@ function pipeline() {
                   resolve: (v) => { this.unmappedConfirm = null; resolve(v); },
                 };
               });
-              if (!confirmed) {
+
+              if (action === 'cancel') {
                 const msg = '[WARN] Ingestión cancelada — corrige los mapeos y vuelve a ejecutar.';
                 this.logLines.push(msg); this._markLine(stageId, msg); this.scrollLog(); continue;
               }
-              this.logLines.push('[INFO] Mapeos confirmados, cargando facturas...');
+
+              if (action === 'save') {
+                const fd = new FormData();
+                fd.append('institution_id', institutionId);
+                fd.append('period_id', periodId);
+                fd.append('file', this.excelFile);
+                fd.append('save_mappings_only', 'true');
+                const saveRes = await fetch('/api/invoices/ingest', { method: 'POST', body: fd });
+                if (saveRes.ok) {
+                  const m = '[OK] Registros sin mapear guardados. Ve a Configuración → Mapeos para asignarlos, luego vuelve a cargar el Excel.';
+                  this.logLines.push(m); this._markLine(stageId, m);
+                } else {
+                  const err = await saveRes.json().catch(() => ({}));
+                  const m = `[ERROR] ${err.detail || 'Error al guardar registros'}`;
+                  this.logLines.push(m); this._markLine(stageId, m);
+                }
+                this.scrollLog(); continue;
+              }
+
+              // action === 'continue'
+              this.logLines.push('[INFO] Continuando con la carga de facturas...');
             } else {
               this.logLines.push('[INFO] Todos los mapeos completos, cargando...');
             }

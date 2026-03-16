@@ -152,6 +152,7 @@ async def ingest_excel(
     period_id: int = Form(...),
     file: UploadFile = File(...),
     scan_only: bool = Form(False),
+    save_mappings_only: bool = Form(False),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload and ingest a SIHOS Excel export."""
@@ -164,7 +165,11 @@ async def ingest_excel(
         raise HTTPException(404, "Institución no encontrada")
 
     file_bytes = await file.read()
-    result = await ingest(file_bytes, institution, period_id, db, scan_only=scan_only)
+    result = await ingest(
+        file_bytes, institution, period_id, db,
+        scan_only=scan_only or save_mappings_only,
+        save_mappings_only=save_mappings_only,
+    )
     return result
 
 
