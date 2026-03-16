@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy import delete, exists, func, select, update
+from sqlalchemy import delete, exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -135,11 +135,9 @@ class InvoiceRepo:
         if contract_canonical is not None:
             q = q.join(Contract, Invoice.contract_id == Contract.id).where(Contract.canonical_contract == contract_canonical)
         if search:
-            pattern = f"%{search.upper()}%"
-            q = q.where(
-                Invoice.invoice_number.ilike(pattern)
-                | Invoice.patient_name.ilike(pattern)
-            )
+            terms = [t.strip().upper() for t in search.split(";") if t.strip()]
+            if terms:
+                q = q.where(or_(*[Invoice.invoice_number.ilike(f"%{t}%") for t in terms]))
         if has_finding_doc_type_id is not None:
             subq = (
                 select(MissingFile.id)
@@ -329,8 +327,9 @@ class InvoiceRepo:
         if contract_canonical is not None:
             q = q.join(Contract, Invoice.contract_id == Contract.id).where(Contract.canonical_contract == contract_canonical)
         if search:
-            pattern = f"%{search.upper()}%"
-            q = q.where(Invoice.invoice_number.ilike(pattern) | Invoice.patient_name.ilike(pattern))
+            terms = [t.strip().upper() for t in search.split(";") if t.strip()]
+            if terms:
+                q = q.where(or_(*[Invoice.invoice_number.ilike(f"%{t}%") for t in terms]))
         if has_finding_doc_type_id is not None:
             subq = (
                 select(MissingFile.id)
