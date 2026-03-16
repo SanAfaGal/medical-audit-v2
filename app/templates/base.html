@@ -110,10 +110,15 @@
         reorderDragIdx: null,
         toast: null,
         confirmingDelete: null,
+        movingEntries: [],
+        moveBrowserPath: '',
+        moveBrowserEntries: [],
         panelWidth: 560,
+        listWidth: 220,
         _resizing: false,
         _resizeStartX: 0,
         _resizeStartWidth: 0,
+        _listResizing: false,
 
         get institutionId() { return Alpine.store('ctx').institutionId; },
         get periodId()      { return Alpine.store('ctx').periodId; },
@@ -224,6 +229,8 @@
         async onDrop(event, targetFolder) {
           const srcPath = event.dataTransfer.getData('text/plain');
           if (!srcPath || srcPath === targetFolder.path) return;
+          // Prevent dropping a folder into one of its own descendants
+          if (targetFolder.path.startsWith(srcPath + '/')) return;
           const data = await this._apiFetch('/api/explorer/move', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -344,6 +351,87 @@
           }
         },
 
+        // ── Move mode ─────────────────────────────────────────────────────
+        startMove(entry) {
+          this.movingEntries = [entry];
+          this.moveBrowserPath = this.currentPath;
+          this.pdfMode = 'move';
+          this.loadMoveBrowser(this.moveBrowserPath);
+        },
+
+        toggleMoveEntry(entry) {
+          const idx = this.movingEntries.findIndex(e => e.path === entry.path);
+          if (idx >= 0) this.movingEntries.splice(idx, 1);
+          else this.movingEntries.push(entry);
+        },
+
+        async loadMoveBrowser(path) {
+          this.moveBrowserPath = path;
+          const subPath = path.split('/').slice(1).join('/');
+          const url = `/api/explorer/list?institution_id=${this.institutionId}&period_id=${this.periodId}&root=${this.rootFolder}&path=${encodeURIComponent(subPath)}`;
+          try {
+            const res = await fetch(url);
+            const data = await res.json();
+            this.moveBrowserEntries = (data.entries || []).filter(e => e.is_dir);
+          } catch { this.moveBrowserEntries = []; }
+        },
+
+        moveBrowserUp() {
+          const parts = this.moveBrowserPath.split('/').filter(Boolean);
+          if (parts.length <= 1) this.loadMoveBrowser(this.rootFolder);
+          else { parts.pop(); this.loadMoveBrowser(parts.join('/')); }
+        },
+
+        async executeMove() {
+          if (!this.movingEntries.length) return;
+          // Prevent moving into self or a child of a folder being moved
+          const dst = this.moveBrowserPath;
+          const invalid = this.movingEntries.find(e =>
+            dst === e.path || dst.startsWith(e.path + '/')
+          );
+          if (invalid) {
+            this.showToast(false, 'No puedes mover una carpeta dentro de sí misma.');
+            return;
+          }
+          let ok = true;
+          for (const entry of this.movingEntries) {
+            const data = await this._apiFetch('/api/explorer/move', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                institution_id: this.institutionId,
+                period_id: this.periodId,
+                src: entry.path,
+                dst_folder: dst,
+              }),
+            });
+            if (!data.ok) { this.showToast(false, data.message); ok = false; break; }
+          }
+          if (ok) {
+            this.showToast(true, `${this.movingEntries.length} elemento(s) movido(s).`);
+            this.pdfMode = 'none';
+            this.movingEntries = [];
+            this.load();
+          }
+        },
+
+        startListResize(event) {
+          this._listResizing = true;
+          const startX = event.clientX;
+          const startW = this.listWidth;
+          const onMove = (e) => {
+            if (!this._listResizing) return;
+            this.listWidth = Math.max(150, Math.min(480, startW + (e.clientX - startX)));
+          };
+          const onUp = () => {
+            this._listResizing = false;
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          };
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        },
+
         startResize(event) {
           this._resizing = true;
           this._resizeStartX = event.clientX;
@@ -351,7 +439,7 @@
           const onMove = (e) => {
             if (!this._resizing) return;
             const delta = this._resizeStartX - e.clientX;
-            this.panelWidth = Math.max(320, Math.min(960, this._resizeStartWidth + delta));
+            this.panelWidth = Math.max(320, Math.min(1020, this._resizeStartWidth + delta));
           };
           const onUp = () => {
             this._resizing = false;
