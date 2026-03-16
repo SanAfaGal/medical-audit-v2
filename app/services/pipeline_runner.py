@@ -942,12 +942,15 @@ async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
             not_found += 1
             continue
 
-        # Build destination: AUDIT / ADMIN / [CONTRACT /] folder_name
-        admin_name = (
-            inv.admin.canonical_admin
-            if inv.admin and inv.admin.canonical_admin
-            else "SIN ADMINISTRADORA"
-        )
+        # Build destination: AUDIT / ADMIN (TYPE) / [CONTRACT /] folder_name
+        if inv.admin and inv.admin.canonical_admin:
+            admin_name = (
+                f"{inv.admin.canonical_admin} ({inv.admin.type})"
+                if inv.admin.type
+                else inv.admin.canonical_admin
+            )
+        else:
+            admin_name = "SIN ADMINISTRADORA"
         contract_name = (
             inv.contract.canonical_contract
             if inv.contract and inv.contract.canonical_contract
