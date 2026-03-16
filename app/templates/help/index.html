@@ -5,604 +5,663 @@
 
 {% block content %}
 <style>
-  .help-layout { display: flex; gap: 1.25rem; align-items: flex-start; min-height: calc(100vh - 10rem); }
+  /* ── Layout ────────────────────────────────────────────── */
+  .help-layout {
+    display: flex; gap: 1.5rem; align-items: flex-start;
+  }
 
-  /* ── Guide list sidebar ─────────────────────────────── */
+  /* ── Sidebar nav ───────────────────────────────────────── */
   .guide-nav {
-    width: 13rem; shrink: 0; position: sticky; top: 0;
+    width: 13.5rem; flex-shrink: 0; position: sticky; top: 1rem;
     border-radius: 0.75rem; overflow: hidden;
     border: 1px solid var(--border); background: var(--bg-surface);
   }
-  .guide-nav-section {
-    padding: 0.625rem 0.75rem 0.25rem;
+  .guide-nav-header {
+    padding: 0.75rem 0.875rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .guide-nav-header p {
+    font-size: 0.625rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--text-3);
+  }
+  .guide-nav-section-label {
+    padding: 0.625rem 0.875rem 0.25rem;
     font-size: 0.625rem; font-weight: 700;
     text-transform: uppercase; letter-spacing: .08em;
     color: var(--text-3);
   }
-  .guide-nav-item {
+  .guide-nav-group { padding: 0.25rem 0.5rem; }
+  .nav-guide-btn {
     display: flex; align-items: center; gap: 0.625rem;
-    width: 100%; padding: 0.5rem 0.75rem;
-    font-size: 0.8125rem; border-radius: 0.5rem;
-    cursor: pointer; border: none; background: transparent;
-    text-align: left; transition: background .12s, color .12s;
+    width: 100%; padding: 0.5rem 0.625rem; border-radius: 0.5rem;
+    font-size: 0.8125rem; cursor: pointer; border: none;
+    background: transparent; text-align: left;
+    transition: background .12s, color .12s;
     color: var(--text-2);
   }
-  .guide-nav-item:hover { background: var(--bg-subtle); color: var(--text-1); }
-  .guide-nav-item.active {
+  .nav-guide-btn:hover { background: var(--bg-subtle); color: var(--text-1); }
+  .nav-guide-btn.active {
     background: var(--violet-soft); color: var(--violet);
     font-weight: 600;
   }
-  .guide-nav-item .nav-dot {
-    width: 6px; height: 6px; border-radius: 50%; shrink: 0;
-    background: var(--border);
+  .nav-guide-icon {
+    width: 1.5rem; height: 1.5rem; border-radius: 0.375rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.65rem; flex-shrink: 0;
+    background: var(--bg-subtle); border: 1px solid var(--border);
+    color: var(--text-3);
   }
-  .guide-nav-item.active .nav-dot { background: var(--violet); }
-
-  /* ── Content area ───────────────────────────────────── */
-  .guide-content { flex: 1; min-width: 0; }
-
-  /* ── Guide header ───────────────────────────────────── */
-  .guide-header {
-    border-radius: 0.875rem; padding: 1.5rem 1.75rem;
-    margin-bottom: 1.25rem;
-    background: linear-gradient(135deg, var(--violet-soft) 0%, var(--sky-soft) 100%);
-    border: 1px solid var(--violet-border);
+  .nav-guide-btn.active .nav-guide-icon {
+    background: var(--violet-soft); border-color: var(--violet-border); color: var(--violet);
   }
-  .guide-header-eyebrow {
+  .nav-coming {
+    display: flex; align-items: center; gap: 0.625rem;
+    padding: 0.5rem 0.625rem; border-radius: 0.5rem;
+    font-size: 0.8125rem; color: var(--text-3); opacity: .5;
+  }
+
+  /* ── Guide article ─────────────────────────────────────── */
+  .guide-article { flex: 1; min-width: 0; }
+
+  /* Guide banner */
+  .guide-banner {
+    border-radius: 0.875rem; padding: 1.375rem 1.75rem 1.25rem;
+    margin-bottom: 1.75rem;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    position: relative; overflow: hidden;
+  }
+  .guide-banner::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, var(--violet-soft) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .guide-banner-eyebrow {
     font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;
     letter-spacing: .07em; color: var(--violet); margin-bottom: 0.375rem;
     display: flex; align-items: center; gap: 0.375rem;
+    position: relative;
   }
-  .guide-header h1 { font-size: 1.1rem; font-weight: 700; color: var(--text-1); margin-bottom: 0.375rem; }
-  .guide-header p  { font-size: 0.8125rem; color: var(--text-2); line-height: 1.6; }
+  .guide-banner h1 {
+    font-size: 1.125rem; font-weight: 700; color: var(--text-1);
+    margin-bottom: 0.375rem; position: relative;
+  }
+  .guide-banner p {
+    font-size: 0.8125rem; color: var(--text-2); line-height: 1.6;
+    position: relative;
+  }
+  .guide-banner-meta {
+    display: flex; align-items: center; gap: 1rem; margin-top: 0.875rem;
+    position: relative;
+  }
+  .guide-badge {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0.2rem 0.625rem; border-radius: 2rem;
+    font-size: 0.7rem; font-weight: 600;
+  }
+  .guide-badge.violet { background: var(--violet-soft); color: var(--violet); border: 1px solid var(--violet-border); }
+  .guide-badge.sky    { background: var(--sky-soft);    color: var(--sky);    border: 1px solid var(--sky-border); }
 
-  /* ── Prereq banner ──────────────────────────────────── */
+  /* ── Prereq ────────────────────────────────────────────── */
   .prereq {
     display: flex; align-items: flex-start; gap: 0.75rem;
-    padding: 0.875rem 1rem; border-radius: 0.75rem;
+    padding: 0.875rem 1rem; border-radius: 0.625rem;
     border: 1px solid var(--amber-border); background: var(--amber-soft);
-    margin-bottom: 1.25rem; font-size: 0.8125rem; color: var(--text-1);
+    margin-bottom: 1.75rem; font-size: 0.8125rem; color: var(--text-1);
+    line-height: 1.6;
   }
-  .prereq i { color: var(--amber); margin-top: 2px; shrink: 0; }
-  .prereq strong { color: var(--amber); }
+  .prereq i { color: var(--amber); margin-top: 2px; flex-shrink: 0; font-size: 0.8rem; line-height: 1; }
 
-  /* ── Steps ──────────────────────────────────────────── */
-  .steps { display: flex; flex-direction: column; gap: 0.75rem; }
+  /* ── Step sections (blog-style) ────────────────────────── */
+  .step-section {
+    margin-bottom: 0;
+    padding-bottom: 1.75rem;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .step-section:last-child { border-bottom: none; padding-bottom: 0; }
 
-  .step-card {
-    border-radius: 0.75rem; border: 1px solid var(--border);
-    background: var(--bg-surface); overflow: hidden;
-    transition: border-color .15s, box-shadow .15s;
+  .step-header {
+    display: flex; align-items: flex-start; gap: 1rem;
+    margin-bottom: 0.875rem;
   }
-  .step-card:hover {
-    border-color: var(--sky-border);
-    box-shadow: 0 2px 12px rgba(2,132,199,.07);
-  }
-
-  .step-head {
-    display: flex; align-items: center; gap: 0.875rem;
-    padding: 0.875rem 1.125rem;
-    cursor: pointer;
-    user-select: none;
-  }
-  .step-num {
-    width: 2rem; height: 2rem; border-radius: 50%; shrink: 0;
+  .step-num-large {
+    width: 2.25rem; height: 2.25rem; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    font-size: 0.75rem; font-weight: 700;
+    font-size: 0.8125rem; font-weight: 700; flex-shrink: 0;
     background: var(--bg-subtle); border: 1.5px solid var(--border);
-    color: var(--text-3);
-    transition: background .15s, border-color .15s, color .15s;
+    color: var(--text-3); margin-top: 1px;
   }
-  .step-card.done .step-num {
-    background: var(--emerald-soft); border-color: var(--emerald-border); color: var(--emerald);
-  }
-  .step-card.active .step-num {
+  .step-section.highlight .step-num-large {
     background: var(--sky-soft); border-color: var(--sky-border); color: var(--sky);
   }
-
-  .step-title { font-size: 0.875rem; font-weight: 600; color: var(--text-1); flex: 1; }
-  .step-title .step-sub { font-size: 0.75rem; font-weight: 400; color: var(--text-3); margin-top: 1px; }
-
-  .step-chevron {
-    color: var(--text-3); font-size: 0.7rem;
-    transition: transform .2s;
+  .step-section.highlight-violet .step-num-large {
+    background: var(--violet-soft); border-color: var(--violet-border); color: var(--violet);
   }
-  .step-card.open .step-chevron { transform: rotate(180deg); }
-
-  .step-body {
-    display: none; padding: 0 1.125rem 1rem 3.875rem;
+  .step-title-block { flex: 1; }
+  .step-title-block h2 {
+    font-size: 0.9375rem; font-weight: 700; color: var(--text-1); margin-bottom: 0.125rem;
   }
-  .step-card.open .step-body { display: block; }
-
-  /* ── Field list ─────────────────────────────────────── */
-  .field-list {
-    display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.625rem;
+  .step-title-block p {
+    font-size: 0.8rem; color: var(--text-3);
   }
+
+  .step-body { padding-left: 3.25rem; }
+  .step-body p {
+    font-size: 0.8125rem; color: var(--text-2); line-height: 1.65;
+    margin-bottom: 0.625rem;
+  }
+  .step-body p:last-child { margin-bottom: 0; }
+  .step-body ol, .step-body ul {
+    font-size: 0.8125rem; color: var(--text-2);
+    padding-left: 1.25rem; line-height: 2; margin: 0.375rem 0;
+  }
+  .step-body li strong { color: var(--text-1); }
+
+  /* ── Nav path ──────────────────────────────────────────── */
+  .nav-path {
+    display: inline-flex; align-items: center; gap: 0.25rem;
+    font-size: 0.8rem; color: var(--text-2); flex-wrap: wrap;
+    margin: 0.5rem 0;
+  }
+  .crumb {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0.2rem 0.5rem; border-radius: 0.3rem;
+    background: var(--bg-subtle); border: 1px solid var(--border);
+    font-weight: 500; color: var(--text-1); font-size: 0.8rem;
+  }
+  /* Solo los separadores (hijos directos), no los iconos dentro de .crumb */
+  .nav-path > i { color: var(--text-3); font-size: 0.6rem; }
+
+  /* ── Filter table ──────────────────────────────────────── */
+  .config-table {
+    width: 100%; border: 1px solid var(--border);
+    border-radius: 0.5rem; overflow: hidden;
+    font-size: 0.8125rem; margin: 0.625rem 0;
+  }
+  .config-table tr { border-bottom: 1px solid var(--border-soft); }
+  .config-table tr:last-child { border-bottom: none; }
+  .config-table td { padding: 0.5rem 0.75rem; }
+  .config-table td:first-child {
+    color: var(--text-3); font-size: 0.75rem;
+    width: 11rem; background: var(--bg-subtle);
+  }
+  .config-table td:last-child { color: var(--text-1); font-weight: 500; }
+
+  /* ── Field tags ────────────────────────────────────────── */
+  .field-tags { display: flex; flex-wrap: wrap; gap: 0.375rem; margin: 0.5rem 0; }
   .field-tag {
     display: inline-flex; align-items: center; gap: 0.375rem;
     padding: 0.25rem 0.625rem; border-radius: 0.375rem;
     font-size: 0.75rem; font-weight: 500;
     background: var(--bg-subtle); border: 1px solid var(--border); color: var(--text-2);
   }
-  .field-tag i { font-size: 0.625rem; color: var(--text-3); }
+  .field-tag i { font-size: 0.55rem; color: var(--violet); }
 
-  .field-row {
-    display: flex; align-items: baseline; gap: 0.5rem;
-    padding: 0.375rem 0;
-    border-bottom: 1px solid var(--border-soft);
-    font-size: 0.8125rem;
+  /* ── Callouts ──────────────────────────────────────────── */
+  .callout {
+    display: flex; align-items: flex-start; gap: 0.625rem;
+    padding: 0.625rem 0.875rem; border-radius: 0.5rem;
+    font-size: 0.8rem; margin: 0.625rem 0; line-height: 1.5;
   }
-  .field-row:last-child { border-bottom: none; }
-  .field-key { color: var(--text-3); width: 11rem; shrink: 0; font-size: 0.75rem; }
-  .field-val { color: var(--text-1); font-weight: 500; }
-  .field-val code {
+  .callout.info  { background: var(--sky-soft);    border: 1px solid var(--sky-border);    }
+  .callout.warn  { background: var(--amber-soft);  border: 1px solid var(--amber-border);  }
+  .callout.ok    { background: var(--emerald-soft);border: 1px solid var(--emerald-border);}
+  .callout.new   { background: var(--violet-soft); border: 1px solid var(--violet-border); }
+  .callout i { margin-top: 2px; flex-shrink: 0; font-size: 0.8rem; line-height: 1; }
+  .callout.info  i { color: var(--sky); }
+  .callout.warn  i { color: var(--amber); }
+  .callout.ok    i { color: var(--emerald); }
+  .callout.new   i { color: var(--violet); }
+  .callout span { color: var(--text-1); }
+  .callout strong { color: inherit; }
+
+  /* ── Code inline ───────────────────────────────────────── */
+  .ic {
     font-family: monospace; font-size: 0.75rem;
     background: var(--bg-subtle); border: 1px solid var(--border);
     padding: 1px 5px; border-radius: 4px; color: var(--sky);
   }
 
-  /* ── Note / warning callout ─────────────────────────── */
-  .callout {
-    display: flex; align-items: flex-start; gap: 0.625rem;
-    padding: 0.625rem 0.875rem; border-radius: 0.5rem;
-    font-size: 0.8rem; margin-top: 0.625rem; line-height: 1.5;
-  }
-  .callout.info  { background: var(--sky-soft);    border: 1px solid var(--sky-border);    color: var(--sky);    }
-  .callout.warn  { background: var(--amber-soft);  border: 1px solid var(--amber-border);  color: var(--amber);  }
-  .callout.ok    { background: var(--emerald-soft);border: 1px solid var(--emerald-border);color: var(--emerald);}
-  .callout i { margin-top: 2px; shrink: 0; }
-  .callout span { color: var(--text-1); }
-  .callout strong { color: inherit; }
-
-  /* ── Download button ────────────────────────────────── */
+  /* ── Download button ───────────────────────────────────── */
   .dl-btn {
     display: inline-flex; align-items: center; gap: 0.5rem;
-    padding: 0.625rem 1.25rem; border-radius: 0.625rem;
-    font-size: 0.875rem; font-weight: 600; cursor: pointer;
-    border: none; margin-top: 0.75rem;
+    padding: 0.5rem 1.125rem; border-radius: 0.5rem;
+    font-size: 0.8125rem; font-weight: 600; cursor: pointer;
+    border: none; margin-top: 0.625rem;
     background: var(--violet); color: #fff;
     transition: opacity .15s, transform .1s;
-    box-shadow: 0 2px 8px rgba(124,58,237,.25);
+    box-shadow: 0 2px 8px rgba(124,58,237,.2);
   }
   .dl-btn:hover { opacity: .88; transform: translateY(-1px); }
   .dl-btn:active { transform: translateY(0); }
 
-  /* ── Nav path (breadcrumb-like) ─────────────────────── */
-  .nav-path {
-    display: inline-flex; align-items: center; gap: 0.25rem;
-    font-size: 0.8rem; color: var(--text-2); flex-wrap: wrap;
-    margin-top: 0.5rem;
-  }
-  .nav-path .crumb {
-    padding: 0.2rem 0.5rem; border-radius: 0.3rem;
+  /* ── Script instruction box ────────────────────────────── */
+  .script-box {
     background: var(--bg-subtle); border: 1px solid var(--border);
-    font-weight: 500; color: var(--text-1);
+    border-radius: 0.625rem; padding: 0.875rem; margin: 0.625rem 0;
   }
-  .nav-path i { color: var(--text-3); font-size: 0.6rem; }
+  .script-box-title {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--text-2); margin-bottom: 0.5rem;
+    display: flex; align-items: center; gap: 0.375rem;
+  }
+  .script-box-title i { color: var(--violet); line-height: 1; }
 
-  /* ── Final CTA ──────────────────────────────────────── */
-  .guide-cta {
-    margin-top: 1.25rem; padding: 1.25rem 1.5rem;
-    border-radius: 0.875rem; border: 1px solid var(--emerald-border);
-    background: var(--emerald-soft);
-    display: flex; align-items: center; gap: 1rem;
+  /* ── TOMA Y ENVIO highlight box ────────────────────────── */
+  .transform-box {
+    border: 1.5px solid var(--violet-border);
+    border-radius: 0.625rem; overflow: hidden; margin: 0.75rem 0;
   }
-  .guide-cta-icon {
-    width: 2.5rem; height: 2.5rem; border-radius: 50%; shrink: 0;
-    background: var(--emerald); display: flex; align-items: center;
-    justify-content: center; color: #fff; font-size: 1rem;
+  .transform-box-header {
+    background: var(--violet-soft); padding: 0.5rem 0.875rem;
+    font-size: 0.75rem; font-weight: 700; color: var(--violet);
+    display: flex; align-items: center; gap: 0.375rem;
+    border-bottom: 1px solid var(--violet-border);
   }
-  .guide-cta h3 { font-size: 0.9rem; font-weight: 700; color: var(--text-1); margin-bottom: 0.25rem; }
-  .guide-cta p  { font-size: 0.8rem; color: var(--text-2); line-height: 1.5; }
+  .transform-row {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.5rem 0.875rem; font-size: 0.8rem;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--bg-surface);
+  }
+  .transform-row:last-child { border-bottom: none; }
+  .t-label { font-size: 0.7rem; color: var(--text-3); width: 5.5rem; flex-shrink: 0; }
+  .t-val {
+    font-family: monospace; font-size: 0.75rem;
+    padding: 0.2rem 0.5rem; border-radius: 0.3rem;
+    font-weight: 600;
+  }
+  .t-val.from { background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber-border); }
+  .t-val.to   { background: var(--emerald-soft); color: var(--emerald); border: 1px solid var(--emerald-border); }
+  .t-arrow { color: var(--text-3); font-size: 0.65rem; line-height: 1; flex-shrink: 0; }
 
-  /* ── Progress bar ───────────────────────────────────── */
-  .progress-bar-wrap {
-    height: 3px; background: var(--border); border-radius: 2px;
-    margin-bottom: 1.25rem; overflow: hidden;
+  /* ── Guide separator ───────────────────────────────────── */
+  .step-divider {
+    height: 1px; background: var(--border-soft);
+    margin: 1.5rem 0;
   }
-  .progress-bar-fill {
-    height: 100%; border-radius: 2px;
-    background: linear-gradient(90deg, var(--violet), var(--sky));
-    transition: width .4s ease;
+
+  /* Scrollable steps container */
+  .steps-container {
+    display: flex; flex-direction: column; gap: 1.5rem;
   }
 </style>
 
-<div class="help-layout" x-data="helpApp()">
+<div class="help-layout" x-data="{ guide: 'download' }">
 
-  <!-- ── Guide list nav ────────────────────────────────── -->
-  <nav class="guide-nav" style="width:13rem;shrink:0;position:sticky;top:0">
-    <div style="padding:0.75rem 0.75rem 0.375rem;border-bottom:1px solid var(--border)">
-      <p style="font-size:0.625rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3)">Tutoriales</p>
+  <!-- ── Sidebar ──────────────────────────────────────────── -->
+  <nav class="guide-nav">
+    <div class="guide-nav-header">
+      <p>Tutoriales</p>
     </div>
-    <div style="padding:0.375rem">
-      <p class="guide-nav-section">SIHOS</p>
-      <button class="guide-nav-item" :class="guide === 'sihos-report' && 'active'"
-              @click="guide = 'sihos-report'">
-        <span class="nav-dot"></span>
-        Descargar reporte
-      </button>
-    </div>
-    <div style="padding:0.375rem;border-top:1px solid var(--border)">
-      <p class="guide-nav-section" style="padding-top:0.5rem">Próximamente</p>
-      <div class="guide-nav-item" style="opacity:.4;cursor:default">
-        <span class="nav-dot"></span>
-        Organizar carpetas
+    <div style="padding: 0.375rem 0; border-bottom: 1px solid var(--border)">
+      <div class="guide-nav-section-label">SIHOS</div>
+      <div class="guide-nav-group">
+        <button class="nav-guide-btn" :class="guide === 'download' && 'active'"
+                @click="guide = 'download'">
+          <span class="nav-guide-icon"><i class="fa-solid fa-download"></i></span>
+          <span>Descargar reporte</span>
+        </button>
+        <button class="nav-guide-btn" :class="guide === 'prepare' && 'active'"
+                @click="guide = 'prepare'">
+          <span class="nav-guide-icon"><i class="fa-solid fa-file-excel"></i></span>
+          <span>Preparar archivo</span>
+        </button>
       </div>
-      <div class="guide-nav-item" style="opacity:.4;cursor:default">
-        <span class="nav-dot"></span>
-        Interpretar hallazgos
+    </div>
+    <div style="padding: 0.375rem 0">
+      <div class="guide-nav-section-label">Próximamente</div>
+      <div class="guide-nav-group">
+        <div class="nav-coming"><span class="nav-guide-icon"><i class="fa-solid fa-folder-open"></i></span> Organizar carpetas</div>
+        <div class="nav-coming"><span class="nav-guide-icon"><i class="fa-solid fa-pills"></i></span> Hojas de medicamentos</div>
       </div>
     </div>
   </nav>
 
-  <!-- ── Guide content ─────────────────────────────────── -->
-  <div class="guide-content">
-    <div x-show="guide === 'sihos-report'">
+  <!-- ── Guide: Descargar reporte ─────────────────────────── -->
+  <div class="guide-article" x-show="guide === 'download'" x-cloak>
 
-      <!-- Header -->
-      <div class="guide-header">
-        <div class="guide-header-eyebrow">
-          <i class="fa-solid fa-book-open-reader"></i>
-          Tutorial · SIHOS
-        </div>
-        <h1>Descargar y preparar el reporte de SIHOS</h1>
-        <p>Aprende cómo exportar el reporte de liquidación desde el portal SIHOS, ejecutar el script de preparación y subir el archivo a la aplicación.</p>
-        <!-- Progress -->
-        <div style="margin-top:1rem">
-          <div class="progress-bar-wrap">
-            <div class="progress-bar-fill" :style="'width:' + progress + '%'"></div>
+    <div class="guide-banner">
+      <div class="guide-banner-eyebrow">
+        <i class="fa-solid fa-download"></i> Tutorial · SIHOS
+      </div>
+      <h1>Descargar el reporte de SIHOS</h1>
+      <p>Cómo exportar el reporte de liquidación desde el portal SIHOS con los campos y filtros exactos que requiere el sistema.</p>
+      <div class="guide-banner-meta">
+        <span class="guide-badge violet"><i class="fa-solid fa-list-check"></i> 4 pasos</span>
+        <span class="guide-badge sky"><i class="fa-solid fa-globe"></i> Requiere acceso a SIHOS</span>
+      </div>
+    </div>
+
+    <div class="prereq">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <div>
+        <strong style="color:var(--amber)">Antes de comenzar:</strong> debes haber iniciado sesión en el portal SIHOS
+        correspondiente al hospital que estás auditando. Si aún no lo has hecho, autentica tu cuenta antes de seguir estos pasos.
+      </div>
+    </div>
+
+    <div class="steps-container">
+
+      <!-- Step 1 -->
+      <div class="step-section">
+        <div class="step-header">
+          <div class="step-num-large">1</div>
+          <div class="step-title-block">
+            <h2>Navegar al reporte de liquidación</h2>
+            <p>Ubicar la sección correcta dentro del portal SIHOS</p>
           </div>
-          <p style="font-size:0.7rem;color:var(--text-3)">
-            <span x-text="doneCount"></span> de <span x-text="totalSteps"></span> pasos completados
+        </div>
+        <div class="step-body">
+          <p>Dentro del portal SIHOS, navega a la siguiente ruta:</p>
+          <div class="nav-path">
+            <span class="crumb"><i class="fa-solid fa-chart-bar" style="color:var(--violet);font-size:0.7rem"></i>Reportes</span>
+            <i class="fa-solid fa-chevron-right"></i>
+            <span class="crumb">Liquidación de servicios</span>
+            <i class="fa-solid fa-chevron-right"></i>
+            <span class="crumb">Liquidación</span>
+          </div>
+          <div class="callout info">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>El menú de <strong>Reportes</strong> suele estar en la barra de navegación superior o en el menú lateral del portal.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="step-section">
+        <div class="step-header">
+          <div class="step-num-large">2</div>
+          <div class="step-title-block">
+            <h2>Seleccionar los campos del reporte</h2>
+            <p>Marcar exactamente los campos requeridos — ni más, ni menos</p>
+          </div>
+        </div>
+        <div class="step-body">
+          <p>En la sección de <strong>campos</strong> o <strong>columnas</strong>, selecciona únicamente los siguientes:</p>
+          <div class="field-tags">
+            <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Administradora</span>
+            <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Tipo Usuario</span>
+            <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Tipo Servicio</span>
+            <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Actividad / Suministro</span>
+            <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Operario</span>
+            <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Paciente</span>
+          </div>
+          <div class="callout warn">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span>No selecciones más campos de los indicados. El script de preparación espera exactamente estas columnas y fallará si encuentra columnas adicionales o faltantes.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="step-section">
+        <div class="step-header">
+          <div class="step-num-large">3</div>
+          <div class="step-title-block">
+            <h2>Configurar los filtros del reporte</h2>
+            <p>Estado, tipo de liquidación, rango de fechas y formato de salida</p>
+          </div>
+        </div>
+        <div class="step-body">
+          <p>Configura los filtros con los siguientes valores exactos:</p>
+          <table class="config-table">
+            <tr><td>Estado</td><td><code class="ic">Confirmado</code></td></tr>
+            <tr><td>Liquidación generada</td><td><code class="ic">Entidad</code></td></tr>
+            <tr><td>Fecha y hora inicial</td><td>Primer día del período a auditar</td></tr>
+            <tr><td>Fecha y hora final</td><td>Último día del período a auditar</td></tr>
+            <tr><td>Reporte</td><td><code class="ic">Horizontal</code></td></tr>
+            <tr><td>Opción seleccionada</td><td><code class="ic">Facturadas</code></td></tr>
+          </table>
+          <div class="callout info">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>El rango de fechas debe coincidir exactamente con el período de auditoría configurado en la aplicación.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div class="step-section">
+        <div class="step-header">
+          <div class="step-num-large">4</div>
+          <div class="step-title-block">
+            <h2>Generar y exportar el reporte</h2>
+            <p>Aceptar, esperar la carga y exportar a Excel</p>
+          </div>
+        </div>
+        <div class="step-body">
+          <ol>
+            <li>Haz clic en <strong>Aceptar</strong> para generar el reporte.</li>
+            <li>Espera a que la tabla cargue con los datos del período.</li>
+            <li>Busca el botón <strong>Exportar a Excel</strong> y haz clic en él.</li>
+            <li>El archivo <code class="ic">.xls</code> se descargará automáticamente a tu carpeta de Descargas.</li>
+          </ol>
+          <div class="callout ok">
+            <i class="fa-solid fa-circle-check"></i>
+            <span>El archivo se guardará con extensión <strong>.xls</strong> (no .xlsx). Esto es normal — lo convertiremos en el siguiente tutorial al preparar el archivo.</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /steps -->
+
+    <!-- Next guide CTA -->
+    <div style="margin-top:1.75rem;padding:1.125rem 1.375rem;border-radius:0.75rem;border:1px solid var(--border);background:var(--bg-surface);display:flex;align-items:center;gap:1rem">
+      <div style="width:2.25rem;height:2.25rem;border-radius:50%;background:var(--violet-soft);border:1px solid var(--violet-border);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i class="fa-solid fa-arrow-right" style="color:var(--violet);font-size:0.75rem"></i>
+      </div>
+      <div style="flex:1">
+        <p style="font-size:0.875rem;font-weight:700;color:var(--text-1);margin-bottom:0.125rem">Continúa con el siguiente paso</p>
+        <p style="font-size:0.8rem;color:var(--text-2)">Una vez descargado el reporte, sigue el tutorial de <strong>Preparar archivo</strong> para procesarlo y subirlo.</p>
+      </div>
+      <button @click="guide = 'prepare'"
+              style="flex-shrink:0;display:inline-flex;align-items:center;gap:0.375rem;padding:0.5rem 1rem;border-radius:0.5rem;background:var(--violet);color:#fff;font-size:0.8125rem;font-weight:600;border:none;cursor:pointer">
+        Preparar archivo <i class="fa-solid fa-arrow-right"></i>
+      </button>
+    </div>
+
+  </div><!-- /download guide -->
+
+  <!-- ── Guide: Preparar archivo ───────────────────────────── -->
+  <div class="guide-article" x-show="guide === 'prepare'" x-cloak>
+
+    <div class="guide-banner">
+      <div class="guide-banner-eyebrow">
+        <i class="fa-solid fa-file-excel"></i> Tutorial · SIHOS
+      </div>
+      <h1>Preparar el archivo de SIHOS</h1>
+      <p>Cómo limpiar el archivo exportado con el script de Office, aplicar las correcciones necesarias y subirlo a la aplicación.</p>
+      <div class="guide-banner-meta">
+        <span class="guide-badge violet"><i class="fa-solid fa-list-check"></i> 5 pasos</span>
+        <span class="guide-badge sky"><i class="fa-solid fa-wand-magic-sparkles"></i> Requiere Microsoft 365</span>
+      </div>
+    </div>
+
+    <div class="prereq">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <div>
+        <strong style="color:var(--amber)">Antes de comenzar:</strong> debes tener el archivo <code class="ic">.xls</code> descargado desde SIHOS.
+        Si aún no lo has descargado, sigue primero el tutorial <strong>Descargar reporte</strong>.
+      </div>
+    </div>
+
+    <div class="steps-container">
+
+      <!-- Step 1 -->
+      <div class="step-section">
+        <div class="step-header">
+          <div class="step-num-large">1</div>
+          <div class="step-title-block">
+            <h2>Abrir el archivo y habilitar edición</h2>
+            <p>Preparar el documento antes de ejecutar el script</p>
+          </div>
+        </div>
+        <div class="step-body">
+          <ol>
+            <li>Abre el archivo <code class="ic">.xls</code> descargado con <strong>Microsoft Excel</strong>.</li>
+            <li>Si aparece la barra amarilla de <em>"Vista protegida"</em>, haz clic en <strong>Habilitar edición</strong>.</li>
+            <li>Elimina la <strong>imagen o logo</strong> que suele aparecer en la cabecera del documento — haz clic encima del logo y presiona la tecla <code class="ic">Supr</code>.</li>
+          </ol>
+          <div class="callout warn">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span>Si no eliminas la imagen, el script puede fallar al procesar las primeras filas. Asegúrate de que no quede ningún objeto flotante en la hoja.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="step-section highlight-violet">
+        <div class="step-header">
+          <div class="step-num-large">2</div>
+          <div class="step-title-block">
+            <h2>Ejecutar el script de preparación</h2>
+            <p>Requiere Microsoft 365 con Office Scripts habilitado</p>
+          </div>
+        </div>
+        <div class="step-body">
+          <p>
+            El script limpia y transforma el archivo automáticamente: elimina filas y columnas innecesarias,
+            renombra cabeceras, convierte todo a mayúsculas, reordena las columnas, aplica formato de tabla
+            y <strong>corrige automáticamente los registros de "TOMA Y"</strong>.
           </p>
+
+          <div class="script-box">
+            <div class="script-box-title">
+              <i class="fa-solid fa-upload"></i> Cómo importar el script en Excel
+            </div>
+            <ol style="font-size:0.8rem;color:var(--text-2);padding-left:1.25rem;line-height:2;margin:0">
+              <li>En Excel, ve a la pestaña <strong style="color:var(--text-1)">Automatizar</strong> en la cinta de opciones.</li>
+              <li>Haz clic en <strong style="color:var(--text-1)">Nuevo script</strong>.</li>
+              <li>En el editor que se abre, <strong style="color:var(--text-1)">borra todo el contenido</strong> existente.</li>
+              <li>Descarga el archivo del script con el botón de abajo y <strong style="color:var(--text-1)">copia su contenido</strong>.</li>
+              <li>Pega el contenido en el editor y haz clic en <strong style="color:var(--text-1)">Guardar script</strong>.</li>
+              <li>Haz clic en <strong style="color:var(--text-1)">Ejecutar</strong> y espera a que finalice.</li>
+            </ol>
+          </div>
+
+          <div class="callout warn">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span>La pestaña <strong>Automatizar</strong> solo aparece si tienes <strong>Microsoft 365</strong> con Office Scripts habilitado. No funciona con versiones antiguas de Office ni con Excel descargado sin suscripción activa.</span>
+          </div>
+
+          <button class="dl-btn" onclick="downloadScript()">
+            <i class="fa-solid fa-download"></i>
+            Descargar script (.ts)
+          </button>
         </div>
       </div>
 
-      <!-- Prerequisite -->
-      <div class="prereq">
-        <i class="fa-solid fa-triangle-exclamation fa-sm"></i>
-        <div>
-          <strong>Antes de comenzar:</strong> debes haber iniciado sesión en el portal SIHOS correspondiente al hospital que estás auditando.
-          Si aún no lo has hecho, ingresa al portal y autentica tu cuenta antes de seguir estos pasos.
+      <!-- Step 3 — TOMA Y ENVIO (new) -->
+      <div class="step-section highlight">
+        <div class="step-header">
+          <div class="step-num-large">3</div>
+          <div class="step-title-block">
+            <h2>Verificar registros "TOMA Y ENVIO"</h2>
+            <p>El script los corrige automáticamente — este paso es solo de verificación</p>
+          </div>
+        </div>
+        <div class="step-body">
+          <p>
+            El script detecta automáticamente todas las filas donde la columna <strong>ACTIVIDAD</strong> contiene
+            el texto <code class="ic">TOMA Y</code> y cambia su <strong>SERVICIO</strong> a <code class="ic">TOMA Y ENVIO</code>.
+            Esto ocurre durante la ejecución del script, por lo que no necesitas hacerlo manualmente.
+          </p>
+
+          <div class="transform-box">
+            <div class="transform-box-header">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              Transformación aplicada por el script
+            </div>
+            <div class="transform-row">
+              <span class="t-label">Condición</span>
+              <span>Columna <code class="ic">ACTIVIDAD</code> contiene <code class="ic">TOMA Y</code></span>
+            </div>
+            <div class="transform-row">
+              <span class="t-label">Columna</span>
+              <span style="font-size:0.8rem;color:var(--text-2)">SERVICIO</span>
+            </div>
+            <div class="transform-row">
+              <span class="t-label">Antes</span>
+              <span class="t-val from">LABORATORIO CLÍNICO</span>
+              <i class="fa-solid fa-arrow-right t-arrow"></i>
+              <span class="t-label" style="width:auto;margin-left:0.25rem">Después</span>
+              <span class="t-val to">TOMA Y ENVIO</span>
+            </div>
+          </div>
+
+          <div class="callout new">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>Si quieres verificar que la corrección se aplicó correctamente, filtra la columna <strong>ACTIVIDAD</strong> por <code class="ic">TOMA Y</code> y confirma que todas las filas muestren <code class="ic">TOMA Y ENVIO</code> en la columna <strong>SERVICIO</strong>.</span>
+          </div>
         </div>
       </div>
 
-      <!-- Steps -->
-      <div class="steps">
-
-        <!-- STEP 1 -->
-        <div class="step-card" :class="{ done: steps[0], open: open === 0, active: open === 0 }" @click="toggle(0)">
-          <div class="step-head">
-            <div class="step-num">
-              <template x-if="steps[0]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
-              <template x-if="!steps[0]">1</template>
-            </div>
-            <div class="step-title">
-              Navegar al reporte de liquidación
-              <div class="step-sub">Ubicar la sección correcta dentro de SIHOS</div>
-            </div>
-            <i class="fa-solid fa-chevron-down step-chevron"></i>
-          </div>
-          <div class="step-body">
-            <p style="font-size:0.8125rem;color:var(--text-2);margin-bottom:0.5rem">Dentro del portal SIHOS, navega a la siguiente ruta:</p>
-            <div class="nav-path">
-              <span class="crumb"><i class="fa-solid fa-chart-bar mr-1" style="color:var(--violet);font-size:0.7rem"></i>Reportes</span>
-              <i class="fa-solid fa-chevron-right"></i>
-              <span class="crumb">Liquidación de servicios</span>
-              <i class="fa-solid fa-chevron-right"></i>
-              <span class="crumb">Liquidación</span>
-            </div>
-            <div class="callout info" style="margin-top:0.75rem">
-              <i class="fa-solid fa-circle-info fa-sm"></i>
-              <span>El menú de <strong>Reportes</strong> suele estar en la barra de navegación superior o en el menú lateral del portal.</span>
-            </div>
-            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
-              <button @click.stop="markDone(0)" class="step-done-btn"
-                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
-                <i class="fa-solid fa-check mr-1"></i>Listo
-              </button>
-            </div>
+      <!-- Step 4 -->
+      <div class="step-section">
+        <div class="step-header">
+          <div class="step-num-large">4</div>
+          <div class="step-title-block">
+            <h2>Guardar el archivo como .xlsx</h2>
+            <p>Convertir al formato requerido por la aplicación</p>
           </div>
         </div>
-
-        <!-- STEP 2 -->
-        <div class="step-card" :class="{ done: steps[1], open: open === 1, active: open === 1 }" @click="toggle(1)">
-          <div class="step-head">
-            <div class="step-num">
-              <template x-if="steps[1]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
-              <template x-if="!steps[1]">2</template>
-            </div>
-            <div class="step-title">
-              Seleccionar los campos del reporte
-              <div class="step-sub">Marcar exactamente los campos requeridos</div>
-            </div>
-            <i class="fa-solid fa-chevron-down step-chevron"></i>
-          </div>
-          <div class="step-body">
-            <p style="font-size:0.8125rem;color:var(--text-2);margin-bottom:0.5rem">En la sección de <strong>campos</strong> o <strong>columnas</strong>, selecciona únicamente los siguientes:</p>
-            <div class="field-list">
-              <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Administradora</span>
-              <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Tipo Usuario</span>
-              <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Tipo Servicio</span>
-              <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Actividad / Suministro</span>
-              <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Operario</span>
-              <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Paciente</span>
-            </div>
-            <div class="callout warn">
-              <i class="fa-solid fa-triangle-exclamation fa-sm"></i>
-              <span>No selecciones más campos de los indicados. El script de preparación espera exactamente estas columnas.</span>
-            </div>
-            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
-              <button @click.stop="markDone(1)" class="step-done-btn"
-                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
-                <i class="fa-solid fa-check mr-1"></i>Listo
-              </button>
-            </div>
+        <div class="step-body">
+          <ol>
+            <li>Ve a <strong>Archivo → Guardar como</strong>.</li>
+            <li>En el tipo de archivo, selecciona <strong>Libro de Excel (.xlsx)</strong>.</li>
+            <li>Guarda el archivo en una ubicación que recuerdes.</li>
+          </ol>
+          <div class="callout info">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>La app solo acepta archivos <strong>.xlsx</strong>. El archivo original <strong>.xls</strong> descargado de SIHOS no es compatible — este paso es obligatorio.</span>
           </div>
         </div>
-
-        <!-- STEP 3 -->
-        <div class="step-card" :class="{ done: steps[2], open: open === 2, active: open === 2 }" @click="toggle(2)">
-          <div class="step-head">
-            <div class="step-num">
-              <template x-if="steps[2]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
-              <template x-if="!steps[2]">3</template>
-            </div>
-            <div class="step-title">
-              Configurar los filtros del reporte
-              <div class="step-sub">Estado, tipo, fechas y formato</div>
-            </div>
-            <i class="fa-solid fa-chevron-down step-chevron"></i>
-          </div>
-          <div class="step-body">
-            <p style="font-size:0.8125rem;color:var(--text-2);margin-bottom:0.625rem">Configura los filtros con los siguientes valores exactos:</p>
-            <div style="border:1px solid var(--border);border-radius:0.5rem;overflow:hidden">
-              <div class="field-row" style="padding:0.5rem 0.75rem">
-                <span class="field-key">Estado</span>
-                <span class="field-val"><code>Confirmado</code></span>
-              </div>
-              <div class="field-row" style="padding:0.5rem 0.75rem">
-                <span class="field-key">Liquidación generada</span>
-                <span class="field-val"><code>Entidad</code></span>
-              </div>
-              <div class="field-row" style="padding:0.5rem 0.75rem">
-                <span class="field-key">Fecha y hora inicial</span>
-                <span class="field-val">Primer día del período a auditar</span>
-              </div>
-              <div class="field-row" style="padding:0.5rem 0.75rem">
-                <span class="field-key">Fecha y hora final</span>
-                <span class="field-val">Último día del período a auditar</span>
-              </div>
-              <div class="field-row" style="padding:0.5rem 0.75rem">
-                <span class="field-key">Reporte</span>
-                <span class="field-val"><code>Horizontal</code></span>
-              </div>
-              <div class="field-row" style="padding:0.5rem 0.75rem;border-bottom:none">
-                <span class="field-key">Opción seleccionada</span>
-                <span class="field-val"><code>Facturadas</code></span>
-              </div>
-            </div>
-            <div class="callout info" style="margin-top:0.625rem">
-              <i class="fa-solid fa-circle-info fa-sm"></i>
-              <span>El rango de fechas debe coincidir con el período de auditoría configurado en la aplicación.</span>
-            </div>
-            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
-              <button @click.stop="markDone(2)" class="step-done-btn"
-                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
-                <i class="fa-solid fa-check mr-1"></i>Listo
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- STEP 4 -->
-        <div class="step-card" :class="{ done: steps[3], open: open === 3, active: open === 3 }" @click="toggle(3)">
-          <div class="step-head">
-            <div class="step-num">
-              <template x-if="steps[3]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
-              <template x-if="!steps[3]">4</template>
-            </div>
-            <div class="step-title">
-              Generar y exportar el reporte
-              <div class="step-sub">Aceptar, exportar a Excel y descargar</div>
-            </div>
-            <i class="fa-solid fa-chevron-down step-chevron"></i>
-          </div>
-          <div class="step-body">
-            <ol style="font-size:0.8125rem;color:var(--text-2);padding-left:1.25rem;line-height:2;margin:0">
-              <li>Haz clic en <strong style="color:var(--text-1)">Aceptar</strong> para generar el reporte.</li>
-              <li>Espera a que la tabla cargue con los datos.</li>
-              <li>Busca el botón <strong style="color:var(--text-1)">Exportar a Excel</strong> y haz clic.</li>
-              <li>El archivo <code style="font-size:0.75rem;background:var(--bg-subtle);border:1px solid var(--border);padding:1px 4px;border-radius:3px">.xls</code> se descargará a tu carpeta de Descargas.</li>
-            </ol>
-            <div class="callout ok" style="margin-top:0.625rem">
-              <i class="fa-solid fa-circle-check fa-sm"></i>
-              <span>El archivo se guardará con extensión <strong>.xls</strong> (no .xlsx). Esto es normal — lo convertiremos en el siguiente paso.</span>
-            </div>
-            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
-              <button @click.stop="markDone(3)" class="step-done-btn"
-                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
-                <i class="fa-solid fa-check mr-1"></i>Listo
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- STEP 5 -->
-        <div class="step-card" :class="{ done: steps[4], open: open === 4, active: open === 4 }" @click="toggle(4)">
-          <div class="step-head">
-            <div class="step-num">
-              <template x-if="steps[4]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
-              <template x-if="!steps[4]">5</template>
-            </div>
-            <div class="step-title">
-              Abrir el archivo y habilitar edición
-              <div class="step-sub">Preparar el documento en Excel</div>
-            </div>
-            <i class="fa-solid fa-chevron-down step-chevron"></i>
-          </div>
-          <div class="step-body">
-            <ol style="font-size:0.8125rem;color:var(--text-2);padding-left:1.25rem;line-height:2;margin:0">
-              <li>Abre el archivo <code style="font-size:0.75rem;background:var(--bg-subtle);border:1px solid var(--border);padding:1px 4px;border-radius:3px">.xls</code> descargado con <strong style="color:var(--text-1)">Microsoft Excel</strong>.</li>
-              <li>Si aparece la barra amarilla de <em>"Vista protegida"</em>, haz clic en <strong style="color:var(--text-1)">Habilitar edición</strong>.</li>
-              <li>Elimina la <strong style="color:var(--text-1)">imagen o logo</strong> que suele aparecer en la cabecera del documento (clic encima → tecla Suprimir).</li>
-            </ol>
-            <div class="callout warn" style="margin-top:0.625rem">
-              <i class="fa-solid fa-triangle-exclamation fa-sm"></i>
-              <span>Si no eliminas la imagen, el script puede fallar al procesar las primeras filas. Asegúrate de que no quede ningún objeto flotante.</span>
-            </div>
-            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
-              <button @click.stop="markDone(4)" class="step-done-btn"
-                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
-                <i class="fa-solid fa-check mr-1"></i>Listo
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- STEP 6 — Script -->
-        <div class="step-card" :class="{ done: steps[5], open: open === 5, active: open === 5 }" @click="toggle(5)">
-          <div class="step-head">
-            <div class="step-num">
-              <template x-if="steps[5]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
-              <template x-if="!steps[5]">6</template>
-            </div>
-            <div class="step-title">
-              Ejecutar el script de preparación
-              <div class="step-sub">Requiere Microsoft 365 con Office Scripts</div>
-            </div>
-            <i class="fa-solid fa-chevron-down step-chevron"></i>
-          </div>
-          <div class="step-body">
-            <p style="font-size:0.8125rem;color:var(--text-2);margin-bottom:0.75rem">
-              El script limpia y transforma el archivo automáticamente: elimina filas y columnas innecesarias, renombra cabeceras, convierte a mayúsculas y da formato de tabla.
-            </p>
-
-            <!-- How to import -->
-            <div style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:0.625rem;padding:0.875rem;margin-bottom:0.75rem">
-              <p style="font-size:0.75rem;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:0.625rem">
-                <i class="fa-solid fa-upload mr-1.5" style="color:var(--violet)"></i>Cómo importar el script en Excel
-              </p>
-              <ol style="font-size:0.8rem;color:var(--text-2);padding-left:1.25rem;line-height:2;margin:0">
-                <li>En Excel, ve a la pestaña <strong style="color:var(--text-1)">Automatizar</strong> en la cinta de opciones.</li>
-                <li>Haz clic en <strong style="color:var(--text-1)">Nuevo script</strong>.</li>
-                <li>En el editor que se abre, <strong style="color:var(--text-1)">borra todo el contenido</strong> existente.</li>
-                <li>Descarga el archivo del script con el botón de abajo y <strong style="color:var(--text-1)">copia su contenido</strong>.</li>
-                <li>Pega el contenido en el editor y haz clic en <strong style="color:var(--text-1)">Guardar script</strong>.</li>
-                <li>Haz clic en <strong style="color:var(--text-1)">Ejecutar</strong>.</li>
-              </ol>
-            </div>
-
-            <div class="callout warn">
-              <i class="fa-solid fa-triangle-exclamation fa-sm"></i>
-              <span>La pestaña <strong>Automatizar</strong> solo aparece si tienes <strong>Microsoft 365</strong> con Office Scripts habilitado. No funciona con versiones antiguas de Office.</span>
-            </div>
-
-            <!-- Download button -->
-            <button class="dl-btn" @click.stop="downloadScript()">
-              <i class="fa-solid fa-download"></i>
-              Descargar script (.ts)
-            </button>
-
-            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
-              <button @click.stop="markDone(5)" class="step-done-btn"
-                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
-                <i class="fa-solid fa-check mr-1"></i>Listo
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- STEP 7 -->
-        <div class="step-card" :class="{ done: steps[6], open: open === 6, active: open === 6 }" @click="toggle(6)">
-          <div class="step-head">
-            <div class="step-num">
-              <template x-if="steps[6]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
-              <template x-if="!steps[6]">7</template>
-            </div>
-            <div class="step-title">
-              Guardar el archivo como .xlsx
-              <div class="step-sub">Convertir al formato requerido por la app</div>
-            </div>
-            <i class="fa-solid fa-chevron-down step-chevron"></i>
-          </div>
-          <div class="step-body">
-            <ol style="font-size:0.8125rem;color:var(--text-2);padding-left:1.25rem;line-height:2;margin:0">
-              <li>Ve a <strong style="color:var(--text-1)">Archivo → Guardar como</strong>.</li>
-              <li>En el tipo de archivo, selecciona <strong style="color:var(--text-1)">Libro de Excel (.xlsx)</strong>.</li>
-              <li>Guarda el archivo.</li>
-            </ol>
-            <div class="callout info" style="margin-top:0.625rem">
-              <i class="fa-solid fa-circle-info fa-sm"></i>
-              <span>La app solo acepta archivos <strong>.xlsx</strong>. El archivo original <strong>.xls</strong> no es compatible.</span>
-            </div>
-            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
-              <button @click.stop="markDone(6)" class="step-done-btn"
-                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
-                <i class="fa-solid fa-check mr-1"></i>Listo
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- STEP 8 -->
-        <div class="step-card" :class="{ done: steps[7], open: open === 7, active: open === 7 }" @click="toggle(7)">
-          <div class="step-head">
-            <div class="step-num">
-              <template x-if="steps[7]"><i class="fa-solid fa-check" style="font-size:0.65rem"></i></template>
-              <template x-if="!steps[7]">8</template>
-            </div>
-            <div class="step-title">
-              Subir el archivo a la aplicación
-              <div class="step-sub">Etapa "Cargar reporte de SIHOS" en el Pipeline</div>
-            </div>
-            <i class="fa-solid fa-chevron-down step-chevron"></i>
-          </div>
-          <div class="step-body">
-            <ol style="font-size:0.8125rem;color:var(--text-2);padding-left:1.25rem;line-height:2;margin:0">
-              <li>Ve a la sección <strong style="color:var(--text-1)">Pipeline</strong> en el menú lateral.</li>
-              <li>Asegúrate de tener seleccionado el hospital y período correctos.</li>
-              <li>Busca la etapa <strong style="color:var(--text-1)">Cargar reporte de SIHOS</strong>.</li>
-              <li>Haz clic en el botón de carga y selecciona el archivo <code style="font-size:0.75rem;background:var(--bg-subtle);border:1px solid var(--border);padding:1px 4px;border-radius:3px">.xlsx</code> que guardaste.</li>
-              <li>Espera a que el proceso finalice. Las facturas quedarán registradas en el sistema.</li>
-            </ol>
-            <div class="callout ok" style="margin-top:0.625rem">
-              <i class="fa-solid fa-circle-check fa-sm"></i>
-              <span>Si la carga fue exitosa, verás el conteo de facturas importadas y podrás continuar con las siguientes etapas del pipeline.</span>
-            </div>
-            <div style="margin-top:0.875rem;display:flex;justify-content:flex-end">
-              <button @click.stop="markDone(7)" class="step-done-btn"
-                      style="font-size:0.75rem;padding:0.375rem 0.875rem;border-radius:0.5rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);color:var(--emerald);cursor:pointer;font-weight:600">
-                <i class="fa-solid fa-check mr-1"></i>Listo
-              </button>
-            </div>
-          </div>
-        </div>
-
-      </div><!-- /steps -->
-
-      <!-- Final CTA -->
-      <div class="guide-cta" x-show="doneCount === totalSteps" x-transition>
-        <div class="guide-cta-icon"><i class="fa-solid fa-trophy"></i></div>
-        <div>
-          <h3>¡Tutorial completado!</h3>
-          <p>Ya tienes el reporte listo. Dirígete al Pipeline para continuar con las demás etapas de auditoría.</p>
-        </div>
-        <a href="/" style="margin-left:auto;display:inline-flex;align-items:center;gap:0.375rem;padding:0.5rem 1rem;border-radius:0.625rem;background:var(--emerald);color:#fff;font-size:0.8125rem;font-weight:600;text-decoration:none;shrink:0">
-          Ir al Pipeline <i class="fa-solid fa-arrow-right"></i>
-        </a>
       </div>
 
-      <!-- Reset -->
-      <div style="margin-top:0.875rem;display:flex;justify-content:flex-end" x-show="doneCount > 0">
-        <button @click="resetSteps()" style="font-size:0.75rem;color:var(--text-3);background:none;border:none;cursor:pointer;padding:0.25rem 0.5rem">
-          <i class="fa-solid fa-rotate-left mr-1"></i>Reiniciar progreso
-        </button>
+      <!-- Step 5 -->
+      <div class="step-section">
+        <div class="step-header">
+          <div class="step-num-large">5</div>
+          <div class="step-title-block">
+            <h2>Subir el archivo a la aplicación</h2>
+            <p>Etapa "Cargar reporte de SIHOS" en el Pipeline</p>
+          </div>
+        </div>
+        <div class="step-body">
+          <ol>
+            <li>Ve a la sección <strong>Pipeline</strong> en el menú lateral.</li>
+            <li>Asegúrate de tener seleccionado el hospital y período correctos.</li>
+            <li>Busca la etapa <strong>Cargar reporte de SIHOS</strong>.</li>
+            <li>Haz clic en el botón de carga y selecciona el archivo <code class="ic">.xlsx</code> que guardaste.</li>
+            <li>Espera a que el proceso finalice. Las facturas quedarán registradas en el sistema.</li>
+          </ol>
+          <div class="callout ok">
+            <i class="fa-solid fa-circle-check"></i>
+            <span>Si la carga fue exitosa, verás el conteo de facturas importadas y podrás continuar con las siguientes etapas del pipeline.</span>
+          </div>
+        </div>
       </div>
 
-    </div><!-- /sihos-report -->
-  </div><!-- /guide-content -->
-</div>
+    </div><!-- /steps -->
+
+    <!-- Final CTA -->
+    <div style="margin-top:1.75rem;padding:1.125rem 1.375rem;border-radius:0.75rem;border:1px solid var(--emerald-border);background:var(--emerald-soft);display:flex;align-items:center;gap:1rem">
+      <div style="width:2.25rem;height:2.25rem;border-radius:50%;background:var(--emerald);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i class="fa-solid fa-trophy" style="color:#fff;font-size:0.8rem"></i>
+      </div>
+      <div style="flex:1">
+        <p style="font-size:0.875rem;font-weight:700;color:var(--text-1);margin-bottom:0.125rem">¡Archivo listo para auditar!</p>
+        <p style="font-size:0.8rem;color:var(--text-2)">Las facturas están cargadas en el sistema. Dirígete al Pipeline para continuar con las demás etapas.</p>
+      </div>
+      <a href="/" style="flex-shrink:0;display:inline-flex;align-items:center;gap:0.375rem;padding:0.5rem 1rem;border-radius:0.5rem;background:var(--emerald);color:#fff;font-size:0.8125rem;font-weight:600;text-decoration:none">
+        Ir al Pipeline <i class="fa-solid fa-arrow-right"></i>
+      </a>
+    </div>
+
+  </div><!-- /prepare guide -->
+
+</div><!-- /help-layout -->
 
 {% endblock %}
 
@@ -712,7 +771,27 @@ const OFFICE_SCRIPT = `function main(workbook: ExcelScript.Workbook): void {
     }
     usedRange8.setValues(allValues8);
 
-    // 8. Reordenar columnas
+    // 8. Renombrar SERVICIO a "TOMA Y ENVIO" donde ACTIVIDAD contenga "TOMA Y"
+    const usedRangeTY = sheet.getUsedRange();
+    const rowCountTY = usedRangeTY.getRowCount();
+    const colCountTY = usedRangeTY.getColumnCount();
+    const allDataTY = usedRangeTY.getValues();
+    let actividadIdx = -1, servicioIdx = -1;
+    for (let c = 0; c < colCountTY; c++) {
+        const h = String(allDataTY[0][c]).trim();
+        if (h === "ACTIVIDAD") actividadIdx = c;
+        if (h === "SERVICIO") servicioIdx = c;
+    }
+    if (actividadIdx >= 0 && servicioIdx >= 0) {
+        for (let r = 1; r < rowCountTY; r++) {
+            const actividad = String(allDataTY[r][actividadIdx]).trim();
+            if (actividad.includes("TOMA Y")) {
+                sheet.getCell(r, servicioIdx).setValue("TOMA Y ENVIO");
+            }
+        }
+    }
+
+    // 9. Reordenar columnas
     const desiredOrder: string[] = [
         "FACTURA","FECHA","DOCUMENTO","NUMERO","PACIENTE",
         "ADMINISTRADORA","CONTRATO","SERVICIO","ACTIVIDAD","OPERARIO",
@@ -738,14 +817,14 @@ const OFFICE_SCRIPT = `function main(workbook: ExcelScript.Workbook): void {
         sheet.getRangeByIndexes(0, desiredOrder.length, rowCount9, extraCount).delete(ExcelScript.DeleteShiftDirection.left);
     }
 
-    // 9. Formato de fecha dd/mm/yyyy
+    // 10. Formato de fecha dd/mm/yyyy
     const fechaFinalIdx = desiredOrder.indexOf("FECHA");
     const finalRowCount = sheet.getUsedRange().getRowCount();
     if (fechaFinalIdx >= 0 && finalRowCount > 1) {
         sheet.getRangeByIndexes(1, fechaFinalIdx, finalRowCount - 1, 1).setNumberFormat("dd/mm/yyyy");
     }
 
-    // 10. Reaplicar alineación y dar formato de tabla
+    // 11. Reaplicar alineación y dar formato de tabla
     const finalUsed = sheet.getUsedRange();
     finalUsed.getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.center);
     finalUsed.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
@@ -758,39 +837,14 @@ const OFFICE_SCRIPT = `function main(workbook: ExcelScript.Workbook): void {
     sheet.getUsedRange().getFormat().autofitRows();
 }`;
 
-function helpApp() {
-  return {
-    guide: 'sihos-report',
-    open: 0,
-    totalSteps: 8,
-    steps: Array(8).fill(false),
-
-    get doneCount() { return this.steps.filter(Boolean).length; },
-    get progress() { return Math.round((this.doneCount / this.totalSteps) * 100); },
-
-    toggle(idx) {
-      this.open = this.open === idx ? -1 : idx;
-    },
-    markDone(idx) {
-      this.steps[idx] = true;
-      // Auto-open next step
-      const next = idx + 1;
-      if (next < this.totalSteps) this.open = next;
-    },
-    resetSteps() {
-      this.steps = Array(this.totalSteps).fill(false);
-      this.open = 0;
-    },
-    downloadScript() {
-      const blob = new Blob([OFFICE_SCRIPT], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'preparar_sihos.ts';
-      a.click();
-      URL.revokeObjectURL(url);
-    },
-  };
+function downloadScript() {
+    const blob = new Blob([OFFICE_SCRIPT], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'preparar_sihos.ts';
+    a.click();
+    URL.revokeObjectURL(url);
 }
 </script>
 {% endblock %}
