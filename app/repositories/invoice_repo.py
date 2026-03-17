@@ -212,6 +212,13 @@ class InvoiceRepo:
         await self.db.flush()
         return True
 
+    async def batch_delete_invoices(self, invoice_ids: list[int]) -> int:
+        result = await self.db.execute(
+            delete(Invoice).where(Invoice.id.in_(invoice_ids))
+        )
+        await self.db.flush()
+        return result.rowcount
+
     # ------------------------------------------------------------------
     # Pipeline helpers
     # ------------------------------------------------------------------

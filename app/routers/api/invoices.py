@@ -137,6 +137,17 @@ async def batch_update_status(data: BatchStatusUpdate, db: AsyncSession = Depend
     return {"updated": len(data.invoice_ids)}
 
 
+@router.post("/batch-delete", status_code=200)
+async def batch_delete_invoices(data: dict, db: AsyncSession = Depends(get_db)):
+    invoice_ids = data.get("invoice_ids", [])
+    if not invoice_ids:
+        return {"deleted": 0}
+    repo = InvoiceRepo(db)
+    deleted = await repo.batch_delete_invoices(invoice_ids)
+    await db.commit()
+    return {"deleted": deleted}
+
+
 @router.delete("/{invoice_id}", status_code=204)
 async def delete_invoice(invoice_id: int, db: AsyncSession = Depends(get_db)):
     repo = InvoiceRepo(db)
