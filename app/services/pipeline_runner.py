@@ -71,6 +71,63 @@ def _get_executor():
 
 
 # ---------------------------------------------------------------------------
+# Log formatting helpers
+# ---------------------------------------------------------------------------
+
+def plog(
+    level: str,
+    msg: str,
+    *,
+    folder: str | None = None,
+    contract_type: str | None = None,
+) -> str:
+    """Format a pipeline log line.
+
+    Usage:
+        plog("INFO", "Facturas cargadas: 154")
+        plog("WARN", "PDF sin texto", folder="FAC-001234", contract_type="CAPITACIÓN")
+        plog("ERROR", "Directorio no existe")
+    """
+    parts = [f"[{level}]"]
+    if contract_type:
+        parts.append(f"[{contract_type}]")
+    if folder:
+        parts.append(f"[{folder}]")
+    parts.append(msg)
+    return " ".join(parts)
+
+
+async def _build_ct_map(db, period) -> dict[str, str]:
+    """Return {invoice_number: contract_type_name} for the period."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from app.models.invoice import Invoice
+    from app.models.institution import Agreement
+
+    q = (
+        select(Invoice)
+        .where(Invoice.audit_period_id == period.id)
+        .options(selectinload(Invoice.agreement).selectinload(Agreement.contract_type))
+    )
+    rows = (await db.execute(q)).scalars().all()
+    return {
+        inv.invoice_number: inv.agreement.contract_type.name
+        for inv in rows
+        if inv.agreement and inv.agreement.contract_type
+    }
+
+
+def _ct_for_folder(folder: str, ct_map: dict[str, str]) -> str | None:
+    """Resolve contract_type name for a folder (exact match, then substring)."""
+    if folder in ct_map:
+        return ct_map[folder]
+    for num, ct in ct_map.items():
+        if num in folder:
+            return ct
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -115,20 +172,20 @@ async def _load_and_process(ctx: dict) -> AsyncGenerator[str, None]:
     file_bytes: bytes | None = ctx.get("file_bytes")
 
     if not file_bytes:
-        yield "[ERROR] No se proporcionó el archivo Excel de SIHOS."
+        yield plog("ERROR", "No se proporcionó el archivo Excel de SIHOS.")
         return
 
-    yield "[INFO] Leyendo Excel SIHOS..."
+    yield plog("INFO", "Leyendo Excel SIHOS...")
     result = await ingest(file_bytes, ctx["institution"], ctx["period"].id, ctx["db"])
-    yield f"[INFO] Insertadas: {result['inserted']} facturas"
+    yield plog("INFO", f"Insertadas: {result['inserted']} facturas")
     if result["skipped"]:
-        yield f"[WARN] Omitidas (admin sin mapear): {result['skipped']}"
+        yield plog("WARN", f"Omitidas (admin sin mapear): {result['skipped']}")
     for admin in result["unknown_admins"]:
-        yield f"[WARN] Administradora sin mapear: {admin}"
+        yield plog("WARN", f"Administradora sin mapear: {admin}")
     for contract in result["unknown_contracts"]:
-        yield f"[WARN] Contrato sin mapear: {contract}"
+        yield plog("WARN", f"Contrato sin mapear: {contract}")
     for service in result["unknown_services"]:
-        yield f"[WARN] Servicio sin reclasificar (GENERAL): {service}"
+        yield plog("WARN", f"Servicio sin reclasificar (GENERAL): {service}")
 
     # Guardar el Excel para permitir re-categorización posterior
     base_path: Path = ctx["base_path"]
@@ -137,7 +194,7 @@ async def _load_and_process(ctx: dict) -> AsyncGenerator[str, None]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
     await executor(_save_excel, base_path / "sihos.xlsx", file_bytes)
-    yield "[INFO] Excel guardado para futuras re-categorizaciones."
+    yield plog("INFO", "Excel guardado para futuras re-categorizaciones.")
 
 
 @_stage("RECATEGORIZE_SERVICES")
@@ -155,10 +212,10 @@ async def _recategorize_services(ctx: dict) -> AsyncGenerator[str, None]:
 
     excel_path = base_path / "sihos.xlsx"
     if not excel_path.exists():
-        yield "[ERROR] No se encontró el Excel guardado. Ejecuta primero 'Cargar reporte SIHOS'."
+        yield plog("ERROR", "No se encontró el Excel guardado. Ejecuta primero 'Cargar reporte SIHOS'.")
         return
 
-    yield f"[INFO] Leyendo Excel guardado: {excel_path.name}"
+    yield plog("INFO", f"Leyendo Excel guardado: {excel_path.name}")
     executor = _get_executor()
     file_bytes = await executor(excel_path.read_bytes)
     raw_df = await executor(load_excel, file_bytes)
@@ -194,12 +251,12 @@ async def _recategorize_services(ctx: dict) -> AsyncGenerator[str, None]:
         best = max(st_ids, key=lambda sid: priority_map.get(sid, 0)) if st_ids else None
         updates[invoice_number] = best
 
-    yield f"[INFO] Facturas a actualizar: {len(updates)}"
+    yield plog("INFO", f"Facturas a actualizar: {len(updates)}")
 
     inv_repo = InvoiceRepo(db)
     updated = await inv_repo.batch_update_service_type(period.id, updates)
     await db.commit()
-    yield f"[OK] Tipos de servicio actualizados: {updated} factura(s)."
+    yield plog("INFO", f"Tipos de servicio actualizados: {updated} factura(s).")
 
 
 @_stage("RUN_STAGING")
@@ -212,20 +269,20 @@ async def _run_staging(ctx: dict) -> AsyncGenerator[str, None]:
     stage_path: Path = ctx["stage_path"]
 
     if not drive_path.is_dir():
-        yield f"[ERROR] Directorio DRIVE no existe: {drive_path}"
+        yield plog("ERROR", f"Directorio DRIVE no existe: {drive_path}")
         return
 
-    yield f"[INFO] Buscando carpetas hoja en {drive_path}..."
+    yield plog("INFO", f"Buscando carpetas hoja en {drive_path}...")
     leaf_finder = LeafFolderFinder()
     leaf_folders = await executor(leaf_finder.find_leaf_folders, drive_path)
-    yield f"[INFO] Carpetas hoja encontradas: {len(leaf_folders)}"
+    yield plog("INFO", f"Carpetas hoja encontradas: {len(leaf_folders)}")
 
     if leaf_folders:
         copier = FolderCopier(stage_path)
         await executor(copier.move_folders, leaf_folders, False)
-        yield f"[INFO] Carpetas movidas a STAGE: {len(leaf_folders)}"
+        yield plog("INFO", f"Carpetas movidas a STAGE: {len(leaf_folders)}")
     else:
-        yield "[WARN] No se encontraron carpetas hoja en DRIVE."
+        yield plog("WARN", "No se encontraron carpetas hoja en DRIVE.")
 
 
 @_stage("CHECK_NESTED_FOLDERS")
@@ -234,7 +291,7 @@ async def _check_nested_folders(ctx: dict) -> AsyncGenerator[str, None]:
     stage_path: Path = ctx["stage_path"]
 
     if not stage_path.is_dir():
-        yield f"[ERROR] Directorio STAGE no existe: {stage_path}"
+        yield plog("ERROR", f"Directorio STAGE no existe: {stage_path}")
         return
 
     def _find_nested(path: Path) -> list[tuple[str, list[str]]]:
@@ -250,13 +307,13 @@ async def _check_nested_folders(ctx: dict) -> AsyncGenerator[str, None]:
     nested = await executor(_find_nested, stage_path)
 
     if not nested:
-        yield "[INFO] No se encontraron carpetas con subcarpetas anidadas en STAGE."
+        yield plog("INFO", "No se encontraron carpetas con subcarpetas anidadas en STAGE.")
         return
 
-    yield f"[WARN] {len(nested)} carpeta(s) con subcarpetas anidadas detectadas en STAGE:"
+    yield plog("WARN", f"{len(nested)} carpeta(s) con subcarpetas anidadas detectadas en STAGE:")
     for name, subs in nested:
-        yield f"[WARN] {name} → subcarpetas: {', '.join(subs)}"
-    yield "[WARN] Revisa y aplana estas carpetas para que los archivos queden directamente en la carpeta de factura."
+        yield plog("WARN", f"subcarpetas: {', '.join(subs)}", folder=name)
+    yield plog("WARN", "Revisa y aplana estas carpetas para que los archivos queden directamente en la carpeta de factura.")
 
 
 @_stage("REMOVE_NON_PDF")
@@ -270,7 +327,7 @@ async def _remove_non_pdf(ctx: dict) -> AsyncGenerator[str, None]:
     stage_path: Path = ctx["stage_path"]
 
     if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     scanner = DocumentScanner(stage_path)
@@ -278,21 +335,21 @@ async def _remove_non_pdf(ctx: dict) -> AsyncGenerator[str, None]:
 
     # Remove non-PDF files
     non_pdf = await executor(scanner.find_non_pdf)
-    yield f"[INFO] Archivos no-PDF encontrados: {len(non_pdf)}"
+    yield plog("INFO", f"Archivos no-PDF encontrados: {len(non_pdf)}")
     if non_pdf:
         removed = await executor(ops.remove_files, non_pdf)
-        yield f"[INFO] Archivos no-PDF eliminados: {removed}"
+        yield plog("INFO", f"Archivos no-PDF eliminados: {removed}")
 
     # Remove corrupt PDFs
     all_pdfs = await executor(scanner.find_by_extension)
-    yield f"[INFO] PDFs a verificar: {len(all_pdfs)}"
+    yield plog("INFO", f"PDFs a verificar: {len(all_pdfs)}")
     invalid = await executor(DocumentReader.find_unreadable, all_pdfs)
     for f in invalid:
-        yield f"[WARN] PDF corrupto: {f.name}"
-    yield f"[INFO] PDFs corruptos encontrados: {len(invalid)}"
+        yield plog("WARN", f"PDF corrupto: {f.name}", folder=f.parent.name)
+    yield plog("INFO", f"PDFs corruptos encontrados: {len(invalid)}")
     if invalid:
         removed_corrupt = await executor(ops.remove_files, invalid)
-        yield f"[INFO] PDFs corruptos eliminados: {removed_corrupt}"
+        yield plog("INFO", f"PDFs corruptos eliminados: {removed_corrupt}")
 
 
 def _apply_prefix_corrections(
@@ -332,10 +389,6 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
 
     from app.repositories.rules_repo import RulesRepo
 
-    from sqlalchemy import select as _select
-    from sqlalchemy.orm import selectinload as _selectinload
-    from app.models.invoice import Invoice as _Invoice
-
     executor = _get_executor()
     stage_path: Path = ctx["stage_path"]
     institution = ctx["institution"]
@@ -343,7 +396,7 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
     period = ctx.get("period")
 
     if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     rules_repo = RulesRepo(db)
@@ -354,12 +407,12 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
         renamed, renames = await executor(_apply_prefix_corrections, stage_path, corrections)
         if renamed:
             for folder, old_name, new_name in renames:
-                yield f"[INFO] Renombrado: [{folder}] {old_name} → {new_name}"
-            yield f"[INFO] Correcciones de prefijo aplicadas: {renamed} archivo(s)"
+                yield plog("INFO", f"{old_name} → {new_name}", folder=folder)
+            yield plog("INFO", f"Correcciones de prefijo aplicadas: {renamed} archivo(s)")
         else:
-            yield "[INFO] Correcciones de prefijo aplicadas: 0 archivo(s)"
+            yield plog("INFO", "Correcciones de prefijo aplicadas: 0 archivo(s)")
     else:
-        yield "[INFO] Sin correcciones de prefijo configuradas"
+        yield plog("INFO", "Sin correcciones de prefijo configuradas")
 
     # -- Step 2: generic standardization --
     prefixes = await rules_repo.get_all_active_doc_type_prefixes()
@@ -368,7 +421,7 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
     invalid = await executor(
         scanner.find_invalid_names, prefixes, institution.invoice_id_prefix or "", institution.nit
     )
-    yield f"[INFO] Archivos con nombre inválido: {len(invalid)}"
+    yield plog("INFO", f"Archivos con nombre inválido: {len(invalid)}")
 
     if invalid:
         standardizer = FilenameStandardizer(
@@ -379,51 +432,28 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
         results = await executor(standardizer.run, invalid)
 
         # Build invoice_number → contract_type_name map for the period (one query)
-        _inv_admin_type: dict[str, str] = {}
-        if period:
-            from app.models.institution import Agreement as _IC
-            _q = (
-                _select(_Invoice)
-                .where(_Invoice.audit_period_id == period.id)
-                .options(
-                    _selectinload(_Invoice.agreement).selectinload(_IC.contract_type)
-                )
-            )
-            _rows = (await db.execute(_q)).scalars().all()
-            for inv in _rows:
-                if inv.agreement and inv.agreement.contract_type:
-                    _inv_admin_type[inv.invoice_number] = inv.agreement.contract_type.name
-
-        def _admin_type_for_folder(folder: str) -> str:
-            """Exact match first, then substring (folder may have extra prefix)."""
-            if folder in _inv_admin_type:
-                return _inv_admin_type[folder]
-            for num, atype in _inv_admin_type.items():
-                if num in folder:
-                    return atype
-            return ""
+        ct_map = await _build_ct_map(db, period) if period else {}
 
         success = 0
         for r in results:
             original_path = Path(r.original_path)
             folder = original_path.parent.name
             old_name = original_path.name
-            admin_type = _admin_type_for_folder(folder)
-            admin_suffix = f" [{admin_type}]" if admin_type else ""
+            ct = _ct_for_folder(folder, ct_map)
             if r.status == "SUCCESS":
                 success += 1
-                yield f"[INFO] Renombrado: [{folder}] {old_name} → {r.new_name}"
+                yield plog("INFO", f"{old_name} → {r.new_name}", folder=folder, contract_type=ct)
             elif r.status == "REJECTED":
                 if "Could not find" in r.reason:
-                    yield f"[WARN] Sin ID de factura extraíble: [{folder}]{admin_suffix} {old_name}"
+                    yield plog("WARN", f"Sin ID de factura extraíble: {old_name}", folder=folder, contract_type=ct)
                 elif "already exists" in r.reason:
-                    yield f"[WARN] Destino ya existe: [{folder}]{admin_suffix} {old_name} → {r.new_name}"
+                    yield plog("WARN", f"Destino ya existe: {old_name} → {r.new_name}", folder=folder, contract_type=ct)
                 else:
                     # Covers empty prefix (starts with digit) and unrecognised prefixes
-                    yield f"[WARN] Prefijo no reconocido: [{folder}]{admin_suffix} {old_name}"
+                    yield plog("WARN", f"Prefijo no reconocido: {old_name}", folder=folder, contract_type=ct)
             elif r.status == "ERROR":
-                yield f"[ERROR] No se pudo renombrar: [{folder}]{admin_suffix} {old_name} — {r.reason}"
-        yield f"[INFO] Archivos renombrados: {success}/{len(invalid)}"
+                yield plog("ERROR", f"No se pudo renombrar: {old_name} — {r.reason}", folder=folder, contract_type=ct)
+        yield plog("INFO", f"Archivos renombrados: {success}/{len(invalid)}")
 
 
 @_stage("LIST_UNREADABLE_PDFS")
@@ -440,7 +470,7 @@ async def _list_unreadable_pdfs(ctx: dict) -> AsyncGenerator[str, None]:
     db = ctx["db"]
 
     if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     rules_repo = RulesRepo(db)
@@ -449,12 +479,12 @@ async def _list_unreadable_pdfs(ctx: dict) -> AsyncGenerator[str, None]:
 
     scanner = DocumentScanner(stage_path)
     invoices = await executor(scanner.find_by_prefix, invoice_prefix)
-    yield f"[INFO] PDFs de factura encontrados: {len(invoices)}"
+    yield plog("INFO", f"PDFs de factura encontrados: {len(invoices)}")
 
     no_text = await executor(DocumentReader.find_needing_ocr, invoices)
     for f in no_text:
-        yield f"[WARN] Sin capa de texto: {f.name}"
-    yield f"[INFO] Facturas sin texto: {len(no_text)}"
+        yield plog("WARN", f"Sin capa de texto: {f.name}", folder=f.parent.name)
+    yield plog("INFO", f"Facturas sin texto: {len(no_text)}")
 
 
 @_stage("DELETE_UNREADABLE_PDFS")
@@ -471,7 +501,7 @@ async def _delete_unreadable_pdfs(ctx: dict) -> AsyncGenerator[str, None]:
     db = ctx["db"]
 
     if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     rules_repo = RulesRepo(db)
@@ -481,17 +511,17 @@ async def _delete_unreadable_pdfs(ctx: dict) -> AsyncGenerator[str, None]:
     scanner = DocumentScanner(stage_path)
     invoices = await executor(scanner.find_by_prefix, invoice_prefix)
     no_text = await executor(DocumentReader.find_needing_ocr, invoices)
-    yield f"[INFO] PDFs sin texto a eliminar: {len(no_text)}"
+    yield plog("INFO", f"PDFs sin texto a eliminar: {len(no_text)}")
 
     deleted = 0
     for f in no_text:
         try:
             f.unlink()
             deleted += 1
-            yield f"[INFO] Eliminado: {f.name}"
+            yield plog("INFO", f"Eliminado: {f.name}", folder=f.parent.name)
         except OSError as exc:
-            yield f"[ERROR] No se pudo eliminar {f.name}: {exc}"
-    yield f"[INFO] Total eliminados: {deleted}"
+            yield plog("ERROR", f"No se pudo eliminar {f.name}: {exc}", folder=f.parent.name)
+    yield plog("INFO", f"Total eliminados: {deleted}")
 
 
 @_stage("DOWNLOAD_INVOICES_FROM_SIHOS")
@@ -513,20 +543,20 @@ async def _download_invoices_from_sihos(ctx: dict) -> AsyncGenerator[str, None]:
     doc_type_id: int = ctx.get("doc_type_id", 0)
 
     if not doc_type_id:
-        yield "[ERROR] No se seleccionó un tipo de documento. Elige uno en el panel antes de ejecutar esta etapa."
+        yield plog("ERROR", "No se seleccionó un tipo de documento. Elige uno en el panel antes de ejecutar esta etapa.")
         return
 
     if not institution.sihos_user or not institution.sihos_password:
-        yield "[ERROR] Credenciales SIHOS no configuradas en la institución."
+        yield plog("ERROR", "Credenciales SIHOS no configuradas en la institución.")
         return
 
     doc_type_result = await db.execute(select(DocType).where(DocType.id == doc_type_id))
     doc_type = doc_type_result.scalar_one_or_none()
     if not doc_type:
-        yield f"[ERROR] Tipo de documento con id={doc_type_id} no encontrado."
+        yield plog("ERROR", f"Tipo de documento con id={doc_type_id} no encontrado.")
         return
 
-    yield f"[INFO] Tipo de documento: {doc_type.code} — prefijo {doc_type.prefix or '(sin prefijo)'}"
+    yield plog("INFO", f"Tipo de documento: {doc_type.code} — prefijo {doc_type.prefix or '(sin prefijo)'}")
 
     stmt = (
         select(Invoice.invoice_number)
@@ -542,10 +572,10 @@ async def _download_invoices_from_sihos(ctx: dict) -> AsyncGenerator[str, None]:
     invoice_numbers = [row.invoice_number for row in result.all()]
 
     if not invoice_numbers:
-        yield f"[INFO] No hay facturas PENDIENTE con hallazgo {doc_type.code} sin resolver."
+        yield plog("INFO", f"No hay facturas PENDIENTE con hallazgo {doc_type.code} sin resolver.")
         return
 
-    yield f"[INFO] Descargando {len(invoice_numbers)} factura(s) desde SIHOS..."
+    yield plog("INFO", f"Descargando {len(invoice_numbers)} factura(s) desde SIHOS...")
 
     executor = _get_executor()
     password = decrypt(institution.sihos_password)
@@ -561,7 +591,7 @@ async def _download_invoices_from_sihos(ctx: dict) -> AsyncGenerator[str, None]:
     )
 
     await executor(downloader.run_from_list, invoice_numbers)
-    yield "[INFO] Descarga SIHOS completada."
+    yield plog("INFO", "Descarga SIHOS completada.")
 
 
 @_stage("DOWNLOAD_MEDICATION_SHEETS")
@@ -583,20 +613,20 @@ async def _download_medication_sheets(ctx: dict) -> AsyncGenerator[str, None]:
     doc_type_id: int = ctx.get("doc_type_id", 0)
 
     if not doc_type_id:
-        yield "[ERROR] No se seleccionó un tipo de documento. Elige uno en el panel antes de ejecutar esta etapa."
+        yield plog("ERROR", "No se seleccionó un tipo de documento. Elige uno en el panel antes de ejecutar esta etapa.")
         return
 
     if not institution.sihos_user or not institution.sihos_password:
-        yield "[ERROR] Credenciales SIHOS no configuradas en la institución."
+        yield plog("ERROR", "Credenciales SIHOS no configuradas en la institución.")
         return
 
     doc_type_result = await db.execute(select(DocType).where(DocType.id == doc_type_id))
     doc_type = doc_type_result.scalar_one_or_none()
     if not doc_type:
-        yield f"[ERROR] Tipo de documento con id={doc_type_id} no encontrado."
+        yield plog("ERROR", f"Tipo de documento con id={doc_type_id} no encontrado.")
         return
 
-    yield f"[INFO] Tipo de documento seleccionado: {doc_type.code} — {doc_type.description}"
+    yield plog("INFO", f"Tipo de documento seleccionado: {doc_type.code} — {doc_type.description}")
 
     stmt = (
         select(Invoice.invoice_number, Invoice.admission, Invoice.id_number)
@@ -616,10 +646,10 @@ async def _download_medication_sheets(ctx: dict) -> AsyncGenerator[str, None]:
     ]
 
     if not targets:
-        yield f"[INFO] No hay facturas PENDIENTE con hallazgo {doc_type.code} sin resolver y número de admisión."
+        yield plog("INFO", f"No hay facturas PENDIENTE con hallazgo {doc_type.code} sin resolver y número de admisión.")
         return
 
-    yield f"[INFO] Descargando {len(targets)} factura(s) desde SIHOS..."
+    yield plog("INFO", f"Descargando {len(targets)} factura(s) desde SIHOS...")
 
     executor = _get_executor()
     password = decrypt(institution.sihos_password)
@@ -636,7 +666,7 @@ async def _download_medication_sheets(ctx: dict) -> AsyncGenerator[str, None]:
 
     file_prefix = doc_type.prefix or doc_type.code
     await executor(downloader.run_medication_sheets, targets, file_prefix)
-    yield "[INFO] Descarga completada."
+    yield plog("INFO", "Descarga completada.")
 
 
 @_stage("CHECK_INVOICES")
@@ -654,7 +684,7 @@ async def _check_invoices(ctx: dict) -> AsyncGenerator[str, None]:
     db = ctx["db"]
 
     if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     rules_repo = RulesRepo(db)
@@ -664,13 +694,13 @@ async def _check_invoices(ctx: dict) -> AsyncGenerator[str, None]:
     scanner = DocumentScanner(stage_path)
     invoices = await executor(scanner.find_by_prefix, invoice_prefix)
     needing_ocr = await executor(DocumentReader.find_needing_ocr, invoices)
-    yield f"[INFO] Facturas que requieren OCR: {len(needing_ocr)}"
+    yield plog("INFO", f"Facturas que requieren OCR: {len(needing_ocr)}")
 
     if needing_ocr:
         result = await executor(DocumentProcessor.batch_ocr, needing_ocr, 8)
-        yield f"[INFO] OCR completado — exitosos: {result['success']}, fallidos: {result['failed']}"
+        yield plog("INFO", f"OCR completado — exitosos: {result['success']}, fallidos: {result['failed']}")
     else:
-        yield "[INFO] Ninguna factura requiere OCR."
+        yield plog("INFO", "Ninguna factura requiere OCR.")
 
 
 @_stage("VERIFY_INVOICE_CODE")
@@ -687,7 +717,7 @@ async def _verify_invoice_code(ctx: dict) -> AsyncGenerator[str, None]:
     db = ctx["db"]
 
     if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     rules_repo = RulesRepo(db)
@@ -700,8 +730,8 @@ async def _verify_invoice_code(ctx: dict) -> AsyncGenerator[str, None]:
     validator = InvoiceValidator(stage_path, institution.invoice_id_prefix or "")
     missing_code, _ = await executor(validator.validate_invoice_files, invoices)
     for f in missing_code:
-        yield f"[WARN] Sin número de factura en PDF: {f.name}"
-    yield f"[INFO] Facturas sin código: {len(missing_code)}"
+        yield plog("WARN", f"Sin número de factura en PDF: {f.name}", folder=f.parent.name)
+    yield plog("INFO", f"Facturas sin código: {len(missing_code)}")
 
 
 @_stage("CHECK_INVOICE_NUMBER_ON_FILES")
@@ -714,14 +744,14 @@ async def _check_invoice_number_on_files(ctx: dict) -> AsyncGenerator[str, None]
     institution = ctx["institution"]
 
     if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     inspector = FolderInspector(stage_path, institution.invoice_id_prefix or "")
     mismatched = await executor(inspector.find_mismatched_files)
     for f in mismatched:
-        yield f"[WARN] Archivo desajustado: {f.name} (en carpeta {f.parent.name})"
-    yield f"[INFO] Archivos desajustados: {len(mismatched)}"
+        yield plog("WARN", f"Archivo desajustado: {f.name}", folder=f.parent.name)
+    yield plog("INFO", f"Archivos desajustados: {len(mismatched)}")
 
 
 @_stage("CHECK_FOLDERS_WITH_EXTRA_TEXT")
@@ -734,14 +764,14 @@ async def _check_folders_with_extra_text(ctx: dict) -> AsyncGenerator[str, None]
     institution = ctx["institution"]
 
     if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     inspector = FolderInspector(stage_path, institution.invoice_id_prefix or "")
     malformed = await executor(inspector.find_malformed_dirs)
     for d in malformed:
-        yield f"[WARN] Carpeta con texto extra: {d.name}"
-    yield f"[INFO] Carpetas malformadas: {len(malformed)}"
+        yield plog("WARN", "Carpeta con texto extra", folder=d.name)
+    yield plog("INFO", f"Carpetas malformadas: {len(malformed)}")
 
 
 @_stage("NORMALIZE_DIR_NAMES")
@@ -755,17 +785,17 @@ async def _normalize_dir_names(ctx: dict) -> AsyncGenerator[str, None]:
     institution = ctx["institution"]
 
     if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     inspector = FolderInspector(stage_path, institution.invoice_id_prefix or "")
     malformed = await executor(inspector.find_malformed_dirs)
-    yield f"[INFO] Carpetas malformadas encontradas: {len(malformed)}"
+    yield plog("INFO", f"Carpetas malformadas encontradas: {len(malformed)}")
 
     if malformed:
         ops = DocumentOps(stage_path, institution.invoice_id_prefix or "")
         renamed = await executor(ops.standardize_dir_names, malformed)
-        yield f"[INFO] Carpetas renombradas: {renamed}"
+        yield plog("INFO", f"Carpetas renombradas: {renamed}")
 
 
 @_stage("CHECK_DIRS")
@@ -782,23 +812,24 @@ async def _check_dirs(ctx: dict) -> AsyncGenerator[str, None]:
     db = ctx["db"]
 
     if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     inv_repo = InvoiceRepo(db)
     presente_numbers = await inv_repo.get_invoice_numbers_by_status(period.id, "PRESENTE")
-    yield f"[INFO] Facturas PRESENTE en BD: {len(presente_numbers)}"
+    yield plog("INFO", f"Facturas PRESENTE en BD: {len(presente_numbers)}")
 
     inspector = FolderInspector(stage_path, institution.invoice_id_prefix or "")
     missing = await executor(inspector.find_missing_dirs, presente_numbers)
-    yield f"[INFO] Facturas sin carpeta en disco: {len(missing)}"
+    yield plog("INFO", f"Facturas sin carpeta en disco: {len(missing)}")
 
     if missing:
+        ct_map = await _build_ct_map(db, period)
         updated = await inv_repo.batch_update_folder_status(period.id, missing, "FALTANTE")
         await db.commit()
-        yield f"[INFO] Marcadas como FALTANTE: {updated}"
+        yield plog("INFO", f"Marcadas como FALTANTE: {updated}")
         for name in missing:
-            yield f"[WARN] Sin carpeta: {name}"
+            yield plog("WARN", "Sin carpeta en disco", folder=name, contract_type=_ct_for_folder(name, ct_map))
 
 
 @_stage("CHECK_REQUIRED_DOCS")
@@ -817,7 +848,7 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
     db = ctx["db"]
 
     if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     inv_repo = InvoiceRepo(db)
@@ -828,7 +859,7 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
     prefix_map = await rules_repo.get_active_doc_types_map()
 
     presente_invoices = await inv_repo.get_invoices_by_status_code(period.id, "PRESENTE")
-    yield f"[INFO] Facturas PRESENTE a verificar: {len(presente_invoices)}"
+    yield plog("INFO", f"Facturas PRESENTE a verificar: {len(presente_invoices)}")
 
     id_prefix = institution.invoice_id_prefix or ""
     inspector = FolderInspector(stage_path, id_prefix)
@@ -869,18 +900,21 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
     total_findings = len(all_findings)
     await finding_repo.bulk_upsert_findings(all_findings)
 
+    ct_map = await _build_ct_map(db, period)
     invoices_with_findings = [inv_number for _, (inv_number, _) in findings_map.items()]
-    for inv_number, (_, dt_ids) in findings_map.items():
-        yield f"[WARN] Faltantes en {dt_ids[0] if len(dt_ids)==1 else str(len(dt_ids))+' docs'}: {inv_number}"
+    for inv_id, (inv_number, dt_ids) in findings_map.items():
+        ct = _ct_for_folder(inv_number, ct_map)
+        doc_str = str(dt_ids[0]) if len(dt_ids) == 1 else f"{len(dt_ids)} docs"
+        yield plog("WARN", f"Faltantes ({doc_str})", folder=inv_number, contract_type=ct)
 
     if invoices_with_findings:
         updated = await inv_repo.batch_update_folder_status(
             period.id, invoices_with_findings, "PENDIENTE"
         )
-        yield f"[INFO] Facturas marcadas PENDIENTE: {updated}"
+        yield plog("INFO", f"Facturas marcadas PENDIENTE: {updated}")
 
     await db.commit()
-    yield f"[INFO] Hallazgos totales registrados: {total_findings}"
+    yield plog("INFO", f"Hallazgos totales registrados: {total_findings}")
 
 
 def _compute_surplus_suggestions(sobrantes, faltantes, SequenceMatcher):
@@ -941,7 +975,7 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
     db: AsyncSession = ctx["db"]
 
     if not stage_path.exists():
-        yield "[ERROR] Directorio STAGE no existe"
+        yield plog("ERROR", "Directorio STAGE no existe")
         return
 
     rules_repo = RulesRepo(db)
@@ -1086,7 +1120,10 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
                 ],
             })
             total += len(sobrantes)
-            log_lines.append(f"[INFO] {folder.name}: {len(sobrantes)} sobrante(s), {len(faltantes_data)} faltante(s)")
+            log_lines.append(
+                plog("INFO", f"{len(sobrantes)} sobrante(s), {len(faltantes_data)} faltante(s)",
+                     folder=folder.name, contract_type=inv_data.get("admin_type"))
+            )
 
         return items_out, log_lines, total
 
@@ -1097,11 +1134,11 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
     for line in log_lines:
         yield line
 
-    yield f"[INFO] Total: {total_sobrantes} archivos sobrantes en {len(items)} carpetas"
+    yield plog("INFO", f"Total: {total_sobrantes} archivos sobrantes en {len(items)} carpetas")
     if items:
         yield f"[DATA] {json.dumps(items, ensure_ascii=False)}"
     else:
-        yield "[INFO] No se encontraron archivos sobrantes"
+        yield plog("INFO", "No se encontraron archivos sobrantes")
 
 
 @_stage("VERIFY_CUFE")
@@ -1119,7 +1156,7 @@ async def _verify_cufe(ctx: dict) -> AsyncGenerator[str, None]:
     db = ctx["db"]
 
     if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     rules_repo = RulesRepo(db)
@@ -1132,13 +1169,13 @@ async def _verify_cufe(ctx: dict) -> AsyncGenerator[str, None]:
     validator = InvoiceValidator(stage_path, institution.invoice_id_prefix or "")
     _, missing_cufe = await executor(validator.validate_invoice_files, invoices)
     for f in missing_cufe:
-        yield f"[WARN] Sin CUFE: {f.name}"
-    yield f"[INFO] Facturas sin CUFE: {len(missing_cufe)}"
+        yield plog("WARN", f"Sin CUFE: {f.name}", folder=f.parent.name)
+    yield plog("INFO", f"Facturas sin CUFE: {len(missing_cufe)}")
 
     if missing_cufe:
         ops = DocumentOps(stage_path, institution.invoice_id_prefix or "")
         marked = await executor(ops.tag_dirs_missing_cufe, missing_cufe)
-        yield f"[INFO] Carpetas marcadas sin CUFE: {marked}"
+        yield plog("INFO", f"Carpetas marcadas sin CUFE: {marked}")
 
 
 @_stage("ORGANIZE")
@@ -1156,16 +1193,18 @@ async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
     db = ctx["db"]
 
     if not stage_path.is_dir():
-        yield f"[WARN] Directorio STAGE no existe: {stage_path}"
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     inv_repo = InvoiceRepo(db)
     organizable = await inv_repo.get_organizable_invoices(period.id)
-    yield f"[INFO] Facturas organizables: {len(organizable)}"
+    yield plog("INFO", f"Facturas organizables: {len(organizable)}")
 
     if not organizable:
-        yield "[INFO] Nada que organizar."
+        yield plog("INFO", "Nada que organizar.")
         return
+
+    ct_map = await _build_ct_map(db, period)
 
     # Index staging folders once (case-insensitive) for fast lookup
     def _build_staging_index(stage: Path) -> dict[str, Path]:
@@ -1192,7 +1231,8 @@ async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
                 None,
             )
         if source is None:
-            yield f"[WARN] Carpeta no encontrada en STAGE: {folder_name}"
+            ct = _ct_for_folder(inv.invoice_number, ct_map)
+            yield plog("WARN", f"Carpeta no encontrada en STAGE: {folder_name}", contract_type=ct)
             not_found += 1
             continue
 
@@ -1230,25 +1270,24 @@ async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
         return moved, failed
 
     moved_pairs, failed_names = await executor(_batch_move, planned)
-    moved_numbers = [inv_number for _, _, inv_number in planned if
-                     any(src == name for name, _ in moved_pairs
-                         for src, _, _ in [p for p in planned if p[2] == inv_number])]
 
-    # Simpler: derive moved_numbers from planned vs failed
+    # Derive moved_numbers from planned vs failed
     failed_set = set(failed_names)
     moved_numbers = [inv_number for src, _, inv_number in planned if src.name not in failed_set]
 
     for src_name, rel_dest in moved_pairs:
-        yield f"[INFO] Movida: {src_name} → {rel_dest}"
+        ct = _ct_for_folder(src_name, ct_map)
+        yield plog("INFO", f"Movida: {src_name} → {rel_dest}", contract_type=ct)
     for src_name in failed_names:
-        yield f"[WARN] Error al mover: {src_name}"
+        ct = _ct_for_folder(src_name, ct_map)
+        yield plog("WARN", f"Error al mover: {src_name}", contract_type=ct)
 
-    yield f"[INFO] Movidas: {len(moved_numbers)}, no encontradas: {not_found}, fallidas: {len(failed_names)}"
+    yield plog("INFO", f"Movidas: {len(moved_numbers)}, no encontradas: {not_found}, fallidas: {len(failed_names)}")
 
     if moved_numbers:
         updated = await inv_repo.batch_update_to_auditada(period.id, moved_numbers)
         await db.commit()
-        yield f"[INFO] Facturas marcadas AUDITADA: {updated}"
+        yield plog("INFO", f"Facturas marcadas AUDITADA: {updated}")
 
 
 @_stage("DOWNLOAD_DRIVE")
@@ -1266,15 +1305,15 @@ async def _download_drive(ctx: dict) -> AsyncGenerator[str, None]:
     db = ctx["db"]
 
     if not institution.drive_credentials_enc:
-        yield "[ERROR] Credenciales de Drive no configuradas en la institución."
+        yield plog("ERROR", "Credenciales de Drive no configuradas en la institución.")
         return
 
     inv_repo = InvoiceRepo(db)
     missing = await inv_repo.get_invoice_numbers_by_status(period.id, "FALTANTE")
-    yield f"[INFO] Facturas FALTANTE a buscar en Drive: {len(missing)}"
+    yield plog("INFO", f"Facturas FALTANTE a buscar en Drive: {len(missing)}")
 
     if not missing:
-        yield "[INFO] No hay facturas FALTANTE."
+        yield plog("INFO", "No hay facturas FALTANTE.")
         return
 
     creds = json.loads(decrypt(institution.drive_credentials_enc))
@@ -1284,11 +1323,11 @@ async def _download_drive(ctx: dict) -> AsyncGenerator[str, None]:
     # Folders on disk (and in Drive) are named PREFIX+invoice_number
     search_names = [id_prefix + num for num in missing]
     for sn in search_names:
-        yield f"[INFO] Buscando en Drive: {sn}"
+        yield plog("INFO", f"Buscando en Drive: {sn}")
 
     stage_path.mkdir(parents=True, exist_ok=True)
     downloaded_prefixed = await executor(drive.download_missing_dirs, search_names, stage_path)
-    yield f"[INFO] Carpetas descargadas de Drive: {len(downloaded_prefixed)}/{len(missing)}"
+    yield plog("INFO", f"Carpetas descargadas de Drive: {len(downloaded_prefixed)}/{len(missing)}")
 
     if downloaded_prefixed:
         # Strip prefix back to plain invoice numbers for DB update
@@ -1298,7 +1337,7 @@ async def _download_drive(ctx: dict) -> AsyncGenerator[str, None]:
         ]
         updated = await inv_repo.batch_update_folder_status(period.id, downloaded, "PRESENTE")
         await db.commit()
-        yield f"[INFO] Facturas actualizadas a PRESENTE: {updated}"
+        yield plog("INFO", f"Facturas actualizadas a PRESENTE: {updated}")
 
 
 @_stage("DOWNLOAD_MISSING_DOCS")
@@ -1317,17 +1356,17 @@ async def _download_missing_docs(ctx: dict) -> AsyncGenerator[str, None]:
     db = ctx["db"]
 
     if not institution.drive_credentials_enc:
-        yield "[ERROR] Credenciales de Drive no configuradas en la institución."
+        yield plog("ERROR", "Credenciales de Drive no configuradas en la institución.")
         return
 
     finding_repo = MissingFileRepo(db)
     rules_repo = RulesRepo(db)
 
     grouped = await finding_repo.get_findings_grouped_by_invoice(period.id)
-    yield f"[INFO] Facturas con documentos faltantes: {len(grouped)}"
+    yield plog("INFO", f"Facturas con documentos faltantes: {len(grouped)}")
 
     if not grouped:
-        yield "[INFO] No hay documentos faltantes."
+        yield plog("INFO", "No hay documentos faltantes.")
         return
 
     doc_types = await rules_repo.get_doc_types()
@@ -1349,6 +1388,6 @@ async def _download_missing_docs(ctx: dict) -> AsyncGenerator[str, None]:
             dest_folder.mkdir(parents=True, exist_ok=True)
             await executor(drive.download_specific_files, file_names, dest_folder)
             total_files += len(file_names)
-            yield f"[INFO] {invoice_number}: buscando {len(file_names)} documento(s) en Drive"
+            yield plog("INFO", f"buscando {len(file_names)} documento(s) en Drive", folder=invoice_number)
 
-    yield f"[INFO] Total archivos buscados en Drive: {total_files}"
+    yield plog("INFO", f"Total archivos buscados en Drive: {total_files}")
