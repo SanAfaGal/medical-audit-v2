@@ -51,3 +51,6 @@ backups/*.sql
 # Datos de auditoría locales (bind mount por defecto)
 audit_data/
 !audit_data/.gitkeep
+
+CLAUDE.md
+.claude/
