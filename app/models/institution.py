@@ -25,7 +25,6 @@ class Institution(Base):
     logo_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True, default=None)
     logo_content_type: Mapped[str | None] = mapped_column(String(50), default=None)
 
-    institution_contracts: Mapped[list[InstitutionContract]] = relationship(back_populates="institution", cascade="all, delete-orphan")
     services: Mapped[list[Service]] = relationship(back_populates="institution", cascade="all, delete-orphan")
     periods: Mapped[list[AuditPeriod]] = relationship(back_populates="institution", cascade="all, delete-orphan")
     service_type_documents: Mapped[list[ServiceTypeDocument]] = relationship(back_populates="institution", cascade="all, delete-orphan")
@@ -58,19 +57,17 @@ class Contract(Base):
     canonical_name: Mapped[str | None] = mapped_column(String(300))
 
 
-class InstitutionContract(Base):
-    """Links an institution to an administrator+contract pair, with an optional contract type."""
-    __tablename__ = "institution_contracts"
-    __table_args__ = (UniqueConstraint("institution_id", "administrator_id", "contract_id"),)
+class Agreement(Base):
+    """Links an administrator+contract pair with an optional contract type."""
+    __tablename__ = "agreements"
+    __table_args__ = (UniqueConstraint("administrator_id", "contract_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    institution_id: Mapped[int] = mapped_column(ForeignKey("institutions.id", ondelete="CASCADE"))
     administrator_id: Mapped[int] = mapped_column(ForeignKey("administrators.id"))
     contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id"))
     contract_type_id: Mapped[int | None] = mapped_column(ForeignKey("contract_types.id"), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
 
-    institution: Mapped[Institution] = relationship(back_populates="institution_contracts")
     administrator: Mapped[Administrator] = relationship()
     contract: Mapped[Contract] = relationship()
     contract_type: Mapped[ContractType | None] = relationship()

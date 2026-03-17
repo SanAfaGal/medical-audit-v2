@@ -1,4 +1,4 @@
-"""Async repository for institutions, administrators, contracts, contract_types, institution_contracts, services."""
+"""Async repository for institutions, administrators, contracts, contract_types, agreements, services."""
 from __future__ import annotations
 
 from sqlalchemy import delete, select
@@ -8,10 +8,10 @@ from sqlalchemy.orm import selectinload
 
 from app.models.institution import (
     Administrator,
+    Agreement,
     Contract,
     ContractType,
     Institution,
-    InstitutionContract,
     Service,
     ServiceTypeDocument,
 )
@@ -199,98 +199,91 @@ class InstitutionRepo:
         return True
 
     # ------------------------------------------------------------------
-    # InstitutionContracts
+    # Agreements
     # ------------------------------------------------------------------
 
-    async def get_institution_contracts(self, institution_id: int) -> list[InstitutionContract]:
+    async def get_agreements(self) -> list[Agreement]:
         result = await self.db.execute(
-            select(InstitutionContract)
-            .where(InstitutionContract.institution_id == institution_id)
+            select(Agreement)
             .options(
-                selectinload(InstitutionContract.administrator),
-                selectinload(InstitutionContract.contract),
-                selectinload(InstitutionContract.contract_type),
+                selectinload(Agreement.administrator),
+                selectinload(Agreement.contract),
+                selectinload(Agreement.contract_type),
             )
         )
         return list(result.scalars().all())
 
-    async def get_pending_institution_contracts(self, institution_id: int) -> list[InstitutionContract]:
-        """Return institution_contracts where contract_type_id is NULL."""
+    async def get_pending_agreements(self) -> list[Agreement]:
+        """Return agreements where contract_type_id is NULL."""
         result = await self.db.execute(
-            select(InstitutionContract)
+            select(Agreement)
             .where(
-                InstitutionContract.institution_id == institution_id,
-                InstitutionContract.contract_type_id.is_(None),
+                Agreement.contract_type_id.is_(None),
             )
             .options(
-                selectinload(InstitutionContract.administrator),
-                selectinload(InstitutionContract.contract),
+                selectinload(Agreement.administrator),
+                selectinload(Agreement.contract),
             )
         )
         return list(result.scalars().all())
 
-    async def upsert_institution_contract(
+    async def upsert_agreement(
         self,
-        institution_id: int,
         administrator_id: int,
         contract_id: int,
         contract_type_id: int | None = None,
-    ) -> InstitutionContract:
+    ) -> Agreement:
         stmt = (
-            pg_insert(InstitutionContract)
+            pg_insert(Agreement)
             .values(
-                institution_id=institution_id,
                 administrator_id=administrator_id,
                 contract_id=contract_id,
                 contract_type_id=contract_type_id,
             )
             .on_conflict_do_nothing(
-                index_elements=["institution_id", "administrator_id", "contract_id"]
+                index_elements=["administrator_id", "contract_id"]
             )
-            .returning(InstitutionContract)
+            .returning(Agreement)
         )
         result = await self.db.execute(stmt)
         row = result.scalar_one_or_none()
         if row is None:
             result2 = await self.db.execute(
-                select(InstitutionContract).where(
-                    InstitutionContract.institution_id == institution_id,
-                    InstitutionContract.administrator_id == administrator_id,
-                    InstitutionContract.contract_id == contract_id,
+                select(Agreement).where(
+                    Agreement.administrator_id == administrator_id,
+                    Agreement.contract_id == contract_id,
                 )
             )
             row = result2.scalar_one()
         return row
 
-    async def set_contract_type(self, institution_contract_id: int, contract_type_id: int | None) -> None:
-        ic = await self.db.get(InstitutionContract, institution_contract_id)
-        if ic:
-            ic.contract_type_id = contract_type_id
+    async def set_agreement_contract_type(self, agreement_id: int, contract_type_id: int | None) -> None:
+        ag = await self.db.get(Agreement, agreement_id)
+        if ag:
+            ag.contract_type_id = contract_type_id
             await self.db.flush()
 
-    async def create_institution_contract(
+    async def create_agreement(
         self,
-        institution_id: int,
         administrator_id: int,
         contract_id: int,
         contract_type_id: int | None = None,
-    ) -> InstitutionContract:
-        ic = InstitutionContract(
-            institution_id=institution_id,
+    ) -> Agreement:
+        ag = Agreement(
             administrator_id=administrator_id,
             contract_id=contract_id,
             contract_type_id=contract_type_id,
         )
-        self.db.add(ic)
+        self.db.add(ag)
         await self.db.flush()
-        await self.db.refresh(ic)
-        return ic
+        await self.db.refresh(ag)
+        return ag
 
-    async def delete_institution_contract(self, institution_contract_id: int) -> bool:
-        ic = await self.db.get(InstitutionContract, institution_contract_id)
-        if not ic:
+    async def delete_agreement(self, agreement_id: int) -> bool:
+        ag = await self.db.get(Agreement, agreement_id)
+        if not ag:
             return False
-        await self.db.delete(ic)
+        await self.db.delete(ag)
         await self.db.flush()
         return True
 

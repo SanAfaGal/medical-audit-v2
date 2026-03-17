@@ -8,7 +8,7 @@ import pandas as pd
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.institution import Administrator, Contract, Institution, InstitutionContract, Service
+from app.models.institution import Administrator, Agreement, Contract, Institution, Service
 from app.models.invoice import Invoice
 from app.repositories.institution_repo import InstitutionRepo
 from app.repositories.invoice_repo import InvoiceRepo
@@ -61,7 +61,7 @@ async def ingest(
     1. Parse + normalize Excel
     2. Pre-load existing administrators/contracts/services into memory
     3. Bulk-insert only the NEW administrators/contracts (globally)
-    4. Load/create institution_contracts for new (admin, contract) pairs
+    4. Load/create agreements for new (admin, contract) pairs
     5. Build invoice_map entirely in memory
     6. Bulk-insert all invoices in one statement
     """
@@ -145,9 +145,9 @@ async def ingest(
             "unknown_services": unknown_services,
         }
 
-    # ── Phase 3b: load/create institution_contracts for new pairs ─────────
-    ic_list = await inst_repo.get_institution_contracts(institution.id)
-    ic_cache: dict[tuple[str, str], InstitutionContract] = {
+    # ── Phase 3b: load/create agreements for new pairs ────────────────────
+    ic_list = await inst_repo.get_agreements()
+    ic_cache: dict[tuple[str, str], Agreement] = {
         (ic.administrator.raw_name, ic.contract.raw_name): ic
         for ic in ic_list
     }
@@ -164,7 +164,6 @@ async def ingest(
     if new_pairs:
         new_ic_values = [
             {
-                "institution_id":  institution.id,
                 "administrator_id": adm_cache[a].id,
                 "contract_id":      ctr_cache[c].id,
                 "contract_type_id": None,
@@ -174,14 +173,14 @@ async def ingest(
         ]
         if new_ic_values:
             await db.execute(
-                pg_insert(InstitutionContract)
+                pg_insert(Agreement)
                 .values(new_ic_values)
                 .on_conflict_do_nothing(
-                    index_elements=["institution_id", "administrator_id", "contract_id"]
+                    index_elements=["administrator_id", "contract_id"]
                 )
             )
             await db.flush()
-            ic_list = await inst_repo.get_institution_contracts(institution.id)
+            ic_list = await inst_repo.get_agreements()
             ic_cache = {
                 (ic.administrator.raw_name, ic.contract.raw_name): ic
                 for ic in ic_list
@@ -222,7 +221,7 @@ async def ingest(
                 "patient_name":            _str(row.get("PACIENTE"), 300),
                 "employee":                _str(row.get("OPERARIO"), 200),
                 "admission":               _str(row.get("ADMISION")),
-                "institution_contract_id": ic.id if ic else None,
+                "agreement_id": ic.id if ic else None,
                 "folder_status_id":        default_fs.id,
                 "_service_type_ids":       set(),
             }

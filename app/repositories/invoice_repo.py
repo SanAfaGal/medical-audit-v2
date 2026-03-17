@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.finding import MissingFile
-from app.models.institution import Administrator, Contract, ContractType, InstitutionContract
+from app.models.institution import Administrator, Agreement, Contract, ContractType
 from app.models.invoice import Invoice
 from app.models.period import AuditPeriod
 from app.models.rules import FolderStatus, ServiceType
@@ -109,8 +109,8 @@ class InvoiceRepo:
         audit_period_id: int,
         folder_status_id: int | None = None,
         service_type_id: int | None = None,
-        administrator_canonical: str | None = None,
-        contract_type_name: str | None = None,
+        admin_canonical: str | None = None,
+        admin_type: str | None = None,
         contract_canonical: str | None = None,
         search: str | None = None,
         has_finding_doc_type_id: int | None = None,
@@ -125,18 +125,18 @@ class InvoiceRepo:
         if service_type_id is not None:
             q = q.where(Invoice.service_type_id == service_type_id)
 
-        if administrator_canonical is not None or contract_type_name is not None or contract_canonical is not None:
-            q = q.join(InstitutionContract, Invoice.institution_contract_id == InstitutionContract.id)
-            if administrator_canonical is not None:
-                q = q.join(Administrator, InstitutionContract.administrator_id == Administrator.id).where(
-                    Administrator.canonical_name == administrator_canonical
+        if admin_canonical is not None or admin_type is not None or contract_canonical is not None:
+            q = q.join(Agreement, Invoice.agreement_id == Agreement.id)
+            if admin_canonical is not None:
+                q = q.join(Administrator, Agreement.administrator_id == Administrator.id).where(
+                    Administrator.canonical_name == admin_canonical
                 )
-            if contract_type_name is not None:
-                q = q.join(ContractType, InstitutionContract.contract_type_id == ContractType.id).where(
-                    ContractType.name == contract_type_name
+            if admin_type is not None:
+                q = q.join(ContractType, Agreement.contract_type_id == ContractType.id).where(
+                    ContractType.name == admin_type
                 )
             if contract_canonical is not None:
-                q = q.join(Contract, InstitutionContract.contract_id == Contract.id).where(
+                q = q.join(Contract, Agreement.contract_id == Contract.id).where(
                     Contract.canonical_name == contract_canonical
                 )
 
@@ -166,9 +166,9 @@ class InvoiceRepo:
             .options(
                 selectinload(Invoice.folder_status),
                 selectinload(Invoice.service_type),
-                selectinload(Invoice.institution_contract).selectinload(InstitutionContract.administrator),
-                selectinload(Invoice.institution_contract).selectinload(InstitutionContract.contract),
-                selectinload(Invoice.institution_contract).selectinload(InstitutionContract.contract_type),
+                selectinload(Invoice.agreement).selectinload(Agreement.administrator),
+                selectinload(Invoice.agreement).selectinload(Agreement.contract),
+                selectinload(Invoice.agreement).selectinload(Agreement.contract_type),
                 selectinload(Invoice.missing_files),
             )
         )
@@ -274,7 +274,7 @@ class InvoiceRepo:
         return result.rowcount
 
     async def get_organizable_invoices(self, period_id: int) -> list[Invoice]:
-        """Return PRESENTE invoices with no unresolved missing files, with institution_contract loaded."""
+        """Return PRESENTE invoices with no unresolved missing files, with agreement loaded."""
         q = (
             select(Invoice)
             .join(FolderStatus, Invoice.folder_status_id == FolderStatus.id)
@@ -289,9 +289,9 @@ class InvoiceRepo:
                 MissingFile.id.is_(None),
             )
             .options(
-                selectinload(Invoice.institution_contract).selectinload(InstitutionContract.administrator),
-                selectinload(Invoice.institution_contract).selectinload(InstitutionContract.contract),
-                selectinload(Invoice.institution_contract).selectinload(InstitutionContract.contract_type),
+                selectinload(Invoice.agreement).selectinload(Agreement.administrator),
+                selectinload(Invoice.agreement).selectinload(Agreement.contract),
+                selectinload(Invoice.agreement).selectinload(Agreement.contract_type),
             )
         )
         result = await self.db.execute(q)
@@ -312,8 +312,8 @@ class InvoiceRepo:
         audit_period_id: int,
         folder_status_id: int | None = None,
         service_type_id: int | None = None,
-        administrator_canonical: str | None = None,
-        contract_type_name: str | None = None,
+        admin_canonical: str | None = None,
+        admin_type: str | None = None,
         contract_canonical: str | None = None,
         search: str | None = None,
         has_finding_doc_type_id: int | None = None,
@@ -325,18 +325,18 @@ class InvoiceRepo:
         if service_type_id is not None:
             q = q.where(Invoice.service_type_id == service_type_id)
 
-        if administrator_canonical is not None or contract_type_name is not None or contract_canonical is not None:
-            q = q.join(InstitutionContract, Invoice.institution_contract_id == InstitutionContract.id)
-            if administrator_canonical is not None:
-                q = q.join(Administrator, InstitutionContract.administrator_id == Administrator.id).where(
-                    Administrator.canonical_name == administrator_canonical
+        if admin_canonical is not None or admin_type is not None or contract_canonical is not None:
+            q = q.join(Agreement, Invoice.agreement_id == Agreement.id)
+            if admin_canonical is not None:
+                q = q.join(Administrator, Agreement.administrator_id == Administrator.id).where(
+                    Administrator.canonical_name == admin_canonical
                 )
-            if contract_type_name is not None:
-                q = q.join(ContractType, InstitutionContract.contract_type_id == ContractType.id).where(
-                    ContractType.name == contract_type_name
+            if admin_type is not None:
+                q = q.join(ContractType, Agreement.contract_type_id == ContractType.id).where(
+                    ContractType.name == admin_type
                 )
             if contract_canonical is not None:
-                q = q.join(Contract, InstitutionContract.contract_id == Contract.id).where(
+                q = q.join(Contract, Agreement.contract_id == Contract.id).where(
                     Contract.canonical_name == contract_canonical
                 )
 
@@ -407,9 +407,9 @@ class InvoiceRepo:
             .options(
                 selectinload(Invoice.folder_status),
                 selectinload(Invoice.service_type),
-                selectinload(Invoice.institution_contract).selectinload(InstitutionContract.administrator),
-                selectinload(Invoice.institution_contract).selectinload(InstitutionContract.contract),
-                selectinload(Invoice.institution_contract).selectinload(InstitutionContract.contract_type),
+                selectinload(Invoice.agreement).selectinload(Agreement.administrator),
+                selectinload(Invoice.agreement).selectinload(Agreement.contract),
+                selectinload(Invoice.agreement).selectinload(Agreement.contract_type),
                 selectinload(Invoice.missing_files).selectinload(MissingFile.doc_type),
                 selectinload(Invoice.period).selectinload(AuditPeriod.institution),
             )

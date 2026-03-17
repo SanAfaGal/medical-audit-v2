@@ -104,12 +104,12 @@
 <div x-data="settingsApp()" class="flex gap-5 items-start">
 
   <!-- ─── Toast ────────────────────────────────────────────── -->
-  <div x-show="toast.msg" x-transition.opacity
+  <div x-show="$store.toast.msg" x-transition.opacity
        class="fixed top-4 right-4 z-50 px-5 py-3 rounded-xl text-white text-sm font-semibold shadow-xl flex items-center gap-2"
-       :style="toast.type === 'error' ? 'background:var(--red)' : 'background:var(--emerald)'"
-       @click="toast.msg = ''" style="display:none">
-    <i :class="toast.type === 'error' ? 'fa-solid fa-circle-xmark' : 'fa-solid fa-circle-check'"></i>
-    <span x-text="toast.msg"></span>
+       :style="$store.toast.type === 'error' ? 'background:var(--red)' : 'background:var(--emerald)'"
+       @click="$store.toast.msg = ''" style="display:none">
+    <i :class="$store.toast.type === 'error' ? 'fa-solid fa-circle-xmark' : 'fa-solid fa-circle-check'"></i>
+    <span x-text="$store.toast.msg"></span>
   </div>
 
   <!-- ─── Sidebar nav ──────────────────────────────────────── -->
@@ -353,15 +353,15 @@
     ══════════════════════════════════════════════════════════ -->
     <div x-show="tab === 'mapeos'" class="space-y-4">
 
-      <!-- No institution selected -->
-      <template x-if="!$store.ctx.institutionId">
+      <!-- No institution selected — only for institution-scoped sub-tabs -->
+      <template x-if="!$store.ctx.institutionId && (mapSubTab === 'services' || mapSubTab === 'stdocs')">
         <div class="no-inst-banner">
           <i class="fa-solid fa-triangle-exclamation shrink-0"></i>
-          <span>Selecciona una institución en el menú lateral para ver y editar mapeos.</span>
+          <span>Selecciona una institución en el menú lateral para ver Servicios y Docs × Servicio.</span>
         </div>
       </template>
 
-      <div x-show="$store.ctx.institutionId" class="cfg-card">
+      <div class="cfg-card">
         <!-- Sub-tabs -->
         <div class="flex" style="border-bottom:1px solid var(--border);background:var(--bg-subtle)">
           <template x-for="st in [{id:'admins',icon:'fa-user-shield',label:'Administradoras'},{id:'contracts',icon:'fa-file-contract',label:'Contratos'},{id:'services',icon:'fa-briefcase-medical',label:'Servicios'},{id:'stdocs',icon:'fa-file-circle-check',label:'Docs × Servicio'}]" :key="st.id">
@@ -376,124 +376,189 @@
           </template>
         </div>
 
-        <!-- Admins -->
-        <div x-show="mapSubTab === 'admins'" class="p-4 space-y-3">
-          <table class="cfg-table w-full">
-            <thead><tr>
-              <th>Raw</th><th>Canónico</th><th>Tipo</th><th></th>
-            </tr></thead>
+        <!-- Admins — crudPanel -->
+        <div x-show="mapSubTab === 'admins'"
+             x-data="crudPanel({apiBase:'/api/institutions/administrators', label:'Administradora', icon:'fa-user-shield'})">
+          <!-- Header bar -->
+          <div class="flex items-center gap-2 px-4 py-2.5 flex-wrap" style="border-bottom:1px solid var(--border)">
+            <i class="fa-solid fa-user-shield" style="color:var(--sky);font-size:.8rem"></i>
+            <span class="text-sm font-semibold" style="color:var(--text-1)">Administradoras</span>
+            <span class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--bg-subtle);color:var(--text-3);border:1px solid var(--border)" x-text="totalCount + ' total'"></span>
+            <span x-show="pendingCount > 0" class="text-[11px] px-2 py-0.5 rounded-full font-semibold" style="background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber-border)" x-text="pendingCount + ' sin mapear'"></span>
+            <input type="text" x-model="search" placeholder="Buscar..." class="cfg-input-sm ml-auto" style="width:11rem" />
+            <button @click="openCreate()" class="cfg-btn-sm cfg-btn-sky">
+              <i class="fa-solid fa-plus text-xs"></i>Nueva
+            </button>
+          </div>
+          <!-- Empty / loading states -->
+          <div x-show="loading" class="py-10 text-center text-sm" style="color:var(--text-3)">
+            <i class="fa-solid fa-spinner fa-spin text-xl mb-2 block"></i>Cargando…
+          </div>
+          <div x-show="!loading && items.length === 0" class="py-10 text-center text-sm" style="color:var(--text-3)">
+            <i class="fa-solid fa-inbox text-xl mb-2 block"></i>No hay administradoras registradas
+          </div>
+          <div x-show="!loading && items.length > 0 && filtered.length === 0" class="py-10 text-center text-sm" style="color:var(--text-3)">
+            <i class="fa-solid fa-magnifying-glass text-xl mb-2 block"></i>Sin resultados para "<span x-text="search"></span>"
+          </div>
+          <!-- Table -->
+          <table class="cfg-table w-full" x-show="!loading && filtered.length > 0">
+            <thead><tr><th>Raw</th><th>Nombre Canónico</th><th>Estado</th><th></th></tr></thead>
             <tbody>
-              <template x-for="a in allAdmins" :key="a.id">
+              <template x-for="item in filtered" :key="item.id">
                 <tr>
-                  <td class="font-mono text-xs max-w-[180px] truncate" style="color:var(--text-2)" x-text="a.raw_admin"></td>
+                  <td class="font-mono text-xs max-w-[200px] truncate" style="color:var(--text-2)" x-text="item.raw_name"></td>
+                  <td x-text="item.canonical_name || '—'"></td>
                   <td>
-                    <template x-if="editingAdminId !== a.id">
-                      <span :style="a.canonical_admin ? '' : 'color:var(--amber);font-style:italic'"
-                            x-text="a.canonical_admin || 'Sin mapear'"></span>
-                    </template>
-                    <template x-if="editingAdminId === a.id">
-                      <input type="text" x-model="editingAdminVal" class="cfg-input-sm editing w-full" />
-                    </template>
-                  </td>
-                  <td>
-                    <template x-if="editingAdminId !== a.id">
-                      <span class="text-xs" style="color:var(--text-3)" x-text="a.type || '—'"></span>
-                    </template>
-                    <template x-if="editingAdminId === a.id">
-                      <select x-model="editingAdminType" class="cfg-input-sm editing">
-                        <option value="">—</option>
-                        <option>EPS</option><option>SOAT</option><option>ARL</option><option>OTRO</option>
-                      </select>
-                    </template>
+                    <span x-show="item.canonical_name" class="text-[11px] font-semibold px-2 py-0.5 rounded-full" style="background:var(--emerald-soft);color:var(--emerald);border:1px solid var(--emerald-border)">Mapeado</span>
+                    <span x-show="!item.canonical_name" class="text-[11px] font-semibold px-2 py-0.5 rounded-full" style="background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber-border)">Sin mapear</span>
                   </td>
                   <td>
                     <div class="flex items-center justify-end gap-1">
-                      <template x-if="editingAdminId !== a.id">
-                        <button @click="startEditAdmin(a)" class="cfg-btn-sm cfg-btn-sky"><i class="fa-solid fa-pen text-xs"></i></button>
-                      </template>
-                      <template x-if="editingAdminId === a.id">
-                        <button @click="saveAdminEdit(a.id)" class="cfg-btn-sm" style="background:var(--sky);color:#fff;border-color:var(--sky)"><i class="fa-solid fa-check text-xs"></i></button>
-                      </template>
-                      <template x-if="editingAdminId === a.id">
-                        <button @click="editingAdminId = null" class="cfg-btn-sm"><i class="fa-solid fa-xmark text-xs"></i></button>
-                      </template>
-                      <template x-if="confirmDeleteAdminId !== a.id && editingAdminId !== a.id">
-                        <button @click="confirmDeleteAdminId = a.id" class="cfg-btn-sm cfg-btn-red"><i class="fa-solid fa-trash text-xs"></i></button>
-                      </template>
-                      <template x-if="confirmDeleteAdminId === a.id">
-                        <button @click="deleteAdmin(a.id)" class="cfg-btn-sm cfg-btn-confirm">Eliminar</button>
-                      </template>
-                      <template x-if="confirmDeleteAdminId === a.id">
-                        <button @click="confirmDeleteAdminId = null" class="cfg-btn-sm">Cancelar</button>
-                      </template>
+                      <button @click="openEdit(item)" class="cfg-btn-sm cfg-btn-sky"><i class="fa-solid fa-pen text-xs"></i></button>
+                      <button @click="confirmDelete(item)" class="cfg-btn-sm cfg-btn-red"><i class="fa-solid fa-trash text-xs"></i></button>
                     </div>
                   </td>
                 </tr>
               </template>
             </tbody>
           </table>
-          <div class="flex gap-2 pt-2" style="border-top:1px solid var(--border-soft)">
-            <input type="text" x-model="newAdmin.raw_admin" placeholder="Valor raw" class="cfg-input flex-1" />
-            <input type="text" x-model="newAdmin.canonical_admin" placeholder="Canónico" class="cfg-input flex-1" />
-            <select x-model="newAdmin.type" class="cfg-input" style="width:7rem">
-              <option value="">Tipo</option>
-              <option>EPS</option><option>SOAT</option><option>ARL</option><option>OTRO</option>
-            </select>
-            <button @click="addAdmin()" :disabled="!newAdmin.raw_admin.trim()" class="cfg-btn-primary">
-              <i class="fa-solid fa-plus"></i>
-            </button>
+          <!-- Create/Edit Modal -->
+          <div x-show="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,.45);display:none" @click.self="closeModal()">
+            <div class="cfg-card w-full max-w-md mx-4" @keydown.escape.window="closeModal()" @keydown.enter.window="saveModal()">
+              <div class="cfg-card-header">
+                <i class="fa-solid fa-user-shield" style="color:var(--sky)"></i>
+                <span x-text="modalMode === 'create' ? 'Nueva administradora' : 'Editar administradora'"></span>
+              </div>
+              <div class="p-5 space-y-4">
+                <div>
+                  <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">Valor raw *</label>
+                  <input type="text" x-model="modalForm.raw_name" :readonly="modalMode === 'edit'"
+                         :style="modalMode === 'edit' ? 'opacity:.6;cursor:default' : ''"
+                         class="cfg-input" placeholder="Nombre tal como aparece en datos" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">Nombre canónico</label>
+                  <input type="text" x-model="modalForm.canonical_name" class="cfg-input" placeholder="Nombre estandarizado (opcional)" />
+                </div>
+                <div class="flex gap-2 pt-2" style="border-top:1px solid var(--border-soft)">
+                  <button @click="saveModal()" :disabled="saving || (modalMode==='create' && !modalForm.raw_name.trim())" class="cfg-btn-primary">
+                    <i x-show="!saving" class="fa-solid fa-floppy-disk"></i>
+                    <i x-show="saving" class="fa-solid fa-spinner fa-spin"></i>
+                    <span x-text="saving ? 'Guardando…' : 'Guardar'"></span>
+                  </button>
+                  <button @click="closeModal()" class="cfg-btn-sm">Cancelar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Delete Modal -->
+          <div x-show="deleteModalOpen" class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,.45);display:none" @click.self="cancelDelete()">
+            <div class="cfg-card w-full max-w-sm mx-4">
+              <div class="cfg-card-header">
+                <i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i>
+                Confirmar eliminación
+              </div>
+              <div class="p-5 space-y-3">
+                <p class="text-sm" style="color:var(--text-1)">¿Eliminar <code class="px-1.5 py-0.5 rounded text-xs font-mono" style="background:var(--bg-subtle);border:1px solid var(--border)" x-text="deleteTargetName"></code>?</p>
+                <div class="flex gap-2">
+                  <button @click="executeDelete()" class="cfg-btn-sm cfg-btn-confirm">Eliminar</button>
+                  <button @click="cancelDelete()" class="cfg-btn-sm">Cancelar</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Contracts -->
-        <div x-show="mapSubTab === 'contracts'" class="p-4 space-y-3">
-          <table class="cfg-table w-full">
-            <thead><tr><th>Raw</th><th>Canónico</th><th></th></tr></thead>
+        <!-- Contracts — crudPanel -->
+        <div x-show="mapSubTab === 'contracts'"
+             x-data="crudPanel({apiBase:'/api/institutions/contracts', label:'Contrato', icon:'fa-file-contract'})">
+          <!-- Header bar -->
+          <div class="flex items-center gap-2 px-4 py-2.5 flex-wrap" style="border-bottom:1px solid var(--border)">
+            <i class="fa-solid fa-file-contract" style="color:var(--sky);font-size:.8rem"></i>
+            <span class="text-sm font-semibold" style="color:var(--text-1)">Contratos</span>
+            <span class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--bg-subtle);color:var(--text-3);border:1px solid var(--border)" x-text="totalCount + ' total'"></span>
+            <span x-show="pendingCount > 0" class="text-[11px] px-2 py-0.5 rounded-full font-semibold" style="background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber-border)" x-text="pendingCount + ' sin mapear'"></span>
+            <input type="text" x-model="search" placeholder="Buscar..." class="cfg-input-sm ml-auto" style="width:11rem" />
+            <button @click="openCreate()" class="cfg-btn-sm cfg-btn-sky">
+              <i class="fa-solid fa-plus text-xs"></i>Nuevo
+            </button>
+          </div>
+          <!-- Empty / loading states -->
+          <div x-show="loading" class="py-10 text-center text-sm" style="color:var(--text-3)">
+            <i class="fa-solid fa-spinner fa-spin text-xl mb-2 block"></i>Cargando…
+          </div>
+          <div x-show="!loading && items.length === 0" class="py-10 text-center text-sm" style="color:var(--text-3)">
+            <i class="fa-solid fa-inbox text-xl mb-2 block"></i>No hay contratos registrados
+          </div>
+          <div x-show="!loading && items.length > 0 && filtered.length === 0" class="py-10 text-center text-sm" style="color:var(--text-3)">
+            <i class="fa-solid fa-magnifying-glass text-xl mb-2 block"></i>Sin resultados para "<span x-text="search"></span>"
+          </div>
+          <!-- Table -->
+          <table class="cfg-table w-full" x-show="!loading && filtered.length > 0">
+            <thead><tr><th>Raw</th><th>Nombre Canónico</th><th>Estado</th><th></th></tr></thead>
             <tbody>
-              <template x-for="c in allContracts" :key="c.id">
+              <template x-for="item in filtered" :key="item.id">
                 <tr>
-                  <td class="font-mono text-xs max-w-[220px] truncate" style="color:var(--text-2)" x-text="c.raw_contract"></td>
+                  <td class="font-mono text-xs max-w-[220px] truncate" style="color:var(--text-2)" x-text="item.raw_name"></td>
+                  <td x-text="item.canonical_name || '—'"></td>
                   <td>
-                    <template x-if="editingContractId !== c.id">
-                      <span :style="c.canonical_contract ? '' : 'color:var(--amber);font-style:italic'"
-                            x-text="c.canonical_contract || 'Sin mapear'"></span>
-                    </template>
-                    <template x-if="editingContractId === c.id">
-                      <input type="text" x-model="editingContractVal" class="cfg-input-sm editing w-full" />
-                    </template>
+                    <span x-show="item.canonical_name" class="text-[11px] font-semibold px-2 py-0.5 rounded-full" style="background:var(--emerald-soft);color:var(--emerald);border:1px solid var(--emerald-border)">Mapeado</span>
+                    <span x-show="!item.canonical_name" class="text-[11px] font-semibold px-2 py-0.5 rounded-full" style="background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber-border)">Sin mapear</span>
                   </td>
                   <td>
                     <div class="flex items-center justify-end gap-1">
-                      <template x-if="editingContractId !== c.id">
-                        <button @click="startEditContract(c)" class="cfg-btn-sm cfg-btn-sky"><i class="fa-solid fa-pen text-xs"></i></button>
-                      </template>
-                      <template x-if="editingContractId === c.id">
-                        <button @click="saveContractEdit(c.id)" class="cfg-btn-sm" style="background:var(--sky);color:#fff;border-color:var(--sky)"><i class="fa-solid fa-check text-xs"></i></button>
-                      </template>
-                      <template x-if="editingContractId === c.id">
-                        <button @click="editingContractId = null" class="cfg-btn-sm"><i class="fa-solid fa-xmark text-xs"></i></button>
-                      </template>
-                      <template x-if="confirmDeleteContractId !== c.id && editingContractId !== c.id">
-                        <button @click="confirmDeleteContractId = c.id" class="cfg-btn-sm cfg-btn-red"><i class="fa-solid fa-trash text-xs"></i></button>
-                      </template>
-                      <template x-if="confirmDeleteContractId === c.id">
-                        <button @click="deleteContract(c.id)" class="cfg-btn-sm cfg-btn-confirm">Eliminar</button>
-                      </template>
-                      <template x-if="confirmDeleteContractId === c.id">
-                        <button @click="confirmDeleteContractId = null" class="cfg-btn-sm">Cancelar</button>
-                      </template>
+                      <button @click="openEdit(item)" class="cfg-btn-sm cfg-btn-sky"><i class="fa-solid fa-pen text-xs"></i></button>
+                      <button @click="confirmDelete(item)" class="cfg-btn-sm cfg-btn-red"><i class="fa-solid fa-trash text-xs"></i></button>
                     </div>
                   </td>
                 </tr>
               </template>
             </tbody>
           </table>
-          <div class="flex gap-2 pt-2" style="border-top:1px solid var(--border-soft)">
-            <input type="text" x-model="newContract.raw_contract" placeholder="Valor raw" class="cfg-input flex-1" />
-            <input type="text" x-model="newContract.canonical_contract" placeholder="Canónico" class="cfg-input flex-1" />
-            <button @click="addContract()" :disabled="!newContract.raw_contract.trim()" class="cfg-btn-primary">
-              <i class="fa-solid fa-plus"></i>
-            </button>
+          <!-- Create/Edit Modal -->
+          <div x-show="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,.45);display:none" @click.self="closeModal()">
+            <div class="cfg-card w-full max-w-md mx-4" @keydown.escape.window="closeModal()" @keydown.enter.window="saveModal()">
+              <div class="cfg-card-header">
+                <i class="fa-solid fa-file-contract" style="color:var(--sky)"></i>
+                <span x-text="modalMode === 'create' ? 'Nuevo contrato' : 'Editar contrato'"></span>
+              </div>
+              <div class="p-5 space-y-4">
+                <div>
+                  <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">Valor raw *</label>
+                  <input type="text" x-model="modalForm.raw_name" :readonly="modalMode === 'edit'"
+                         :style="modalMode === 'edit' ? 'opacity:.6;cursor:default' : ''"
+                         class="cfg-input" placeholder="Nombre tal como aparece en datos" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">Nombre canónico</label>
+                  <input type="text" x-model="modalForm.canonical_name" class="cfg-input" placeholder="Nombre estandarizado (opcional)" />
+                </div>
+                <div class="flex gap-2 pt-2" style="border-top:1px solid var(--border-soft)">
+                  <button @click="saveModal()" :disabled="saving || (modalMode==='create' && !modalForm.raw_name.trim())" class="cfg-btn-primary">
+                    <i x-show="!saving" class="fa-solid fa-floppy-disk"></i>
+                    <i x-show="saving" class="fa-solid fa-spinner fa-spin"></i>
+                    <span x-text="saving ? 'Guardando…' : 'Guardar'"></span>
+                  </button>
+                  <button @click="closeModal()" class="cfg-btn-sm">Cancelar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Delete Modal -->
+          <div x-show="deleteModalOpen" class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,.45);display:none" @click.self="cancelDelete()">
+            <div class="cfg-card w-full max-w-sm mx-4">
+              <div class="cfg-card-header">
+                <i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i>
+                Confirmar eliminación
+              </div>
+              <div class="p-5 space-y-3">
+                <p class="text-sm" style="color:var(--text-1)">¿Eliminar <code class="px-1.5 py-0.5 rounded text-xs font-mono" style="background:var(--bg-subtle);border:1px solid var(--border)" x-text="deleteTargetName"></code>?</p>
+                <div class="flex gap-2">
+                  <button @click="executeDelete()" class="cfg-btn-sm cfg-btn-confirm">Eliminar</button>
+                  <button @click="cancelDelete()" class="cfg-btn-sm">Cancelar</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1113,6 +1178,91 @@
 
 {% block extra_scripts %}
 <script>
+// ── Global toast store ─────────────────────────────────────────────────────
+document.addEventListener('alpine:init', () => {
+  Alpine.store('toast', {
+    msg: '', type: 'success', _t: null,
+    show(msg, type = 'success') {
+      clearTimeout(this._t);
+      this.msg = msg; this.type = type;
+      this._t = setTimeout(() => { this.msg = ''; }, 3500);
+    },
+  });
+});
+
+// ── Reusable CRUD panel factory ────────────────────────────────────────────
+function crudPanel({ apiBase, label, icon }) {
+  return {
+    items: [], loading: false, saving: false, search: '',
+    modalOpen: false, modalMode: 'create',
+    modalForm: { raw_name: '', canonical_name: '' }, modalEditId: null,
+    deleteModalOpen: false, deleteTargetId: null, deleteTargetName: '',
+
+    get filtered() {
+      const q = this.search.toLowerCase();
+      if (!q) return this.items;
+      return this.items.filter(i =>
+        (i.raw_name || '').toLowerCase().includes(q) ||
+        (i.canonical_name || '').toLowerCase().includes(q)
+      );
+    },
+    get pendingCount() { return this.items.filter(i => !i.canonical_name).length; },
+    get totalCount()   { return this.items.length; },
+
+    async init() { await this.load(); },
+    async load() {
+      this.loading = true;
+      try { const r = await fetch(apiBase); this.items = await r.json(); }
+      finally { this.loading = false; }
+    },
+
+    openCreate() {
+      this.modalForm = { raw_name: '', canonical_name: '' };
+      this.modalMode = 'create'; this.modalEditId = null; this.modalOpen = true;
+    },
+    openEdit(item) {
+      this.modalForm = { raw_name: item.raw_name, canonical_name: item.canonical_name || '' };
+      this.modalMode = 'edit'; this.modalEditId = item.id; this.modalOpen = true;
+    },
+    closeModal() { this.modalOpen = false; },
+
+    async saveModal() {
+      if (this.saving) return;
+      this.saving = true;
+      try {
+        let res;
+        if (this.modalMode === 'create') {
+          const body = { raw_name: this.modalForm.raw_name };
+          if (this.modalForm.canonical_name) body.canonical_name = this.modalForm.canonical_name;
+          res = await fetch(apiBase, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        } else {
+          res = await fetch(`${apiBase}/${this.modalEditId}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ canonical_name: this.modalForm.canonical_name || null }) });
+        }
+        if (res.ok) {
+          await this.load(); this.closeModal();
+          this.$store.toast.show(this.modalMode === 'create' ? `${label} agregado/a.` : 'Actualizado.');
+        } else {
+          const err = await res.json().catch(() => ({}));
+          this.$store.toast.show(err.detail || 'Error al guardar.', 'error');
+        }
+      } finally { this.saving = false; }
+    },
+
+    confirmDelete(item) {
+      this.deleteTargetId = item.id; this.deleteTargetName = item.raw_name; this.deleteModalOpen = true;
+    },
+    cancelDelete() { this.deleteModalOpen = false; this.deleteTargetId = null; this.deleteTargetName = ''; },
+    async executeDelete() {
+      const res = await fetch(`${apiBase}/${this.deleteTargetId}`, { method: 'DELETE' });
+      if (res.ok || res.status === 204) {
+        await this.load(); this.cancelDelete(); this.$store.toast.show('Eliminado.');
+      } else {
+        this.cancelDelete(); this.$store.toast.show('No se pudo eliminar.', 'error');
+      }
+    },
+  };
+}
+
 function settingsApp() {
   return {
     tab: 'instituciones',
@@ -1139,13 +1289,9 @@ function settingsApp() {
 
     // Mapeos
     mapSubTab: 'admins',
-    allAdmins: [], allContracts: [], allServices: [], serviceTypeDocs: [],
-    editingAdminId: null, editingAdminVal: '', editingAdminType: '',
-    editingContractId: null, editingContractVal: '',
+    allServices: [], serviceTypeDocs: [],
     editingServiceId: null, editingServiceTypeId: '',
-    confirmDeleteAdminId: null, confirmDeleteContractId: null, confirmDeleteServiceId: null,
-    newAdmin: { raw_admin:'', canonical_admin:'', type:'' },
-    newContract: { raw_contract:'', canonical_contract:'' },
+    confirmDeleteServiceId: null,
     newService: { raw_service:'', service_type_id:'' },
     stdPending: {},
 
@@ -1174,9 +1320,6 @@ function settingsApp() {
     editingPCId: null, editingPC: { correct_prefix:'', notes:'' },
     newPC: { wrong_prefix:'', correct_prefix:'', notes:'' },
 
-    // Toast
-    toast: { msg:'', type:'success' },
-
     async init() {
       const [instRes, stRes, dtRes, fsRes, pcRes, sysRes] = await Promise.all([
         fetch('/api/institutions'),
@@ -1194,23 +1337,25 @@ function settingsApp() {
       const sys = await sysRes.json();
       this.systemSettings = { audit_data_root: sys.audit_data_root || '' };
 
+      // Load global mappings (admins/contracts) on init
+      if (this.tab === 'mapeos') this.loadMappings();
+
       // Reload tab data when the sidebar institution changes
       this.$watch(() => this.$store.ctx.institutionId, (newId) => {
-        if (!newId) return;
         if (this.tab === 'mapeos') this.loadMappings();
+        if (!newId) return;
         if (this.tab === 'periodos') this.loadPeriods();
       });
     },
 
     showToast(msg, type = 'success') {
-      this.toast = { msg, type };
-      setTimeout(() => { this.toast.msg = ''; }, 3500);
+      this.$store.toast.show(msg, type);
     },
 
     switchTab(t) {
       this.tab = t;
       const instId = this.$store.ctx.institutionId;
-      if (t === 'mapeos' && instId) this.loadMappings();
+      if (t === 'mapeos') this.loadMappings();
       if (t === 'periodos' && instId) this.loadPeriods();
     },
 
@@ -1320,60 +1465,13 @@ function settingsApp() {
     // ---- MAPEOS ----
     async loadMappings() {
       const id = this.$store.ctx.institutionId;
-      if (!id) return;
-      const [admins, contracts, services, stdocs] = await Promise.all([
-        fetch(`/api/institutions/${id}/admins`).then(r => r.json()),
-        fetch(`/api/institutions/${id}/contracts`).then(r => r.json()),
-        fetch(`/api/institutions/${id}/services`).then(r => r.json()),
-        fetch(`/api/institutions/${id}/service-type-documents`).then(r => r.json()),
-      ]);
-      this.allAdmins = admins; this.allContracts = contracts;
-      this.allServices = services; this.serviceTypeDocs = stdocs;
-    },
-
-    // Admins
-    startEditAdmin(a) { this.editingAdminId = a.id; this.editingAdminVal = a.canonical_admin || ''; this.editingAdminType = a.type || ''; },
-    async saveAdminEdit(id) {
-      const res = await fetch(`/api/institutions/admins/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ canonical_admin: this.editingAdminVal || null, type: this.editingAdminType || null }) });
-      if (res.ok) { this.editingAdminId = null; await this.loadMappings(); this.showToast('Actualizado.'); }
-      else this.showToast('Error al actualizar.', 'error');
-    },
-    async addAdmin() {
-      const id = this.$store.ctx.institutionId;
-      if (!id || !this.newAdmin.raw_admin.trim()) return;
-      const body = { raw_admin: this.newAdmin.raw_admin };
-      if (this.newAdmin.canonical_admin) body.canonical_admin = this.newAdmin.canonical_admin;
-      if (this.newAdmin.type) body.type = this.newAdmin.type;
-      const res = await fetch(`/api/institutions/${id}/admins`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-      if (res.ok) { this.newAdmin = {raw_admin:'',canonical_admin:'',type:''}; await this.loadMappings(); this.showToast('Administradora agregada.'); }
-      else this.showToast('Error al agregar.', 'error');
-    },
-    async deleteAdmin(id) {
-      const res = await fetch(`/api/institutions/admins/${id}`, { method:'DELETE' });
-      if (res.ok || res.status === 204) { this.confirmDeleteAdminId = null; await this.loadMappings(); this.showToast('Eliminado.'); }
-      else this.showToast('No se pudo eliminar.', 'error');
-    },
-
-    // Contracts
-    startEditContract(c) { this.editingContractId = c.id; this.editingContractVal = c.canonical_contract || ''; },
-    async saveContractEdit(id) {
-      const res = await fetch(`/api/institutions/contracts/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ canonical_contract: this.editingContractVal || null }) });
-      if (res.ok) { this.editingContractId = null; await this.loadMappings(); this.showToast('Actualizado.'); }
-      else this.showToast('Error al actualizar.', 'error');
-    },
-    async addContract() {
-      const id = this.$store.ctx.institutionId;
-      if (!id || !this.newContract.raw_contract.trim()) return;
-      const body = { raw_contract: this.newContract.raw_contract };
-      if (this.newContract.canonical_contract) body.canonical_contract = this.newContract.canonical_contract;
-      const res = await fetch(`/api/institutions/${id}/contracts`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-      if (res.ok) { this.newContract = {raw_contract:'',canonical_contract:''}; await this.loadMappings(); this.showToast('Contrato agregado.'); }
-      else this.showToast('Error al agregar.', 'error');
-    },
-    async deleteContract(id) {
-      const res = await fetch(`/api/institutions/contracts/${id}`, { method:'DELETE' });
-      if (res.ok || res.status === 204) { this.confirmDeleteContractId = null; await this.loadMappings(); this.showToast('Eliminado.'); }
-      else this.showToast('No se pudo eliminar.', 'error');
+      if (id) {
+        const [services, stdocs] = await Promise.all([
+          fetch(`/api/institutions/${id}/services`).then(r => r.json()),
+          fetch(`/api/institutions/${id}/service-type-documents`).then(r => r.json()),
+        ]);
+        this.allServices = services; this.serviceTypeDocs = stdocs;
+      }
     },
 
     // Services

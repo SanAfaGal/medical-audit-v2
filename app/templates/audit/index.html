@@ -781,20 +781,18 @@ function auditApp() {
       }));
     },
     get uniqueAdminTypes() {
-      const seen = new Set();
-      return this.admins.map(a => a.type).filter(t => t && !seen.has(t) && seen.add(t)).sort();
+      return [];
     },
     get filteredAdmins() {
       const seen = new Set();
       return this.admins
-        .filter(a => a.canonical_admin && (!this.filterAdminType || a.type === this.filterAdminType))
-        .map(a => a.canonical_admin)
-        .filter(n => !seen.has(n) && seen.add(n))
+        .map(a => a.canonical_name)
+        .filter(n => n && !seen.has(n) && seen.add(n))
         .sort();
     },
     get uniqueContracts() {
       const seen = new Set();
-      return this.contracts.map(c => c.canonical_contract).filter(n => n && !seen.has(n) && seen.add(n)).sort();
+      return this.contracts.map(c => c.canonical_name).filter(n => n && !seen.has(n) && seen.add(n)).sort();
     },
 
     // ── Init ──────────────────────────────────────────
@@ -830,8 +828,8 @@ function auditApp() {
       const id = this.$store.ctx.institutionId;
       if (!id) return;
       const [a, c] = await Promise.all([
-        fetch(`/api/institutions/${id}/admins`),
-        fetch(`/api/institutions/${id}/contracts`),
+        fetch(`/api/institutions/administrators`),
+        fetch(`/api/institutions/contracts`),
       ]);
       this.admins    = await a.json();
       this.contracts = await c.json();

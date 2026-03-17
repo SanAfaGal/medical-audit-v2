@@ -27,8 +27,8 @@ async def get_invoice_ids(
     period_id: int,
     folder_status_id: int | None = None,
     service_type_id: int | None = None,
-    administrator_canonical: str | None = None,
-    contract_type_name: str | None = None,
+    admin_canonical: str | None = None,
+    admin_type: str | None = None,
     contract_canonical: str | None = None,
     search: str | None = None,
     has_finding_doc_type_id: int | None = None,
@@ -39,8 +39,8 @@ async def get_invoice_ids(
         audit_period_id=period_id,
         folder_status_id=folder_status_id,
         service_type_id=service_type_id,
-        administrator_canonical=administrator_canonical,
-        contract_type_name=contract_type_name,
+        admin_canonical=admin_canonical,
+        admin_type=admin_type,
         contract_canonical=contract_canonical,
         search=search,
         has_finding_doc_type_id=has_finding_doc_type_id,
@@ -64,8 +64,8 @@ async def list_invoices(
     period_id: int,
     folder_status_id: int | None = None,
     service_type_id: int | None = None,
-    administrator_canonical: str | None = None,
-    contract_type_name: str | None = None,
+    admin_canonical: str | None = None,
+    admin_type: str | None = None,
     contract_canonical: str | None = None,
     search: str | None = None,
     has_finding_doc_type_id: int | None = None,
@@ -78,8 +78,8 @@ async def list_invoices(
         audit_period_id=period_id,
         folder_status_id=folder_status_id,
         service_type_id=service_type_id,
-        administrator_canonical=administrator_canonical,
-        contract_type_name=contract_type_name,
+        admin_canonical=admin_canonical,
+        admin_type=admin_type,
         contract_canonical=contract_canonical,
         search=search,
         has_finding_doc_type_id=has_finding_doc_type_id,
@@ -89,14 +89,14 @@ async def list_invoices(
 
     items = []
     for inv in invoices:
-        ic = inv.institution_contract
+        ic = inv.agreement
         items.append(InvoiceListItem(
             id=inv.id,
             invoice_number=inv.invoice_number,
             patient_name=inv.patient_name,
-            institution_contract_id=inv.institution_contract_id,
-            administrator_canonical=ic.administrator.canonical_name if ic and ic.administrator else None,
-            contract_type_name=ic.contract_type.name if ic and ic.contract_type else None,
+            agreement_id=inv.agreement_id,
+            admin_canonical=ic.administrator.canonical_name if ic and ic.administrator else None,
+            admin_type=ic.contract_type.name if ic and ic.contract_type else None,
             contract_canonical=ic.contract.canonical_name if ic and ic.contract else None,
             folder_status=inv.folder_status.status,
             folder_status_id=inv.folder_status_id,
@@ -196,7 +196,7 @@ async def export_invoices(period_id: int, db: AsyncSession = Depends(get_db)):
             inv.period.institution.display_name
             if inv.period and inv.period.institution else ""
         )
-        ic = inv.institution_contract
+        ic = inv.agreement
         administrator = ""
         contract_type = ""
         contract = ""

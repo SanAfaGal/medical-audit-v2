@@ -1,4 +1,4 @@
-"""Pydantic schemas for institutions, administrators, contracts, contract_types, institution_contracts, and services."""
+"""Pydantic schemas for institutions, administrators, contracts, contract_types, agreements, and services."""
 from pydantic import BaseModel
 
 
@@ -108,14 +108,13 @@ class ContractUpdate(BaseModel):
 
 
 # ------------------------------------------------------------------
-# InstitutionContract
+# Agreement
 # ------------------------------------------------------------------
 
-class InstitutionContractOut(BaseModel):
+class AgreementOut(BaseModel):
     model_config = {"from_attributes": True}
 
     id: int
-    institution_id: int
     administrator_id: int
     contract_id: int
     contract_type_id: int | None
@@ -124,13 +123,13 @@ class InstitutionContractOut(BaseModel):
     contract_type: ContractTypeOut | None = None
 
 
-class InstitutionContractCreate(BaseModel):
+class AgreementCreate(BaseModel):
     administrator_id: int
     contract_id: int
     contract_type_id: int | None = None
 
 
-class InstitutionContractUpdate(BaseModel):
+class AgreementUpdate(BaseModel):
     contract_type_id: int | None = None
 
 

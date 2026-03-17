@@ -20,7 +20,7 @@ class Invoice(Base):
     id_type: Mapped[str] = mapped_column(String(10), nullable=False)   # CC, TI, RC, CE
     id_number: Mapped[str] = mapped_column(String(50), nullable=False)
     patient_name: Mapped[str] = mapped_column(String(300), nullable=False)
-    institution_contract_id: Mapped[int | None] = mapped_column(ForeignKey("institution_contracts.id"), nullable=True)
+    agreement_id: Mapped[int | None] = mapped_column(ForeignKey("agreements.id"), nullable=True)
     service_type_id: Mapped[int | None] = mapped_column(ForeignKey("service_types.id"), nullable=True)
     employee: Mapped[str | None] = mapped_column(String(200))
     admission: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -31,11 +31,11 @@ class Invoice(Base):
     period: Mapped[AuditPeriod] = relationship(back_populates="invoices")
     folder_status: Mapped[FolderStatus] = relationship()
     service_type: Mapped[ServiceType] = relationship()
-    institution_contract: Mapped[InstitutionContract | None] = relationship()
+    agreement: Mapped[Agreement | None] = relationship()
     missing_files: Mapped[list[MissingFile]] = relationship(back_populates="invoice", cascade="all, delete-orphan")
 
 
 from app.models.period import AuditPeriod           # noqa: E402
 from app.models.finding import MissingFile          # noqa: E402
 from app.models.rules import FolderStatus, ServiceType  # noqa: E402
-from app.models.institution import InstitutionContract  # noqa: E402
+from app.models.institution import Agreement  # noqa: E402
