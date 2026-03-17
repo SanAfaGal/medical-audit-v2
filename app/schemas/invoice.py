@@ -13,16 +13,15 @@ class InvoiceListItem(BaseModel):
     id: int
     invoice_number: str
     patient_name: str
-    admin_id: int | None
-    admin_canonical: str | None       # resolved from admin.canonical_admin
-    admin_type: str | None            # resolved from admin.type (EPS, SOAT, ARL…)
-    contract_id: int | None
-    contract_canonical: str | None    # resolved from contract.canonical_contract
-    folder_status: str                # resolved from folder_status.status
+    institution_contract_id: int | None
+    administrator_canonical: str | None   # resolved from institution_contract.administrator.canonical_name
+    contract_type_name: str | None        # resolved from institution_contract.contract_type.name
+    contract_canonical: str | None        # resolved from institution_contract.contract.canonical_name
+    folder_status: str                    # resolved from folder_status.status
     folder_status_id: int
-    service_type_code: str | None     # resolved from service_type.code
+    service_type_code: str | None         # resolved from service_type.code
     service_type_id: int | None
-    missing_file_count: int           # count of unresolved missing_files
+    missing_file_count: int               # count of unresolved missing_files
     date: datetime.date
 
 
@@ -35,9 +34,8 @@ class InvoiceOut(BaseModel):
     id_type: str
     id_number: str
     patient_name: str
-    admin_id: int | None
-    contract_id: int | None
-    service_type_id: int
+    institution_contract_id: int | None
+    service_type_id: int | None
     employee: str | None
     admission: str | None = None
     folder_status_id: int

@@ -1,11 +1,20 @@
-"""Async repository for institutions, admins, contracts, services, and service-type-document mappings."""
+"""Async repository for institutions, administrators, contracts, contract_types, institution_contracts, services."""
 from __future__ import annotations
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.models.institution import Admin, Contract, Institution, Service, ServiceTypeDocument
+from app.models.institution import (
+    Administrator,
+    Contract,
+    ContractType,
+    Institution,
+    InstitutionContract,
+    Service,
+    ServiceTypeDocument,
+)
 
 
 class InstitutionRepo:
@@ -44,108 +53,252 @@ class InstitutionRepo:
         return institution
 
     # ------------------------------------------------------------------
-    # Admins
+    # Administrators (global)
     # ------------------------------------------------------------------
 
-    async def get_admins(self, institution_id: int) -> list[Admin]:
+    async def get_all_administrators(self) -> list[Administrator]:
+        result = await self.db.execute(select(Administrator).order_by(Administrator.raw_name))
+        return list(result.scalars().all())
+
+    async def get_pending_administrators(self) -> list[Administrator]:
+        """Return administrators whose canonical_name is NULL (not yet mapped by user)."""
         result = await self.db.execute(
-            select(Admin).where(Admin.institution_id == institution_id).order_by(Admin.raw_admin)
+            select(Administrator)
+            .where(Administrator.canonical_name.is_(None))
+            .order_by(Administrator.raw_name)
         )
         return list(result.scalars().all())
 
-    async def get_pending_admins(self, institution_id: int) -> list[Admin]:
-        """Return admins whose canonical_admin is NULL (not yet mapped by user)."""
-        result = await self.db.execute(
-            select(Admin)
-            .where(Admin.institution_id == institution_id, Admin.canonical_admin.is_(None))
-            .order_by(Admin.raw_admin)
-        )
-        return list(result.scalars().all())
-
-    async def upsert_admin(self, institution_id: int, raw_admin: str) -> Admin:
-        """Insert admin if not exists; return existing row if already present."""
+    async def upsert_administrator(self, raw_name: str) -> Administrator:
+        """Insert administrator globally if not exists; return existing row if present."""
         stmt = (
-            pg_insert(Admin)
-            .values(institution_id=institution_id, raw_admin=raw_admin)
-            .on_conflict_do_nothing(index_elements=["institution_id", "raw_admin"])
-            .returning(Admin)
+            pg_insert(Administrator)
+            .values(raw_name=raw_name)
+            .on_conflict_do_nothing(index_elements=["raw_name"])
+            .returning(Administrator)
         )
         result = await self.db.execute(stmt)
         row = result.scalar_one_or_none()
         if row is None:
             result2 = await self.db.execute(
-                select(Admin).where(
-                    Admin.institution_id == institution_id, Admin.raw_admin == raw_admin
-                )
+                select(Administrator).where(Administrator.raw_name == raw_name)
             )
             row = result2.scalar_one()
         return row
 
-    async def set_admin_canonical(
-        self, admin_id: int, canonical: str | None, type_: str | None = None
-    ) -> None:
-        admin = await self.db.get(Admin, admin_id)
+    async def set_administrator_canonical(self, administrator_id: int, canonical_name: str | None) -> None:
+        admin = await self.db.get(Administrator, administrator_id)
         if admin:
-            admin.canonical_admin = canonical
-            if type_ is not None:
-                admin.type = type_
+            admin.canonical_name = canonical_name
             await self.db.flush()
 
+    async def create_administrator(self, raw_name: str, canonical_name: str | None) -> Administrator:
+        admin = Administrator(raw_name=raw_name, canonical_name=canonical_name)
+        self.db.add(admin)
+        await self.db.flush()
+        await self.db.refresh(admin)
+        return admin
+
+    async def delete_administrator(self, administrator_id: int) -> bool:
+        admin = await self.db.get(Administrator, administrator_id)
+        if not admin:
+            return False
+        await self.db.delete(admin)
+        await self.db.flush()
+        return True
+
     # ------------------------------------------------------------------
-    # Contracts
+    # Contracts (global)
     # ------------------------------------------------------------------
 
-    async def get_contracts(self, institution_id: int) -> list[Contract]:
+    async def get_all_contracts(self) -> list[Contract]:
+        result = await self.db.execute(select(Contract).order_by(Contract.raw_name))
+        return list(result.scalars().all())
+
+    async def get_pending_contracts(self) -> list[Contract]:
+        """Return contracts with NULL canonical_name."""
         result = await self.db.execute(
             select(Contract)
-            .where(Contract.institution_id == institution_id)
-            .order_by(Contract.raw_contract)
+            .where(Contract.canonical_name.is_(None))
+            .order_by(Contract.raw_name)
         )
         return list(result.scalars().all())
 
-    async def get_pending_contracts(self, institution_id: int) -> list[Contract]:
-        """Return contracts with NULL canonical_contract for an institution."""
-        result = await self.db.execute(
-            select(Contract)
-            .where(
-                Contract.institution_id == institution_id,
-                Contract.canonical_contract.is_(None),
-            )
-            .order_by(Contract.raw_contract)
-        )
-        return list(result.scalars().all())
-
-    async def upsert_contract(self, institution_id: int, raw_contract: str) -> Contract:
+    async def upsert_contract(self, raw_name: str) -> Contract:
         stmt = (
             pg_insert(Contract)
-            .values(institution_id=institution_id, raw_contract=raw_contract)
-            .on_conflict_do_nothing(index_elements=["institution_id", "raw_contract"])
+            .values(raw_name=raw_name)
+            .on_conflict_do_nothing(index_elements=["raw_name"])
             .returning(Contract)
         )
         result = await self.db.execute(stmt)
         row = result.scalar_one_or_none()
         if row is None:
             result2 = await self.db.execute(
-                select(Contract).where(
-                    Contract.institution_id == institution_id,
-                    Contract.raw_contract == raw_contract,
+                select(Contract).where(Contract.raw_name == raw_name)
+            )
+            row = result2.scalar_one()
+        return row
+
+    async def set_contract_canonical(self, contract_id: int, canonical_name: str | None) -> None:
+        contract = await self.db.get(Contract, contract_id)
+        if contract:
+            contract.canonical_name = canonical_name
+            await self.db.flush()
+
+    async def create_contract(self, raw_name: str, canonical_name: str | None) -> Contract:
+        contract = Contract(raw_name=raw_name, canonical_name=canonical_name)
+        self.db.add(contract)
+        await self.db.flush()
+        await self.db.refresh(contract)
+        return contract
+
+    async def delete_contract(self, contract_id: int) -> bool:
+        contract = await self.db.get(Contract, contract_id)
+        if not contract:
+            return False
+        await self.db.delete(contract)
+        await self.db.flush()
+        return True
+
+    # ------------------------------------------------------------------
+    # ContractTypes (global)
+    # ------------------------------------------------------------------
+
+    async def get_all_contract_types(self) -> list[ContractType]:
+        result = await self.db.execute(select(ContractType).order_by(ContractType.name))
+        return list(result.scalars().all())
+
+    async def get_contract_type_by_id(self, ct_id: int) -> ContractType | None:
+        return await self.db.get(ContractType, ct_id)
+
+    async def create_contract_type(self, name: str, description: str | None) -> ContractType:
+        ct = ContractType(name=name, description=description)
+        self.db.add(ct)
+        await self.db.flush()
+        await self.db.refresh(ct)
+        return ct
+
+    async def update_contract_type(self, ct_id: int, name: str | None, description: str | None) -> ContractType | None:
+        ct = await self.db.get(ContractType, ct_id)
+        if not ct:
+            return None
+        if name is not None:
+            ct.name = name
+        if description is not None:
+            ct.description = description
+        await self.db.flush()
+        return ct
+
+    async def delete_contract_type(self, ct_id: int) -> bool:
+        ct = await self.db.get(ContractType, ct_id)
+        if not ct:
+            return False
+        await self.db.delete(ct)
+        await self.db.flush()
+        return True
+
+    # ------------------------------------------------------------------
+    # InstitutionContracts
+    # ------------------------------------------------------------------
+
+    async def get_institution_contracts(self, institution_id: int) -> list[InstitutionContract]:
+        result = await self.db.execute(
+            select(InstitutionContract)
+            .where(InstitutionContract.institution_id == institution_id)
+            .options(
+                selectinload(InstitutionContract.administrator),
+                selectinload(InstitutionContract.contract),
+                selectinload(InstitutionContract.contract_type),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_pending_institution_contracts(self, institution_id: int) -> list[InstitutionContract]:
+        """Return institution_contracts where contract_type_id is NULL."""
+        result = await self.db.execute(
+            select(InstitutionContract)
+            .where(
+                InstitutionContract.institution_id == institution_id,
+                InstitutionContract.contract_type_id.is_(None),
+            )
+            .options(
+                selectinload(InstitutionContract.administrator),
+                selectinload(InstitutionContract.contract),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def upsert_institution_contract(
+        self,
+        institution_id: int,
+        administrator_id: int,
+        contract_id: int,
+        contract_type_id: int | None = None,
+    ) -> InstitutionContract:
+        stmt = (
+            pg_insert(InstitutionContract)
+            .values(
+                institution_id=institution_id,
+                administrator_id=administrator_id,
+                contract_id=contract_id,
+                contract_type_id=contract_type_id,
+            )
+            .on_conflict_do_nothing(
+                index_elements=["institution_id", "administrator_id", "contract_id"]
+            )
+            .returning(InstitutionContract)
+        )
+        result = await self.db.execute(stmt)
+        row = result.scalar_one_or_none()
+        if row is None:
+            result2 = await self.db.execute(
+                select(InstitutionContract).where(
+                    InstitutionContract.institution_id == institution_id,
+                    InstitutionContract.administrator_id == administrator_id,
+                    InstitutionContract.contract_id == contract_id,
                 )
             )
             row = result2.scalar_one()
         return row
 
-    async def set_contract_canonical(self, contract_id: int, canonical: str | None) -> None:
-        contract = await self.db.get(Contract, contract_id)
-        if contract:
-            contract.canonical_contract = canonical
+    async def set_contract_type(self, institution_contract_id: int, contract_type_id: int | None) -> None:
+        ic = await self.db.get(InstitutionContract, institution_contract_id)
+        if ic:
+            ic.contract_type_id = contract_type_id
             await self.db.flush()
+
+    async def create_institution_contract(
+        self,
+        institution_id: int,
+        administrator_id: int,
+        contract_id: int,
+        contract_type_id: int | None = None,
+    ) -> InstitutionContract:
+        ic = InstitutionContract(
+            institution_id=institution_id,
+            administrator_id=administrator_id,
+            contract_id=contract_id,
+            contract_type_id=contract_type_id,
+        )
+        self.db.add(ic)
+        await self.db.flush()
+        await self.db.refresh(ic)
+        return ic
+
+    async def delete_institution_contract(self, institution_contract_id: int) -> bool:
+        ic = await self.db.get(InstitutionContract, institution_contract_id)
+        if not ic:
+            return False
+        await self.db.delete(ic)
+        await self.db.flush()
+        return True
 
     # ------------------------------------------------------------------
     # Services
     # ------------------------------------------------------------------
 
     async def get_services(self, institution_id: int) -> list[Service]:
-        """Return all services for an institution (service_type_id is always set)."""
         result = await self.db.execute(
             select(Service)
             .where(Service.institution_id == institution_id)
@@ -154,7 +307,6 @@ class InstitutionRepo:
         return list(result.scalars().all())
 
     async def get_pending_services(self, institution_id: int) -> list[Service]:
-        """Return services whose service_type_id is NULL (not yet mapped by user)."""
         result = await self.db.execute(
             select(Service)
             .where(Service.institution_id == institution_id, Service.service_type_id.is_(None))
@@ -163,7 +315,6 @@ class InstitutionRepo:
         return list(result.scalars().all())
 
     async def upsert_service(self, institution_id: int, raw_service: str) -> Service:
-        """Insert service with NULL service_type_id if not exists; return existing row."""
         stmt = (
             pg_insert(Service)
             .values(institution_id=institution_id, raw_service=raw_service, service_type_id=None)
@@ -243,49 +394,6 @@ class InstitutionRepo:
     # ------------------------------------------------------------------
     # Create / Delete helpers
     # ------------------------------------------------------------------
-
-    async def create_admin(
-        self, institution_id: int, raw_admin: str, canonical_admin: str | None, type_: str | None
-    ) -> Admin:
-        admin = Admin(
-            institution_id=institution_id,
-            raw_admin=raw_admin,
-            canonical_admin=canonical_admin,
-            type=type_,
-        )
-        self.db.add(admin)
-        await self.db.flush()
-        await self.db.refresh(admin)
-        return admin
-
-    async def delete_admin(self, admin_id: int) -> bool:
-        admin = await self.db.get(Admin, admin_id)
-        if not admin:
-            return False
-        await self.db.delete(admin)
-        await self.db.flush()
-        return True
-
-    async def create_contract(
-        self, institution_id: int, raw_contract: str, canonical_contract: str | None
-    ) -> Contract:
-        contract = Contract(
-            institution_id=institution_id,
-            raw_contract=raw_contract,
-            canonical_contract=canonical_contract,
-        )
-        self.db.add(contract)
-        await self.db.flush()
-        await self.db.refresh(contract)
-        return contract
-
-    async def delete_contract(self, contract_id: int) -> bool:
-        contract = await self.db.get(Contract, contract_id)
-        if not contract:
-            return False
-        await self.db.delete(contract)
-        await self.db.flush()
-        return True
 
     async def create_service(
         self, institution_id: int, raw_service: str, service_type_id: int | None = None

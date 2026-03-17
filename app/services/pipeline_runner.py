@@ -378,18 +378,21 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
         )
         results = await executor(standardizer.run, invalid)
 
-        # Build invoice_number → admin_type map for the period (one query)
+        # Build invoice_number → contract_type_name map for the period (one query)
         _inv_admin_type: dict[str, str] = {}
         if period:
+            from app.models.institution import InstitutionContract as _IC
             _q = (
                 _select(_Invoice)
                 .where(_Invoice.audit_period_id == period.id)
-                .options(_selectinload(_Invoice.admin))
+                .options(
+                    _selectinload(_Invoice.institution_contract).selectinload(_IC.contract_type)
+                )
             )
             _rows = (await db.execute(_q)).scalars().all()
             for inv in _rows:
-                if inv.admin and inv.admin.type:
-                    _inv_admin_type[inv.invoice_number] = inv.admin.type
+                if inv.institution_contract and inv.institution_contract.contract_type:
+                    _inv_admin_type[inv.invoice_number] = inv.institution_contract.contract_type.name
 
         def _admin_type_for_folder(folder: str) -> str:
             """Exact match first, then substring (folder may have extra prefix)."""
@@ -927,7 +930,7 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
     from sqlalchemy.orm import selectinload
 
     from app.models.finding import MissingFile
-    from app.models.institution import Admin
+    from app.models.institution import InstitutionContract
     from app.models.invoice import Invoice
     from app.repositories.invoice_repo import InvoiceRepo
     from app.repositories.rules_repo import RulesRepo
@@ -950,7 +953,7 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
         select(Invoice)
         .where(Invoice.audit_period_id == period.id)
         .options(
-            selectinload(Invoice.admin),
+            selectinload(Invoice.institution_contract).selectinload(InstitutionContract.contract_type),
             selectinload(Invoice.service_type),
             selectinload(Invoice.missing_files).selectinload(MissingFile.doc_type),
         )
@@ -965,7 +968,7 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
             "id": inv.id,
             "invoice_number": inv.invoice_number,
             "service_type_id": inv.service_type_id,
-            "admin_type": inv.admin.type if inv.admin else None,
+            "admin_type": inv.institution_contract.contract_type.name if inv.institution_contract and inv.institution_contract.contract_type else None,
             "service_type": inv.service_type.display_name if inv.service_type else None,
             "faltantes": [
                 {
@@ -1193,17 +1196,18 @@ async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
             not_found += 1
             continue
 
-        if inv.admin and inv.admin.canonical_admin:
+        ic = inv.institution_contract
+        if ic and ic.administrator and ic.administrator.canonical_name:
             admin_name = (
-                f"{inv.admin.canonical_admin} ({inv.admin.type})"
-                if inv.admin.type
-                else inv.admin.canonical_admin
+                f"{ic.administrator.canonical_name} ({ic.contract_type.name})"
+                if ic.contract_type
+                else ic.administrator.canonical_name
             )
         else:
             admin_name = "SIN ADMINISTRADORA"
         contract_name = (
-            inv.contract.canonical_contract
-            if inv.contract and inv.contract.canonical_contract
+            ic.contract.canonical_name
+            if ic and ic.contract and ic.contract.canonical_name
             else None
         )
         dest = (

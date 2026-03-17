@@ -1,7 +1,9 @@
-"""ORM models for institutions, admins, contracts, services, and service-type-document mappings."""
+"""ORM models for institutions, administrators, contracts, contract types, services, and service-type-document mappings."""
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Integer, LargeBinary, String, UniqueConstraint
+import datetime
+
+from sqlalchemy import DateTime, ForeignKey, Integer, LargeBinary, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from app.models.base import Base
@@ -23,36 +25,55 @@ class Institution(Base):
     logo_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True, default=None)
     logo_content_type: Mapped[str | None] = mapped_column(String(50), default=None)
 
-    admins: Mapped[list[Admin]] = relationship(back_populates="institution", cascade="all, delete-orphan")
-    contracts: Mapped[list[Contract]] = relationship(back_populates="institution", cascade="all, delete-orphan")
+    institution_contracts: Mapped[list[InstitutionContract]] = relationship(back_populates="institution", cascade="all, delete-orphan")
     services: Mapped[list[Service]] = relationship(back_populates="institution", cascade="all, delete-orphan")
     periods: Mapped[list[AuditPeriod]] = relationship(back_populates="institution", cascade="all, delete-orphan")
     service_type_documents: Mapped[list[ServiceTypeDocument]] = relationship(back_populates="institution", cascade="all, delete-orphan")
 
 
-class Admin(Base):
-    __tablename__ = "admins"
-    __table_args__ = (UniqueConstraint("institution_id", "raw_admin"),)
+class ContractType(Base):
+    """Global contract type (EPS, SOAT, ARL, etc.) — assigned manually by user."""
+    __tablename__ = "contract_types"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    institution_id: Mapped[int] = mapped_column(ForeignKey("institutions.id", ondelete="CASCADE"))
-    type: Mapped[str | None] = mapped_column(String(20))   # EPS | SOAT | ARL | NULL
-    raw_admin: Mapped[str] = mapped_column(String(300), nullable=False)
-    canonical_admin: Mapped[str | None] = mapped_column(String(300))
+    name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    description: Mapped[str | None] = mapped_column(String(200))
 
-    institution: Mapped[Institution] = relationship(back_populates="admins")
+
+class Administrator(Base):
+    """Global administrator — same company shared across institutions."""
+    __tablename__ = "administrators"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raw_name: Mapped[str] = mapped_column(String(300), unique=True, nullable=False)
+    canonical_name: Mapped[str | None] = mapped_column(String(300))
 
 
 class Contract(Base):
+    """Global contract — same contract identifier shared across institutions."""
     __tablename__ = "contracts"
-    __table_args__ = (UniqueConstraint("institution_id", "raw_contract"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raw_name: Mapped[str] = mapped_column(String(300), unique=True, nullable=False)
+    canonical_name: Mapped[str | None] = mapped_column(String(300))
+
+
+class InstitutionContract(Base):
+    """Links an institution to an administrator+contract pair, with an optional contract type."""
+    __tablename__ = "institution_contracts"
+    __table_args__ = (UniqueConstraint("institution_id", "administrator_id", "contract_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     institution_id: Mapped[int] = mapped_column(ForeignKey("institutions.id", ondelete="CASCADE"))
-    raw_contract: Mapped[str] = mapped_column(String(300), nullable=False)
-    canonical_contract: Mapped[str | None] = mapped_column(String(300))
+    administrator_id: Mapped[int] = mapped_column(ForeignKey("administrators.id"))
+    contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id"))
+    contract_type_id: Mapped[int | None] = mapped_column(ForeignKey("contract_types.id"), nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
 
-    institution: Mapped[Institution] = relationship(back_populates="contracts")
+    institution: Mapped[Institution] = relationship(back_populates="institution_contracts")
+    administrator: Mapped[Administrator] = relationship()
+    contract: Mapped[Contract] = relationship()
+    contract_type: Mapped[ContractType | None] = relationship()
 
 
 class Service(Base):

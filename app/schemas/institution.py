@@ -1,4 +1,4 @@
-"""Pydantic schemas for institutions, admins, contracts, and services."""
+"""Pydantic schemas for institutions, administrators, contracts, contract_types, institution_contracts, and services."""
 from pydantic import BaseModel
 
 
@@ -43,33 +43,100 @@ class InstitutionOut(BaseModel):
     # NOTE: sihos_password and drive_credentials_enc are never exposed
 
 
-class AdminOut(BaseModel):
+# ------------------------------------------------------------------
+# ContractType
+# ------------------------------------------------------------------
+
+class ContractTypeOut(BaseModel):
     model_config = {"from_attributes": True}
 
     id: int
-    institution_id: int
-    type: str | None
-    raw_admin: str
-    canonical_admin: str | None
+    name: str
+    description: str | None
 
 
-class AdminUpdate(BaseModel):
-    canonical_admin: str | None = None
-    type: str | None = None
+class ContractTypeCreate(BaseModel):
+    name: str
+    description: str | None = None
 
+
+class ContractTypeUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+# ------------------------------------------------------------------
+# Administrator (global)
+# ------------------------------------------------------------------
+
+class AdministratorOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    raw_name: str
+    canonical_name: str | None
+
+
+class AdministratorCreate(BaseModel):
+    raw_name: str
+    canonical_name: str | None = None
+
+
+class AdministratorUpdate(BaseModel):
+    canonical_name: str | None = None
+
+
+# ------------------------------------------------------------------
+# Contract (global)
+# ------------------------------------------------------------------
 
 class ContractOut(BaseModel):
     model_config = {"from_attributes": True}
 
     id: int
-    institution_id: int
-    raw_contract: str
-    canonical_contract: str | None
+    raw_name: str
+    canonical_name: str | None
+
+
+class ContractCreate(BaseModel):
+    raw_name: str
+    canonical_name: str | None = None
 
 
 class ContractUpdate(BaseModel):
-    canonical_contract: str | None = None
+    canonical_name: str | None = None
 
+
+# ------------------------------------------------------------------
+# InstitutionContract
+# ------------------------------------------------------------------
+
+class InstitutionContractOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    institution_id: int
+    administrator_id: int
+    contract_id: int
+    contract_type_id: int | None
+    administrator: AdministratorOut | None = None
+    contract: ContractOut | None = None
+    contract_type: ContractTypeOut | None = None
+
+
+class InstitutionContractCreate(BaseModel):
+    administrator_id: int
+    contract_id: int
+    contract_type_id: int | None = None
+
+
+class InstitutionContractUpdate(BaseModel):
+    contract_type_id: int | None = None
+
+
+# ------------------------------------------------------------------
+# Service
+# ------------------------------------------------------------------
 
 class ServiceOut(BaseModel):
     model_config = {"from_attributes": True}
@@ -82,17 +149,6 @@ class ServiceOut(BaseModel):
 
 class ServiceUpdate(BaseModel):
     service_type_id: int | None = None
-
-
-class AdminCreate(BaseModel):
-    raw_admin: str
-    canonical_admin: str | None = None
-    type: str | None = None  # EPS | SOAT | ARL | OTRO
-
-
-class ContractCreate(BaseModel):
-    raw_contract: str
-    canonical_contract: str | None = None
 
 
 class ServiceCreate(BaseModel):

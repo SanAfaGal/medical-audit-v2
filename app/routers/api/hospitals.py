@@ -10,15 +10,21 @@ _ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp", "image/avif", "image/g
 
 from app import crypto
 from app.database import get_db
-from app.models.institution import Admin, Contract, Institution, Service
+from app.models.institution import Administrator, Contract, ContractType, Institution, InstitutionContract, Service
 from app.repositories.institution_repo import InstitutionRepo
 from app.schemas.institution import (
-    AdminCreate,
-    AdminOut,
-    AdminUpdate,
+    AdministratorCreate,
+    AdministratorOut,
+    AdministratorUpdate,
     ContractCreate,
     ContractOut,
+    ContractTypeCreate,
+    ContractTypeOut,
+    ContractTypeUpdate,
     ContractUpdate,
+    InstitutionContractCreate,
+    InstitutionContractOut,
+    InstitutionContractUpdate,
     InstitutionCreate,
     InstitutionOut,
     InstitutionUpdate,
@@ -156,48 +162,108 @@ async def update_institution(
 
 
 # ------------------------------------------------------------------
-# Admins sub-resource
+# ContractTypes (global)
 # ------------------------------------------------------------------
 
-@router.get("/{institution_id}/admins", response_model=list[AdminOut])
-async def list_admins(
-    institution_id: int, pending_only: bool = False, db: AsyncSession = Depends(get_db)
+@router.get("/contract-types", response_model=list[ContractTypeOut])
+async def list_contract_types(db: AsyncSession = Depends(get_db)):
+    repo = InstitutionRepo(db)
+    return await repo.get_all_contract_types()
+
+
+@router.post("/contract-types", response_model=ContractTypeOut, status_code=201)
+async def create_contract_type(data: ContractTypeCreate, db: AsyncSession = Depends(get_db)):
+    repo = InstitutionRepo(db)
+    ct = await repo.create_contract_type(data.name, data.description)
+    await db.commit()
+    return ct
+
+
+@router.patch("/contract-types/{ct_id}", response_model=ContractTypeOut)
+async def update_contract_type(
+    ct_id: int, data: ContractTypeUpdate, db: AsyncSession = Depends(get_db)
 ):
     repo = InstitutionRepo(db)
-    institution = await repo.get_by_id(institution_id)
-    if not institution:
-        raise HTTPException(404, "Institución no encontrada")
-    if pending_only:
-        return await repo.get_pending_admins(institution_id)
-    return await repo.get_admins(institution_id)
-
-
-@router.patch("/admins/{admin_id}", response_model=AdminOut)
-async def update_admin(admin_id: int, data: AdminUpdate, db: AsyncSession = Depends(get_db)):
-    repo = InstitutionRepo(db)
-    await repo.set_admin_canonical(admin_id, data.canonical_admin, data.type)
+    ct = await repo.update_contract_type(ct_id, data.name, data.description)
+    if not ct:
+        raise HTTPException(404, "Tipo de contrato no encontrado")
     await db.commit()
-    admin = await db.get(Admin, admin_id)
+    return ct
+
+
+@router.delete("/contract-types/{ct_id}", status_code=204)
+async def delete_contract_type(ct_id: int, db: AsyncSession = Depends(get_db)):
+    repo = InstitutionRepo(db)
+    deleted = await repo.delete_contract_type(ct_id)
+    if not deleted:
+        raise HTTPException(404, "Tipo de contrato no encontrado")
+    await db.commit()
+
+
+# ------------------------------------------------------------------
+# Administrators (global)
+# ------------------------------------------------------------------
+
+@router.get("/administrators", response_model=list[AdministratorOut])
+async def list_administrators(
+    pending_only: bool = False, db: AsyncSession = Depends(get_db)
+):
+    repo = InstitutionRepo(db)
+    if pending_only:
+        return await repo.get_pending_administrators()
+    return await repo.get_all_administrators()
+
+
+@router.post("/administrators", response_model=AdministratorOut, status_code=201)
+async def create_administrator(data: AdministratorCreate, db: AsyncSession = Depends(get_db)):
+    repo = InstitutionRepo(db)
+    admin = await repo.create_administrator(data.raw_name, data.canonical_name)
+    await db.commit()
+    return admin
+
+
+@router.patch("/administrators/{administrator_id}", response_model=AdministratorOut)
+async def update_administrator(
+    administrator_id: int, data: AdministratorUpdate, db: AsyncSession = Depends(get_db)
+):
+    repo = InstitutionRepo(db)
+    await repo.set_administrator_canonical(administrator_id, data.canonical_name)
+    await db.commit()
+    admin = await db.get(Administrator, administrator_id)
     if not admin:
         raise HTTPException(404, "Administradora no encontrada")
     return admin
 
 
+@router.delete("/administrators/{administrator_id}", status_code=204)
+async def delete_administrator(administrator_id: int, db: AsyncSession = Depends(get_db)):
+    repo = InstitutionRepo(db)
+    deleted = await repo.delete_administrator(administrator_id)
+    if not deleted:
+        raise HTTPException(404, "Administradora no encontrada")
+    await db.commit()
+
+
 # ------------------------------------------------------------------
-# Contracts sub-resource
+# Contracts (global)
 # ------------------------------------------------------------------
 
-@router.get("/{institution_id}/contracts", response_model=list[ContractOut])
+@router.get("/contracts", response_model=list[ContractOut])
 async def list_contracts(
-    institution_id: int, pending_only: bool = False, db: AsyncSession = Depends(get_db)
+    pending_only: bool = False, db: AsyncSession = Depends(get_db)
 ):
     repo = InstitutionRepo(db)
-    institution = await repo.get_by_id(institution_id)
-    if not institution:
-        raise HTTPException(404, "Institución no encontrada")
     if pending_only:
-        return await repo.get_pending_contracts(institution_id)
-    return await repo.get_contracts(institution_id)
+        return await repo.get_pending_contracts()
+    return await repo.get_all_contracts()
+
+
+@router.post("/contracts", response_model=ContractOut, status_code=201)
+async def create_contract(data: ContractCreate, db: AsyncSession = Depends(get_db)):
+    repo = InstitutionRepo(db)
+    contract = await repo.create_contract(data.raw_name, data.canonical_name)
+    await db.commit()
+    return contract
 
 
 @router.patch("/contracts/{contract_id}", response_model=ContractOut)
@@ -205,12 +271,91 @@ async def update_contract(
     contract_id: int, data: ContractUpdate, db: AsyncSession = Depends(get_db)
 ):
     repo = InstitutionRepo(db)
-    await repo.set_contract_canonical(contract_id, data.canonical_contract)
+    await repo.set_contract_canonical(contract_id, data.canonical_name)
     await db.commit()
     contract = await db.get(Contract, contract_id)
     if not contract:
         raise HTTPException(404, "Contrato no encontrado")
     return contract
+
+
+@router.delete("/contracts/{contract_id}", status_code=204)
+async def delete_contract(contract_id: int, db: AsyncSession = Depends(get_db)):
+    repo = InstitutionRepo(db)
+    deleted = await repo.delete_contract(contract_id)
+    if not deleted:
+        raise HTTPException(404, "Contrato no encontrado")
+    await db.commit()
+
+
+# ------------------------------------------------------------------
+# InstitutionContracts sub-resource
+# ------------------------------------------------------------------
+
+@router.get("/{institution_id}/institution-contracts", response_model=list[InstitutionContractOut])
+async def list_institution_contracts(
+    institution_id: int,
+    pending_only: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    repo = InstitutionRepo(db)
+    institution = await repo.get_by_id(institution_id)
+    if not institution:
+        raise HTTPException(404, "Institución no encontrada")
+    if pending_only:
+        return await repo.get_pending_institution_contracts(institution_id)
+    return await repo.get_institution_contracts(institution_id)
+
+
+@router.post(
+    "/{institution_id}/institution-contracts",
+    response_model=InstitutionContractOut,
+    status_code=201,
+)
+async def create_institution_contract(
+    institution_id: int,
+    data: InstitutionContractCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    repo = InstitutionRepo(db)
+    institution = await repo.get_by_id(institution_id)
+    if not institution:
+        raise HTTPException(404, "Institución no encontrada")
+    ic = await repo.create_institution_contract(
+        institution_id, data.administrator_id, data.contract_id, data.contract_type_id
+    )
+    await db.commit()
+    await db.refresh(ic)
+    return ic
+
+
+@router.patch(
+    "/institution-contracts/{institution_contract_id}",
+    response_model=InstitutionContractOut,
+)
+async def update_institution_contract(
+    institution_contract_id: int,
+    data: InstitutionContractUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    repo = InstitutionRepo(db)
+    await repo.set_contract_type(institution_contract_id, data.contract_type_id)
+    await db.commit()
+    ic = await db.get(InstitutionContract, institution_contract_id)
+    if not ic:
+        raise HTTPException(404, "Vínculo institución-contrato no encontrado")
+    return ic
+
+
+@router.delete("/institution-contracts/{institution_contract_id}", status_code=204)
+async def delete_institution_contract(
+    institution_contract_id: int, db: AsyncSession = Depends(get_db)
+):
+    repo = InstitutionRepo(db)
+    deleted = await repo.delete_institution_contract(institution_contract_id)
+    if not deleted:
+        raise HTTPException(404, "Vínculo institución-contrato no encontrado")
+    await db.commit()
 
 
 # ------------------------------------------------------------------
@@ -289,73 +434,6 @@ async def delete_service_type_document(
 
 
 # ------------------------------------------------------------------
-# Institution delete
-# ------------------------------------------------------------------
-
-@router.delete("/{institution_id}", status_code=204)
-async def delete_institution(institution_id: int, db: AsyncSession = Depends(get_db)):
-    repo = InstitutionRepo(db)
-    deleted = await repo.delete_institution(institution_id)
-    if not deleted:
-        raise HTTPException(404, "Institución no encontrada")
-    await db.commit()
-
-
-# ------------------------------------------------------------------
-# Admin create / delete
-# ------------------------------------------------------------------
-
-@router.post("/{institution_id}/admins", response_model=AdminOut, status_code=201)
-async def create_admin(
-    institution_id: int, data: AdminCreate, db: AsyncSession = Depends(get_db)
-):
-    repo = InstitutionRepo(db)
-    inst = await repo.get_by_id(institution_id)
-    if not inst:
-        raise HTTPException(404, "Institución no encontrada")
-    admin = await repo.create_admin(institution_id, data.raw_admin, data.canonical_admin, data.type)
-    await db.commit()
-    return admin
-
-
-@router.delete("/admins/{admin_id}", status_code=204)
-async def delete_admin(admin_id: int, db: AsyncSession = Depends(get_db)):
-    repo = InstitutionRepo(db)
-    deleted = await repo.delete_admin(admin_id)
-    if not deleted:
-        raise HTTPException(404, "Administradora no encontrada")
-    await db.commit()
-
-
-# ------------------------------------------------------------------
-# Contract create / delete
-# ------------------------------------------------------------------
-
-@router.post("/{institution_id}/contracts", response_model=ContractOut, status_code=201)
-async def create_contract(
-    institution_id: int, data: ContractCreate, db: AsyncSession = Depends(get_db)
-):
-    repo = InstitutionRepo(db)
-    inst = await repo.get_by_id(institution_id)
-    if not inst:
-        raise HTTPException(404, "Institución no encontrada")
-    contract = await repo.create_contract(
-        institution_id, data.raw_contract, data.canonical_contract
-    )
-    await db.commit()
-    return contract
-
-
-@router.delete("/contracts/{contract_id}", status_code=204)
-async def delete_contract(contract_id: int, db: AsyncSession = Depends(get_db)):
-    repo = InstitutionRepo(db)
-    deleted = await repo.delete_contract(contract_id)
-    if not deleted:
-        raise HTTPException(404, "Contrato no encontrado")
-    await db.commit()
-
-
-# ------------------------------------------------------------------
 # Service create / delete
 # ------------------------------------------------------------------
 
@@ -378,4 +456,17 @@ async def delete_service(service_id: int, db: AsyncSession = Depends(get_db)):
     deleted = await repo.delete_service(service_id)
     if not deleted:
         raise HTTPException(404, "Servicio no encontrado")
+    await db.commit()
+
+
+# ------------------------------------------------------------------
+# Institution delete
+# ------------------------------------------------------------------
+
+@router.delete("/{institution_id}", status_code=204)
+async def delete_institution(institution_id: int, db: AsyncSession = Depends(get_db)):
+    repo = InstitutionRepo(db)
+    deleted = await repo.delete_institution(institution_id)
+    if not deleted:
+        raise HTTPException(404, "Institución no encontrada")
     await db.commit()
