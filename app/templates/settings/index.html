@@ -349,25 +349,20 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════════
-         TAB: MAPEOS
+         TAB: NORMALIZACIÓN
     ══════════════════════════════════════════════════════════ -->
-    <div x-show="tab === 'mapeos'" class="space-y-4">
-
-      <!-- No institution selected — only for institution-scoped sub-tabs -->
-      <template x-if="!$store.ctx.institutionId && (mapSubTab === 'services' || mapSubTab === 'stdocs')">
-        <div class="no-inst-banner">
-          <i class="fa-solid fa-triangle-exclamation shrink-0"></i>
-          <span>Selecciona una institución en el menú lateral para ver Servicios y Docs × Servicio.</span>
-        </div>
-      </template>
-
+    <div x-show="tab === 'normalizacion'" class="space-y-4">
       <div class="cfg-card">
         <!-- Sub-tabs -->
         <div class="flex" style="border-bottom:1px solid var(--border);background:var(--bg-subtle)">
-          <template x-for="st in [{id:'admins',icon:'fa-user-shield',label:'Administradoras'},{id:'contracts',icon:'fa-file-contract',label:'Contratos'},{id:'services',icon:'fa-briefcase-medical',label:'Servicios'},{id:'stdocs',icon:'fa-file-circle-check',label:'Docs × Servicio'}]" :key="st.id">
-            <button @click="mapSubTab = st.id"
+          <template x-for="st in [
+            {id:'admins',    icon:'fa-user-shield',   label:'Administradoras'},
+            {id:'contracts', icon:'fa-file-contract', label:'Contratos'},
+            {id:'agreements',icon:'fa-handshake',     label:'Convenios'}
+          ]" :key="st.id">
+            <button @click="normSubTab = st.id"
                     class="px-4 py-2.5 text-xs font-medium transition-colors"
-                    :style="mapSubTab === st.id
+                    :style="normSubTab === st.id
                       ? 'border-bottom:2px solid var(--sky);color:var(--sky);margin-bottom:-1px;background:var(--bg-surface)'
                       : 'color:var(--text-2);border-bottom:2px solid transparent'">
               <i :class="'fa-solid ' + st.icon + ' mr-1.5'"></i>
@@ -377,9 +372,8 @@
         </div>
 
         <!-- Admins — crudPanel -->
-        <div x-show="mapSubTab === 'admins'"
+        <div x-show="normSubTab === 'admins'"
              x-data="crudPanel({apiBase:'/api/institutions/administrators', label:'Administradora', icon:'fa-user-shield'})">
-          <!-- Header bar -->
           <div class="flex items-center gap-2 px-4 py-2.5 flex-wrap" style="border-bottom:1px solid var(--border)">
             <i class="fa-solid fa-user-shield" style="color:var(--sky);font-size:.8rem"></i>
             <span class="text-sm font-semibold" style="color:var(--text-1)">Administradoras</span>
@@ -390,7 +384,6 @@
               <i class="fa-solid fa-plus text-xs"></i>Nueva
             </button>
           </div>
-          <!-- Empty / loading states -->
           <div x-show="loading" class="py-10 text-center text-sm" style="color:var(--text-3)">
             <i class="fa-solid fa-spinner fa-spin text-xl mb-2 block"></i>Cargando…
           </div>
@@ -400,7 +393,6 @@
           <div x-show="!loading && items.length > 0 && filtered.length === 0" class="py-10 text-center text-sm" style="color:var(--text-3)">
             <i class="fa-solid fa-magnifying-glass text-xl mb-2 block"></i>Sin resultados para "<span x-text="search"></span>"
           </div>
-          <!-- Table -->
           <table class="cfg-table w-full" x-show="!loading && filtered.length > 0">
             <thead><tr><th>Raw</th><th>Nombre Canónico</th><th>Estado</th><th></th></tr></thead>
             <tbody>
@@ -422,7 +414,6 @@
               </template>
             </tbody>
           </table>
-          <!-- Create/Edit Modal -->
           <div x-show="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,.45);display:none" @click.self="closeModal()">
             <div class="cfg-card w-full max-w-md mx-4" @keydown.escape.window="closeModal()" @keydown.enter.window="saveModal()">
               <div class="cfg-card-header">
@@ -451,7 +442,6 @@
               </div>
             </div>
           </div>
-          <!-- Delete Modal -->
           <div x-show="deleteModalOpen" class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,.45);display:none" @click.self="cancelDelete()">
             <div class="cfg-card w-full max-w-sm mx-4">
               <div class="cfg-card-header">
@@ -469,10 +459,9 @@
           </div>
         </div>
 
-        <!-- Contracts — crudPanel -->
-        <div x-show="mapSubTab === 'contracts'"
+        <!-- Contratos — crudPanel -->
+        <div x-show="normSubTab === 'contracts'"
              x-data="crudPanel({apiBase:'/api/institutions/contracts', label:'Contrato', icon:'fa-file-contract'})">
-          <!-- Header bar -->
           <div class="flex items-center gap-2 px-4 py-2.5 flex-wrap" style="border-bottom:1px solid var(--border)">
             <i class="fa-solid fa-file-contract" style="color:var(--sky);font-size:.8rem"></i>
             <span class="text-sm font-semibold" style="color:var(--text-1)">Contratos</span>
@@ -483,7 +472,6 @@
               <i class="fa-solid fa-plus text-xs"></i>Nuevo
             </button>
           </div>
-          <!-- Empty / loading states -->
           <div x-show="loading" class="py-10 text-center text-sm" style="color:var(--text-3)">
             <i class="fa-solid fa-spinner fa-spin text-xl mb-2 block"></i>Cargando…
           </div>
@@ -493,7 +481,6 @@
           <div x-show="!loading && items.length > 0 && filtered.length === 0" class="py-10 text-center text-sm" style="color:var(--text-3)">
             <i class="fa-solid fa-magnifying-glass text-xl mb-2 block"></i>Sin resultados para "<span x-text="search"></span>"
           </div>
-          <!-- Table -->
           <table class="cfg-table w-full" x-show="!loading && filtered.length > 0">
             <thead><tr><th>Raw</th><th>Nombre Canónico</th><th>Estado</th><th></th></tr></thead>
             <tbody>
@@ -515,7 +502,6 @@
               </template>
             </tbody>
           </table>
-          <!-- Create/Edit Modal -->
           <div x-show="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,.45);display:none" @click.self="closeModal()">
             <div class="cfg-card w-full max-w-md mx-4" @keydown.escape.window="closeModal()" @keydown.enter.window="saveModal()">
               <div class="cfg-card-header">
@@ -544,7 +530,6 @@
               </div>
             </div>
           </div>
-          <!-- Delete Modal -->
           <div x-show="deleteModalOpen" class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,.45);display:none" @click.self="cancelDelete()">
             <div class="cfg-card w-full max-w-sm mx-4">
               <div class="cfg-card-header">
@@ -560,6 +545,120 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Convenios -->
+        <div x-show="normSubTab === 'agreements'" class="p-0">
+          <!-- Header bar -->
+          <div class="flex items-center gap-2 px-4 py-2.5 flex-wrap" style="border-bottom:1px solid var(--border)">
+            <i class="fa-solid fa-handshake" style="color:var(--sky);font-size:.8rem"></i>
+            <span class="text-sm font-semibold" style="color:var(--text-1)">Convenios</span>
+            <span class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--bg-subtle);color:var(--text-3);border:1px solid var(--border)"
+                  x-text="agreements.length + ' total'"></span>
+            <span x-show="agreements.filter(a => !a.contract_type_id).length > 0"
+                  class="text-[11px] px-2 py-0.5 rounded-full font-semibold"
+                  style="background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber-border)"
+                  x-text="agreements.filter(a => !a.contract_type_id).length + ' sin tipo'"></span>
+            <label class="ml-auto flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" x-model="normPendingOnly" class="w-3.5 h-3.5 rounded cursor-pointer" style="accent-color:var(--amber)" />
+              <span class="text-xs" style="color:var(--text-2)">Solo pendientes</span>
+            </label>
+          </div>
+          <!-- Empty state -->
+          <div x-show="agreements.length === 0" class="py-10 text-center text-sm" style="color:var(--text-3)">
+            <i class="fa-solid fa-handshake text-xl mb-2 block"></i>No hay convenios registrados aún.<br>
+            <span class="text-xs mt-1 block">Se crean automáticamente al ingestar facturas del SIHOS.</span>
+          </div>
+          <div x-show="agreements.length > 0 && filteredAgreements.length === 0" class="py-8 text-center text-sm" style="color:var(--text-3)">
+            <i class="fa-solid fa-circle-check text-xl mb-2 block" style="color:var(--emerald)"></i>
+            Todos los convenios tienen tipo asignado.
+          </div>
+          <!-- Grouped table -->
+          <div x-show="filteredAgreements.length > 0">
+            <template x-for="group in groupedAgreements" :key="group.label">
+              <div>
+                <!-- Group header -->
+                <div class="flex items-center gap-2 px-4 py-2 sticky top-0 z-10"
+                     style="background:var(--bg-subtle);border-bottom:1px solid var(--border);border-top:1px solid var(--border)">
+                  <i class="fa-solid fa-user-shield text-[10px]" style="color:var(--sky)"></i>
+                  <span class="text-xs font-bold" style="color:var(--text-1)" x-text="group.label"></span>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold ml-1"
+                        style="background:var(--bg-surface);border:1px solid var(--border);color:var(--text-3)"
+                        x-text="group.items.length + (group.items.length === 1 ? ' convenio' : ' convenios')"></span>
+                </div>
+                <!-- Agreements in this group -->
+                <table class="cfg-table w-full">
+                  <thead>
+                    <tr>
+                      <th>Contrato</th>
+                      <th style="min-width:180px">Tipo de convenio</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="ag in group.items" :key="ag.id">
+                      <tr>
+                        <td>
+                          <div class="text-xs font-medium" style="color:var(--text-1)"
+                               x-text="ag.contract?.canonical_name || ag.contract?.raw_name || '—'"></div>
+                          <div x-show="ag.contract?.canonical_name && ag.contract?.raw_name !== ag.contract?.canonical_name"
+                               class="font-mono text-[10px] mt-0.5 truncate max-w-[260px]"
+                               style="color:var(--text-3)" x-text="ag.contract?.raw_name"></div>
+                        </td>
+                        <td>
+                          <div class="flex items-center gap-2">
+                            <select
+                              @change="setAgreementType(ag.id, $event.target.value || null)"
+                              :disabled="savingAgreementId === ag.id"
+                              class="cfg-input-sm"
+                              :class="savingAgreementId === ag.id ? 'opacity-50' : ''"
+                              :style="!ag.contract_type_id ? 'border-color:var(--amber-border);color:var(--amber)' : 'border-color:var(--emerald-border);color:var(--emerald)'">
+                              <option value="" :selected="!ag.contract_type_id" style="color:var(--text-3)">— Sin tipo —</option>
+                              <template x-for="ct in contractTypes" :key="ct.id">
+                                <option :value="ct.id" :selected="ct.id === ag.contract_type_id" x-text="ct.name"></option>
+                              </template>
+                            </select>
+                            <i x-show="savingAgreementId === ag.id" class="fa-solid fa-spinner fa-spin text-xs" style="color:var(--text-3)"></i>
+                            <i x-show="ag.contract_type_id && savingAgreementId !== ag.id" class="fa-solid fa-circle-check text-xs" style="color:var(--emerald)"></i>
+                          </div>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         TAB: MAPEOS
+    ══════════════════════════════════════════════════════════ -->
+    <div x-show="tab === 'mapeos'" class="space-y-4">
+
+      <!-- No institution selected -->
+      <template x-if="!$store.ctx.institutionId">
+        <div class="no-inst-banner">
+          <i class="fa-solid fa-triangle-exclamation shrink-0"></i>
+          <span>Selecciona una institución en el menú lateral para ver Servicios y Docs × Servicio.</span>
+        </div>
+      </template>
+
+      <div class="cfg-card">
+        <!-- Sub-tabs -->
+        <div class="flex" style="border-bottom:1px solid var(--border);background:var(--bg-subtle)">
+          <template x-for="st in [{id:'services',icon:'fa-briefcase-medical',label:'Servicios'},{id:'stdocs',icon:'fa-file-circle-check',label:'Docs × Servicio'}]" :key="st.id">
+            <button @click="mapSubTab = st.id"
+                    class="px-4 py-2.5 text-xs font-medium transition-colors"
+                    :style="mapSubTab === st.id
+                      ? 'border-bottom:2px solid var(--sky);color:var(--sky);margin-bottom:-1px;background:var(--bg-surface)'
+                      : 'color:var(--text-2);border-bottom:2px solid transparent'">
+              <i :class="'fa-solid ' + st.icon + ' mr-1.5'"></i>
+              <span x-text="st.label"></span>
+            </button>
+          </template>
         </div>
 
         <!-- Services -->
@@ -1269,6 +1368,7 @@ function settingsApp() {
 
     navTabs: [
       { id: 'instituciones', icon: 'fa-hospital',          label: 'Instituciones', scope: 'global'      },
+      { id: 'normalizacion', icon: 'fa-shuffle',           label: 'Normalización', scope: 'global'      },
       { id: 'reglas',        icon: 'fa-sliders',            label: 'Reglas',        scope: 'global'      },
       { id: 'sistema',       icon: 'fa-gear',               label: 'Sistema',       scope: 'global'      },
       { id: 'mapeos',        icon: 'fa-arrows-left-right',  label: 'Mapeos',        scope: 'institution' },
@@ -1287,8 +1387,15 @@ function settingsApp() {
     driveCredsError: '',
     form: { name:'', display_name:'', nit:'', invoice_id_prefix:'', sihos_base_url:'', sihos_doc_code:'', sihos_user:'', sihos_password:'' },
 
+    // Normalización (global)
+    normSubTab: 'admins',
+    agreements: [],
+    contractTypes: [],
+    normPendingOnly: false,
+    savingAgreementId: null,
+
     // Mapeos
-    mapSubTab: 'admins',
+    mapSubTab: 'services',
     allServices: [], serviceTypeDocs: [],
     editingServiceId: null, editingServiceTypeId: '',
     confirmDeleteServiceId: null,
@@ -1337,7 +1444,8 @@ function settingsApp() {
       const sys = await sysRes.json();
       this.systemSettings = { audit_data_root: sys.audit_data_root || '' };
 
-      // Load global mappings (admins/contracts) on init
+      // Load global normalization data on init
+      if (this.tab === 'normalizacion') this.loadNormalization();
       if (this.tab === 'mapeos') this.loadMappings();
 
       // Reload tab data when the sidebar institution changes
@@ -1355,6 +1463,7 @@ function settingsApp() {
     switchTab(t) {
       this.tab = t;
       const instId = this.$store.ctx.institutionId;
+      if (t === 'normalizacion') this.loadNormalization();
       if (t === 'mapeos') this.loadMappings();
       if (t === 'periodos' && instId) this.loadPeriods();
     },
@@ -1460,6 +1569,55 @@ function settingsApp() {
         this.driveCredsError = err.detail || 'Error al guardar credenciales.';
         this.showToast(this.driveCredsError, 'error');
       }
+    },
+
+    // ---- NORMALIZACIÓN ----
+    async loadNormalization() {
+      const [agRes, ctRes] = await Promise.all([
+        fetch('/api/institutions/agreements'),
+        fetch('/api/institutions/contract-types'),
+      ]);
+      this.agreements = await agRes.json();
+      this.contractTypes = await ctRes.json();
+    },
+
+    get filteredAgreements() {
+      if (this.normPendingOnly) return this.agreements.filter(a => !a.contract_type_id);
+      return this.agreements;
+    },
+
+    get groupedAgreements() {
+      const list = this.filteredAgreements;
+      const groups = {};
+      for (const ag of list) {
+        const key = ag.administrator?.canonical_name || ag.administrator?.raw_name || '—';
+        if (!groups[key]) groups[key] = { label: key, items: [] };
+        groups[key].items.push(ag);
+      }
+      return Object.values(groups).sort((a, b) => a.label.localeCompare(b.label));
+    },
+
+    async setAgreementType(agreementId, contractTypeId) {
+      this.savingAgreementId = agreementId;
+      const res = await fetch(`/api/institutions/agreements/${agreementId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contract_type_id: contractTypeId ? parseInt(contractTypeId) : null }),
+      });
+      this.savingAgreementId = null;
+      if (res.ok) {
+        const idx = this.agreements.findIndex(a => a.id === agreementId);
+        if (idx >= 0) this.agreements[idx].contract_type_id = contractTypeId ? parseInt(contractTypeId) : null;
+        this.showToast('Tipo de convenio actualizado.');
+      } else {
+        this.showToast('Error al actualizar.', 'error');
+      }
+    },
+
+    ctName(id) {
+      if (!id) return null;
+      const ct = this.contractTypes.find(c => c.id === id || c.id === parseInt(id));
+      return ct ? ct.name : `#${id}`;
     },
 
     // ---- MAPEOS ----

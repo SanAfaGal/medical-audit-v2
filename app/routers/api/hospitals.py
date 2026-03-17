@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 _ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp", "image/avif", "image/gif"}
 
@@ -296,7 +297,16 @@ async def update_agreement(
     repo = InstitutionRepo(db)
     await repo.set_agreement_contract_type(agreement_id, data.contract_type_id)
     await db.commit()
-    ag = await db.get(Agreement, agreement_id)
+    result = await db.execute(
+        select(Agreement)
+        .where(Agreement.id == agreement_id)
+        .options(
+            selectinload(Agreement.administrator),
+            selectinload(Agreement.contract),
+            selectinload(Agreement.contract_type),
+        )
+    )
+    ag = result.scalar_one_or_none()
     if not ag:
         raise HTTPException(404, "Acuerdo no encontrado")
     return ag
