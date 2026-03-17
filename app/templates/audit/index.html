@@ -367,7 +367,7 @@
         </div>
         <div>
           <label class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Administradora</label>
-          <select x-model="filterAdminCanonical" @change="page=1; loadInvoices()"
+          <select x-model="filterAdminCanonical" @change="filterContractCanonical=''; page=1; loadInvoices()"
                   class="field-select w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-400">
             <option value="">Todas</option>
             <template x-for="name in filteredAdmins" :key="name">
@@ -489,6 +489,7 @@
               </th>
               <th class="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Factura</th>
               <th class="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider">Paciente</th>
+              <th class="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider hidden xl:table-cell whitespace-nowrap">Admisión</th>
               <th class="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">Administradora</th>
               <th class="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Contrato</th>
               <th class="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Servicio</th>
@@ -522,6 +523,9 @@
                 </td>
                 <td class="px-3 py-1.5 max-w-[180px]">
                   <span class="truncate block text-xs text-gray-700" x-text="inv.patient_name || '—'"></span>
+                </td>
+                <td class="px-3 py-1.5 hidden xl:table-cell whitespace-nowrap">
+                  <span class="font-mono text-xs text-gray-500" x-text="inv.admission || '—'"></span>
                 </td>
                 <td class="px-3 py-1.5 hidden md:table-cell max-w-[180px]">
                   <div class="flex items-center gap-1.5 min-w-0">
@@ -558,7 +562,7 @@
             <!-- Empty state inside table -->
             <template x-if="invoices.length === 0 && $store.ctx.periodId">
               <tr>
-                <td colspan="8" class="py-16 text-center text-gray-400 text-sm">
+                <td colspan="9" class="py-16 text-center text-gray-400 text-sm">
                   <i class="fa-regular fa-folder-open text-3xl mb-3 block opacity-30"></i>
                   No se encontraron facturas
                 </td>
@@ -603,6 +607,10 @@
           <div>
             <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Servicio</div>
             <div class="font-medium text-gray-700" x-text="selectedInvoice && selectedInvoice.service_type_code || '—'"></div>
+          </div>
+          <div>
+            <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Admisión</div>
+            <div class="font-mono font-medium text-gray-700" x-text="selectedInvoice && selectedInvoice.admission || '—'"></div>
           </div>
           <div class="col-span-2">
             <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Administradora</div>
@@ -822,6 +830,8 @@ function auditApp() {
     docTypes: [],
     admins: [],
     contracts: [],
+    contractTypes: [],
+    agreements: [],
     serviceTypes: [],
 
     // --- Filters ---
@@ -883,7 +893,11 @@ function auditApp() {
       }));
     },
     get uniqueAdminTypes() {
-      return [];
+      const seen = new Set();
+      return this.contractTypes
+        .map(ct => ct.name)
+        .filter(n => n && !seen.has(n) && seen.add(n))
+        .sort();
     },
     get filteredAdmins() {
       const seen = new Set();
@@ -893,8 +907,23 @@ function auditApp() {
         .sort();
     },
     get uniqueContracts() {
+      let contractIds = null;
+      if (this.filterAdminCanonical) {
+        const admin = this.admins.find(a => a.canonical_name === this.filterAdminCanonical);
+        if (admin) {
+          contractIds = new Set(
+            this.agreements
+              .filter(ag => ag.administrator_id === admin.id)
+              .map(ag => ag.contract_id)
+          );
+        }
+      }
       const seen = new Set();
-      return this.contracts.map(c => c.canonical_name).filter(n => n && !seen.has(n) && seen.add(n)).sort();
+      return this.contracts
+        .filter(c => c.canonical_name && (!contractIds || contractIds.has(c.id)))
+        .map(c => c.canonical_name)
+        .filter(n => !seen.has(n) && seen.add(n))
+        .sort();
     },
 
     // ── Init ──────────────────────────────────────────
@@ -919,7 +948,7 @@ function auditApp() {
         if (val) { this.loadInvoices(); this.loadStats(); this.loadFindingsSummary(); }
       });
       this.$watch('$store.ctx.institutionId', async val => {
-        this.admins = []; this.contracts = [];
+        this.admins = []; this.contracts = []; this.contractTypes = []; this.agreements = [];
         this.filterAdminType = ''; this.filterAdminCanonical = ''; this.filterContractCanonical = '';
         if (val) await this.loadFilterOptions();
       });
@@ -929,12 +958,16 @@ function auditApp() {
     async loadFilterOptions() {
       const id = this.$store.ctx.institutionId;
       if (!id) return;
-      const [a, c] = await Promise.all([
+      const [a, c, ct, ag] = await Promise.all([
         fetch(`/api/institutions/administrators`),
         fetch(`/api/institutions/contracts`),
+        fetch(`/api/institutions/contract-types`),
+        fetch(`/api/institutions/agreements`),
       ]);
-      this.admins    = await a.json();
-      this.contracts = await c.json();
+      this.admins         = await a.json();
+      this.contracts      = await c.json();
+      this.contractTypes  = await ct.json();
+      this.agreements     = await ag.json();
     },
 
     async loadStats() {

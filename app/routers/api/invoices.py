@@ -104,6 +104,7 @@ async def list_invoices(
             service_type_id=inv.service_type_id,
             missing_file_count=len([mf for mf in inv.missing_files if mf.resolved_at is None]),
             date=inv.date,
+            admission=inv.admission,
         ))
 
     return {
@@ -196,7 +197,7 @@ async def export_invoices(period_id: int, db: AsyncSession = Depends(get_db)):
     ws = wb.create_sheet("Facturas")
     ws.append([
         "Período", "Hospital", "Factura", "Fecha",
-        "Tipo Doc.", "Número Doc.", "Paciente",
+        "Tipo Doc.", "Número Doc.", "Paciente", "Admisión",
         "Administradora", "Tipo Contrato", "Contrato", "Servicio",
         "Operación", "Estado", "Hallazgos",
     ])
@@ -237,6 +238,7 @@ async def export_invoices(period_id: int, db: AsyncSession = Depends(get_db)):
             inv.id_type,
             inv.id_number,
             inv.patient_name,
+            inv.admission or "",
             administrator,
             contract_type,
             contract,

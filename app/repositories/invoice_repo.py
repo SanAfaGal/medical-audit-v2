@@ -141,9 +141,15 @@ class InvoiceRepo:
                 )
 
         if search:
-            terms = [t.strip().upper() for t in search.split(";") if t.strip()]
+            terms = [t.strip() for t in search.split(";") if t.strip()]
             if terms:
-                q = q.where(or_(*[Invoice.invoice_number.ilike(f"%{t}%") for t in terms]))
+                q = q.where(or_(*[
+                    or_(
+                        Invoice.invoice_number.ilike(f"%{t.upper()}%"),
+                        Invoice.patient_name.ilike(f"%{t}%"),
+                    )
+                    for t in terms
+                ]))
         if has_finding_doc_type_id is not None:
             subq = (
                 select(MissingFile.id)
@@ -348,9 +354,15 @@ class InvoiceRepo:
                 )
 
         if search:
-            terms = [t.strip().upper() for t in search.split(";") if t.strip()]
+            terms = [t.strip() for t in search.split(";") if t.strip()]
             if terms:
-                q = q.where(or_(*[Invoice.invoice_number.ilike(f"%{t}%") for t in terms]))
+                q = q.where(or_(*[
+                    or_(
+                        Invoice.invoice_number.ilike(f"%{t.upper()}%"),
+                        Invoice.patient_name.ilike(f"%{t}%"),
+                    )
+                    for t in terms
+                ]))
         if has_finding_doc_type_id is not None:
             subq = (
                 select(MissingFile.id)

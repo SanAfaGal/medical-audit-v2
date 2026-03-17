@@ -23,6 +23,7 @@ class InvoiceListItem(BaseModel):
     service_type_id: int | None
     missing_file_count: int               # count of unresolved missing_files
     date: datetime.date
+    admission: str | None = None
 
 
 class InvoiceOut(BaseModel):
