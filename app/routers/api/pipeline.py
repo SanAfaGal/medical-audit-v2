@@ -11,7 +11,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -319,3 +319,57 @@ async def process_non_pdf_decisions(
                 errors.append(f"Error convirtiendo {abs_path.name}: {exc}")
 
     return {"ok": True, "deleted": deleted, "converted": converted, "errors": errors}
+
+
+_PREVIEW_MIME: dict[str, str] = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "tiff": "image/tiff",
+    "tif": "image/tiff",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "bmp": "image/bmp",
+}
+
+
+@router.get("/file-preview")
+async def file_preview(
+    institution_id: int,
+    period_id: int,
+    rel_path: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Serve a non-PDF file from STAGE for in-browser preview."""
+    institution = await InstitutionRepo(db).get_by_id(institution_id)
+    if not institution:
+        raise HTTPException(404, "Institución no encontrada")
+    period = await InvoiceRepo(db).get_period_by_id(period_id)
+    if not period:
+        raise HTTPException(404, "Período no encontrado")
+
+    rules_repo = RulesRepo(db)
+    sys_settings = await rules_repo.get_system_settings()
+    if not sys_settings or not sys_settings.audit_data_root:
+        raise HTTPException(500, "audit_data_root no configurado")
+
+    stage_path = (
+        to_container_path(sys_settings.audit_data_root)
+        / institution.name
+        / period.period_label
+        / "STAGE"
+    )
+
+    try:
+        abs_path = (stage_path / rel_path).resolve()
+        abs_path.relative_to(stage_path.resolve())
+    except (ValueError, OSError):
+        raise HTTPException(400, "Ruta inválida")
+
+    if not abs_path.exists() or not abs_path.is_file():
+        raise HTTPException(404, "Archivo no encontrado")
+
+    ext = abs_path.suffix.lstrip(".").lower()
+    media_type = _PREVIEW_MIME.get(ext, "application/octet-stream")
+
+    return FileResponse(str(abs_path), media_type=media_type, filename=abs_path.name)

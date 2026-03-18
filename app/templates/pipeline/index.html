@@ -646,6 +646,15 @@
                     <!-- Size -->
                     <span class="shrink-0 text-[10px] tabular-nums"
                           style="color:var(--text-3)" x-text="f.size_kb + ' KB'"></span>
+                    <!-- Preview button (images only) -->
+                    <template x-if="f.is_image">
+                      <button @click="previewFile = { rel_path: f.rel_path, filename: f.filename }"
+                              class="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition-colors hover:opacity-75"
+                              style="color:#60a5fa;border:1px solid rgba(59,130,246,0.3);background:rgba(59,130,246,0.1)"
+                              title="Vista previa">
+                        <i class="fa-solid fa-eye text-[10px]"></i>
+                      </button>
+                    </template>
                     <!-- Action: dropdown for images, fixed label for others -->
                     <template x-if="f.is_image">
                       <select x-model="f.action"
@@ -734,6 +743,40 @@
 
   </div><!-- /RIGHT PANEL -->
 
+<!-- Image preview modal -->
+<template x-if="previewFile">
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4"
+       style="background:rgba(0,0,0,0.75);backdrop-filter:blur(4px)"
+       @click.self="previewFile = null"
+       @keydown.escape.window="previewFile = null">
+    <div class="relative flex flex-col rounded-xl overflow-hidden max-w-3xl w-full max-h-[90vh]"
+         style="background:var(--bg-surface);border:1px solid var(--border)">
+      <!-- Modal header -->
+      <div class="px-4 py-3 flex items-center justify-between shrink-0"
+           style="background:var(--bg-subtle);border-bottom:1px solid var(--border)">
+        <div class="flex items-center gap-2 min-w-0">
+          <i class="fa-solid fa-image text-sm shrink-0" style="color:#60a5fa"></i>
+          <span class="text-sm font-mono truncate" style="color:var(--text-1)"
+                x-text="previewFile.filename"></span>
+        </div>
+        <button @click="previewFile = null"
+                class="shrink-0 ml-3 p-1.5 rounded-lg transition-colors hover:opacity-75"
+                style="color:var(--text-3)">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <!-- Image -->
+      <div class="overflow-auto flex items-center justify-center p-4 flex-1"
+           style="background:repeating-conic-gradient(#1a1a1a 0% 25%,#111 0% 50%) 0 0/16px 16px">
+        <img :src="`/api/pipeline/file-preview?institution_id=${$store.ctx.institutionId}&period_id=${$store.ctx.periodId}&rel_path=${encodeURIComponent(previewFile.rel_path)}`"
+             :alt="previewFile.filename"
+             class="max-w-full max-h-[70vh] object-contain rounded shadow-lg"
+             style="image-rendering:auto" />
+      </div>
+    </div>
+  </div>
+</template>
+
 
 </div>
 
@@ -781,6 +824,7 @@ function pipeline() {
     unmappedConfirm: null,
     surplusData: null,
     nonPdfData: null,
+    previewFile: null,
     stageStatuses: {},
     stageResults: {},
     hoveredStage: null,
