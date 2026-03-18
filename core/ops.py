@@ -15,6 +15,30 @@ logger = logging.getLogger(__name__)
 _RE_NIT: re.Pattern = re.compile(r"_(\d+)_")
 _FOLDER_NAME_PART_INDEX: int = 2
 
+# Supported image formats for PDF conversion
+IMAGE_EXTENSIONS: frozenset[str] = frozenset({"jpg", "jpeg", "png", "tiff", "tif"})
+
+
+def convert_image_to_pdf(image_path: Path) -> Path:
+    """Convert an image file to PDF (same folder, same stem, .pdf extension).
+
+    Deletes the original image on success.
+    Returns the path of the newly created PDF.
+
+    Raises:
+        fitz.FileDataError: if the image cannot be opened.
+        OSError: if writing the output PDF fails.
+    """
+    import fitz  # PyMuPDF — already a project dependency
+
+    output_path = image_path.with_suffix(".pdf")
+    img_doc = fitz.open(str(image_path))
+    pdf_bytes = img_doc.convert_to_pdf()
+    img_doc.close()
+    output_path.write_bytes(pdf_bytes)
+    image_path.unlink()
+    return output_path
+
 
 class _TransferResult(TypedDict):
     success: int

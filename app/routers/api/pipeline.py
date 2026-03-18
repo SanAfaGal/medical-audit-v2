@@ -1,10 +1,14 @@
 """API router for pipeline stage execution via SSE."""
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import zipfile
 from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
@@ -236,3 +240,82 @@ async def load_drive_zip(
         "extracted": len(extracted),
         "drive_path": str(drive_path),
     }
+
+
+class _NonPdfDecision(BaseModel):
+    rel_path: str
+    action: Literal["delete", "convert"]
+
+
+class _ProcessNonPdfRequest(BaseModel):
+    institution_id: int
+    period_id: int
+    decisions: list[_NonPdfDecision]
+
+
+@router.post("/process-non-pdf")
+async def process_non_pdf_decisions(
+    data: _ProcessNonPdfRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Apply delete/convert decisions for files found in the REMOVE_NON_PDF scan."""
+    from core.ops import IMAGE_EXTENSIONS, convert_image_to_pdf
+
+    institution = await InstitutionRepo(db).get_by_id(data.institution_id)
+    if not institution:
+        raise HTTPException(404, "Institución no encontrada")
+    period = await InvoiceRepo(db).get_period_by_id(data.period_id)
+    if not period:
+        raise HTTPException(404, "Período no encontrado")
+
+    rules_repo = RulesRepo(db)
+    sys_settings = await rules_repo.get_system_settings()
+    if not sys_settings or not sys_settings.audit_data_root:
+        raise HTTPException(500, "audit_data_root no configurado")
+
+    stage_path = (
+        to_container_path(sys_settings.audit_data_root)
+        / institution.name
+        / period.period_label
+        / "STAGE"
+    )
+    if not stage_path.is_dir():
+        raise HTTPException(400, "Directorio STAGE no existe")
+
+    deleted = 0
+    converted = 0
+    errors: list[str] = []
+    loop = asyncio.get_running_loop()
+
+    for decision in data.decisions:
+        # Security: resolve and verify path is inside stage_path
+        try:
+            abs_path = (stage_path / decision.rel_path).resolve()
+            abs_path.relative_to(stage_path.resolve())
+        except (ValueError, OSError):
+            errors.append(f"Ruta inválida: {decision.rel_path}")
+            continue
+
+        if not abs_path.exists():
+            errors.append(f"Archivo no encontrado: {decision.rel_path}")
+            continue
+
+        if decision.action == "delete":
+            try:
+                abs_path.unlink()
+                deleted += 1
+            except OSError as exc:
+                errors.append(f"No se pudo eliminar {abs_path.name}: {exc}")
+
+        elif decision.action == "convert":
+            ext = abs_path.suffix.lstrip(".").lower()
+            if ext not in IMAGE_EXTENSIONS:
+                errors.append(f"Formato no convertible: {abs_path.name}")
+                continue
+            try:
+                await loop.run_in_executor(None, convert_image_to_pdf, abs_path)
+                converted += 1
+            except Exception as exc:
+                errors.append(f"Error convirtiendo {abs_path.name}: {exc}")
+
+    return {"ok": True, "deleted": deleted, "converted": converted, "errors": errors}

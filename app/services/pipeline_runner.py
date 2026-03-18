@@ -318,8 +318,8 @@ async def _check_nested_folders(ctx: dict) -> AsyncGenerator[str, None]:
 
 @_stage("REMOVE_NON_PDF")
 async def _remove_non_pdf(ctx: dict) -> AsyncGenerator[str, None]:
-    """Delete non-PDF files and corrupt PDFs in STAGE."""
-    from core.ops import DocumentOps
+    """Scan STAGE for non-PDF files and corrupt PDFs; emit [DATA] for user review."""
+    from core.ops import IMAGE_EXTENSIONS
     from core.reader import DocumentReader
     from core.scanner import DocumentScanner
 
@@ -330,26 +330,60 @@ async def _remove_non_pdf(ctx: dict) -> AsyncGenerator[str, None]:
         yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
-    scanner = DocumentScanner(stage_path)
-    ops = DocumentOps(stage_path)
+    def _build_non_pdf_list(s_path: Path) -> list[dict]:
+        scanner = DocumentScanner(s_path)
+        files = scanner.find_non_pdf()
+        result = []
+        for f in files:
+            ext = f.suffix.lstrip(".").lower()
+            try:
+                size_kb = round(f.stat().st_size / 1024, 1)
+            except OSError:
+                size_kb = 0.0
+            result.append({
+                "rel_path": f.relative_to(s_path).as_posix(),
+                "filename": f.name,
+                "extension": ext,
+                "size_kb": size_kb,
+                "is_image": ext in IMAGE_EXTENSIONS,
+            })
+        return result
 
-    # Remove non-PDF files
-    non_pdf = await executor(scanner.find_non_pdf)
-    yield plog("INFO", f"Archivos no-PDF encontrados: {len(non_pdf)}")
-    if non_pdf:
-        removed = await executor(ops.remove_files, non_pdf)
-        yield plog("INFO", f"Archivos no-PDF eliminados: {removed}")
+    def _build_corrupt_list(s_path: Path) -> list[dict]:
+        scanner = DocumentScanner(s_path)
+        all_pdfs = scanner.find_by_extension("pdf")
+        invalid = DocumentReader.find_unreadable(all_pdfs)
+        result = []
+        for f in invalid:
+            try:
+                size_kb = round(f.stat().st_size / 1024, 1)
+            except OSError:
+                size_kb = 0.0
+            result.append({
+                "rel_path": f.relative_to(s_path).as_posix(),
+                "filename": f.name,
+                "size_kb": size_kb,
+            })
+        return result
 
-    # Remove corrupt PDFs
-    all_pdfs = await executor(scanner.find_by_extension)
-    yield plog("INFO", f"PDFs a verificar: {len(all_pdfs)}")
-    invalid = await executor(DocumentReader.find_unreadable, all_pdfs)
-    for f in invalid:
-        yield plog("WARN", f"PDF corrupto: {f.name}", folder=f.parent.name)
-    yield plog("INFO", f"PDFs corruptos encontrados: {len(invalid)}")
-    if invalid:
-        removed_corrupt = await executor(ops.remove_files, invalid)
-        yield plog("INFO", f"PDFs corruptos eliminados: {removed_corrupt}")
+    non_pdf_list, corrupt_list = await asyncio.gather(
+        executor(_build_non_pdf_list, stage_path),
+        executor(_build_corrupt_list, stage_path),
+    )
+
+    yield plog("INFO", f"Archivos no-PDF encontrados: {len(non_pdf_list)}")
+    yield plog("INFO", f"PDFs corruptos encontrados: {len(corrupt_list)}")
+
+    if not non_pdf_list and not corrupt_list:
+        yield plog("INFO", "No se encontraron archivos problemáticos — STAGE limpio")
+        return
+
+    data = {
+        "stage": "REMOVE_NON_PDF",
+        "non_pdf": non_pdf_list,
+        "corrupt_pdfs": corrupt_list,
+    }
+    yield f"[DATA] {json.dumps(data, ensure_ascii=False)}"
 
 
 def _apply_prefix_corrections(
