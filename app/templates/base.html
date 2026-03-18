@@ -88,6 +88,47 @@
     });
   </script>
 
+  <!-- ── Store global de Pipeline (tarea en background) ────────────────── -->
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.store('pipeline', {
+        taskId: null,
+        stage: null,
+        status: null,   // "running" | "done" | "error" | "cancelled" | null
+        cursor: 0,      // último idx recibido (para reconexión)
+
+        init() {
+          try {
+            const s = JSON.parse(localStorage.getItem('pipeline_task') || 'null');
+            if (s) {
+              this.taskId = s.taskId;
+              this.stage  = s.stage;
+              this.status = s.status;
+              this.cursor = s.cursor || 0;
+            }
+          } catch {}
+        },
+        setTask(taskId, stage) {
+          this.taskId = taskId; this.stage = stage; this.status = 'running'; this.cursor = 0;
+          this._save();
+        },
+        update(status, cursor) {
+          this.status = status; this.cursor = cursor; this._save();
+        },
+        clear() {
+          this.taskId = null; this.stage = null; this.status = null; this.cursor = 0;
+          localStorage.removeItem('pipeline_task');
+        },
+        get isRunning() { return this.status === 'running'; },
+        _save() {
+          localStorage.setItem('pipeline_task', JSON.stringify({
+            taskId: this.taskId, stage: this.stage, status: this.status, cursor: this.cursor,
+          }));
+        },
+      });
+    });
+  </script>
+
   <!-- ── Explorador PDF: componente Alpine ──────────────────────────────── -->
   <script>
     document.addEventListener('alpine:init', () => {
@@ -653,8 +694,19 @@
          class="flex items-center rounded-lg font-medium transition-all
                 {% if request.url.path == '/' %}bg-sky-500/15 text-sky-300 border border-sky-500/20{% else %}text-slate-400 hover:bg-white/5 hover:text-white border border-transparent{% endif %}"
          :class="$store.ui.sidebarOpen ? 'gap-3 px-3 py-2.5 text-sm' : 'justify-center p-2.5'">
-        <i class="fa-solid fa-gears w-4 text-center opacity-80 shrink-0"></i>
+        <div class="relative shrink-0">
+          <i class="fa-solid fa-gears w-4 text-center opacity-80"></i>
+          <template x-if="$store.pipeline.isRunning">
+            <span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+          </template>
+        </div>
         <span x-show="$store.ui.sidebarOpen">Pipeline</span>
+        <template x-if="$store.pipeline.isRunning && $store.ui.sidebarOpen">
+          <span class="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded-full
+                       bg-sky-500/15 text-sky-400 border border-sky-500/25">
+            ejecutando
+          </span>
+        </template>
       </a>
       <!-- Auditoría -->
       <a href="/audit"

@@ -6,7 +6,7 @@ import json
 import zipfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,8 +16,13 @@ from app.repositories.institution_repo import InstitutionRepo
 from app.repositories.invoice_repo import InvoiceRepo
 from app.repositories.rules_repo import RulesRepo
 from app.services import pipeline_runner
+from app.services.task_manager import PipelineTaskManager
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
+
+
+def get_task_manager(request: Request) -> PipelineTaskManager:
+    return request.app.state.task_manager
 
 
 @router.get("/run/{stage}")
@@ -65,6 +70,90 @@ async def run_stage(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/run/{stage}")
+async def start_stage_task(
+    stage: str,
+    institution_id: int,
+    period_id: int,
+    invoice_numbers: str = "",
+    doc_type_id: int = 0,
+    db: AsyncSession = Depends(get_db),
+    tm: PipelineTaskManager = Depends(get_task_manager),
+):
+    """Start a pipeline stage as a background task; returns task_id for streaming."""
+    existing = tm.get_active_for_context(institution_id, period_id)
+    if existing:
+        raise HTTPException(409, f"Ya hay una tarea activa: {existing.task_id}")
+
+    institution = await InstitutionRepo(db).get_by_id(institution_id)
+    if not institution:
+        raise HTTPException(404, "Institución no encontrada")
+    period = await InvoiceRepo(db).get_period_by_id(period_id)
+    if not period:
+        raise HTTPException(404, "Período no encontrado")
+
+    extra: dict = {}
+    if invoice_numbers:
+        extra["invoice_numbers"] = [n.strip() for n in invoice_numbers.split(",") if n.strip()]
+    if doc_type_id:
+        extra["doc_type_id"] = doc_type_id
+
+    run = await tm.start(stage, institution_id, period_id, extra)
+    return {"task_id": run.task_id, "stage": stage}
+
+
+@router.get("/stream/{task_id}")
+async def stream_task_logs(
+    task_id: str,
+    from_: int = Query(0, alias="from"),
+    tm: PipelineTaskManager = Depends(get_task_manager),
+):
+    """SSE stream of log lines for a background task, with replay from a cursor."""
+    run = tm.get_run(task_id)
+    if not run:
+        raise HTTPException(404, "Tarea no encontrada")
+
+    async def event_gen():
+        async for idx, line in tm.stream_from(task_id, from_):
+            payload = json.dumps({"msg": line, "idx": idx})
+            yield f"data: {payload}\n\n"
+        run_final = tm.get_run(task_id)
+        status = run_final.status if run_final else "done"
+        yield f"data: {json.dumps({'msg': '[DONE]', 'status': status})}\n\n"
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/active")
+async def list_active(tm: PipelineTaskManager = Depends(get_task_manager)):
+    """List all currently running pipeline tasks."""
+    return [
+        {
+            "task_id": r.task_id,
+            "stage": r.stage,
+            "institution_id": r.institution_id,
+            "period_id": r.period_id,
+            "status": r.status,
+            "log_count": len(r.logs),
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in tm.get_all_active()
+    ]
+
+
+@router.delete("/{task_id}", status_code=200)
+async def cancel_task(task_id: str, tm: PipelineTaskManager = Depends(get_task_manager)):
+    """Cancel a running background pipeline task."""
+    cancelled = await tm.cancel(task_id)
+    if not cancelled:
+        raise HTTPException(404, "Tarea no encontrada o ya finalizada")
+    return {"ok": True}
 
 
 @router.post("/load-drive-zip")

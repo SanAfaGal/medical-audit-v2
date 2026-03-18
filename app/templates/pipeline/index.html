@@ -638,6 +638,8 @@ function pipeline() {
     stageStatuses: {},
     stageResults: {},
     hoveredStage: null,
+    taskId: null,
+    _evtSource: null,
 
     stageFlow: [
 
@@ -786,6 +788,78 @@ function pipeline() {
       ['pipeline_logLines','pipeline_currentStageLabel','pipeline_stageStatuses','pipeline_stageResults'].forEach(k => sessionStorage.removeItem(k));
     },
 
+    // Stages that must run synchronously (require user interaction or file upload)
+    _isSyncStage(stageId) {
+      return stageId === 'LOAD_AND_PROCESS' || stageId === 'LOAD_DRIVE_ZIP' || stageId === 'REVISAR_SOBRANTES';
+    },
+
+    async _runBackgroundStage(stageId, institutionId, periodId) {
+      const params = new URLSearchParams({ institution_id: institutionId, period_id: periodId });
+      if (stageId === 'DOWNLOAD_INVOICES_FROM_SIHOS' && this.invoiceDocTypeId)
+        params.set('doc_type_id', this.invoiceDocTypeId);
+      if (stageId === 'DOWNLOAD_MEDICATION_SHEETS' && this.medSheetDocTypeId)
+        params.set('doc_type_id', this.medSheetDocTypeId);
+
+      const res = await fetch(`/api/pipeline/run/${stageId}?${params}`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Error al iniciar ${stageId}`);
+      }
+      const { task_id } = await res.json();
+      this.taskId = task_id;
+      this.$store.pipeline.setTask(task_id, stageId);
+
+      await new Promise((resolve) => {
+        this._subscribeToTask(task_id, stageId, 0, resolve);
+      });
+    },
+
+    _subscribeToTask(taskId, stageId, fromCursor, onDone) {
+      if (this._evtSource) { this._evtSource.close(); this._evtSource = null; }
+      const evtSource = new EventSource(`/api/pipeline/stream/${taskId}?from=${fromCursor}`);
+      this._evtSource = evtSource;
+      let cursor = fromCursor;
+
+      evtSource.onmessage = (event) => {
+        let parsed;
+        try { parsed = JSON.parse(event.data); } catch { return; }
+        const line = parsed.msg;
+        cursor = (parsed.idx != null ? parsed.idx : cursor - 1) + 1;
+
+        if (line === '[DONE]') {
+          evtSource.close(); this._evtSource = null;
+          const finalStatus = parsed.status || 'done';
+          if (this.stageStatuses[stageId] === 'running')
+            this.stageStatuses[stageId] = finalStatus === 'cancelled' ? 'error' : 'done';
+          this.$store.pipeline.update(finalStatus, cursor);
+          if (finalStatus === 'done' || finalStatus === 'cancelled') this.$store.pipeline.clear();
+          // In reconnect mode (no onDone), we own the running state
+          if (!onDone) { this.running = false; this.currentStageLabel = ''; }
+          if (onDone) onDone();
+          return;
+        }
+
+        this.$store.pipeline.update('running', cursor);
+        this._markLine(stageId, line);
+        this._updateStageResult(stageId, line);
+        this.logLines.push(line);
+        this.$nextTick(() => this.scrollLog());
+      };
+
+      evtSource.onerror = () => {
+        evtSource.close(); this._evtSource = null;
+        this.logLines.push('[WARN] Conexión interrumpida. La tarea continúa en segundo plano.');
+        this.$nextTick(() => this.scrollLog());
+        setTimeout(() => {
+          if (this.$store.pipeline.isRunning && this.$store.pipeline.taskId === taskId) {
+            this._subscribeToTask(taskId, stageId, this.$store.pipeline.cursor, onDone);
+          } else if (onDone) {
+            onDone();
+          }
+        }, 2000);
+      };
+    },
+
     init() {
       try {
         const sl  = sessionStorage.getItem('pipeline_logLines');
@@ -805,6 +879,18 @@ function pipeline() {
       this.$watch('stageStatuses',     v => sessionStorage.setItem('pipeline_stageStatuses',     JSON.stringify(v)));
       this.$watch('stageResults',      v => sessionStorage.setItem('pipeline_stageResults',      JSON.stringify(v)));
       fetch('/api/settings/doc-types').then(r => r.json()).then(d => { this.docTypes = d; });
+
+      // Reconectar si hay una tarea activa al volver a la página
+      if (this.$store.pipeline.isRunning && this.$store.pipeline.taskId) {
+        const { taskId, stage, cursor } = this.$store.pipeline;
+        this.running = true;
+        this.taskId = taskId;
+        const stageInfo = this.stageById(stage);
+        this.currentStageLabel = stageInfo?.label || stage || '';
+        this.stageStatuses[stage] = 'running';
+        this.logLines.push('─── Reconectando al pipeline en curso... ───');
+        this._subscribeToTask(taskId, stage, cursor, null);
+      }
     },
 
     async runPipeline() {
@@ -919,14 +1005,9 @@ function pipeline() {
             if (data.unknown_services?.length)  { const m=`[WARN] Servicios sin mapear: ${data.unknown_services.join(', ')}`; this.logLines.push(m); this._markLine(stageId,m); }
             this.scrollLog();
 
-          } else {
+          } else if (stageId === 'REVISAR_SOBRANTES') {
+            // Sync SSE — blocks waiting for user interaction via [DATA] events
             let url = `/api/pipeline/run/${stageId}?institution_id=${encodeURIComponent(institutionId)}&period_id=${encodeURIComponent(periodId)}`;
-            if (stageId === 'DOWNLOAD_INVOICES_FROM_SIHOS' && this.invoiceDocTypeId) {
-              url += `&doc_type_id=${encodeURIComponent(this.invoiceDocTypeId)}`;
-            }
-            if (stageId === 'DOWNLOAD_MEDICATION_SHEETS' && this.medSheetDocTypeId) {
-              url += `&doc_type_id=${encodeURIComponent(this.medSheetDocTypeId)}`;
-            }
             const evtSource = new EventSource(url);
 
             await new Promise((resolve) => {
@@ -960,6 +1041,9 @@ function pipeline() {
                 this.logLines.push(msg); this._markLine(stageId, msg); resolve();
               };
             });
+          } else {
+            // Background stage — runs independently of the HTTP connection
+            await this._runBackgroundStage(stageId, institutionId, periodId);
           }
         } catch (e) {
           const msg = `[ERROR] ${e.message}`;
