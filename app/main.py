@@ -18,6 +18,8 @@ logger = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.services.task_manager import PipelineTaskManager
+    app.state.task_manager = PipelineTaskManager()
     logger.info("startup", host=settings.host, port=settings.port, docs=settings.docs_enabled)
     yield
     await engine.dispose()
