@@ -629,7 +629,7 @@ async def _download_medication_sheets(ctx: dict) -> AsyncGenerator[str, None]:
     yield plog("INFO", f"Tipo de documento seleccionado: {doc_type.code} — {doc_type.description}")
 
     stmt = (
-        select(Invoice.invoice_number, Invoice.admission, Invoice.id_number)
+        select(Invoice.invoice_number, Invoice.admission, Invoice.id_type, Invoice.id_number)
         .join(FolderStatus, Invoice.folder_status_id == FolderStatus.id)
         .join(MissingFile, MissingFile.invoice_id == Invoice.id)
         .where(Invoice.audit_period_id == period.id)
@@ -640,8 +640,8 @@ async def _download_medication_sheets(ctx: dict) -> AsyncGenerator[str, None]:
         .distinct()
     )
     result = await db.execute(stmt)
-    targets: list[tuple[str, str, str]] = [
-        (row.invoice_number, row.admission, row.id_number)
+    targets: list[tuple[str, str, str, str]] = [
+        (row.invoice_number, row.admission, row.id_type, row.id_number)
         for row in result.all()
     ]
 

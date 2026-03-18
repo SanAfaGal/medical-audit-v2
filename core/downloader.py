@@ -70,11 +70,11 @@ class SihosDownloader:
         invoice_list = read_lines_from_file(list_path)
         self._download_invoices(invoice_list)
 
-    def run_medication_sheets(self, targets: list[tuple[str, str, str]], file_prefix: str) -> None:
+    def run_medication_sheets(self, targets: list[tuple[str, str, str, str]], file_prefix: str) -> None:
         """Download medication sheet PDFs for the given targets.
 
         Args:
-            targets: List of ``(invoice_number, admission, id_number)`` tuples.
+            targets: List of ``(invoice_number, admission, id_type, id_number)`` tuples.
             file_prefix: Prefix used in the output filename (e.g. the doc type prefix).
         """
         self._output_dir.mkdir(parents=True, exist_ok=True)
@@ -151,17 +151,17 @@ class SihosDownloader:
                     )
 
     async def _async_download_medication_sheets(
-        self, targets: list[tuple[str, str, str]], file_prefix: str
+        self, targets: list[tuple[str, str, str, str]], file_prefix: str
     ) -> None:
         """Async implementation of medication sheet download."""
         async with self._browser_session() as page:
             if page is None:
                 return
-            for invoice_number, admission, id_number in targets:
+            for invoice_number, admission, id_type, id_number in targets:
                 url = (
                     "{}/modulos/comun/medicamentos/impriconso.php"
-                    "?ConsAdmi={}&TipoDocu=PE&NumeUsua={}&SinModu=1".format(
-                        self._base_url.rstrip("/"), admission, id_number
+                    "?ConsAdmi={}&TipoDocu={}&NumeUsua={}&SinModu=1".format(
+                        self._base_url.rstrip("/"), admission, id_type, id_number
                     )
                 )
                 invoice_folder = self._output_dir / f"{self._invoice_id_prefix}{invoice_number}"
