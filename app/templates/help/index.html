@@ -382,6 +382,7 @@
           <p>En la sección de <strong>campos</strong> o <strong>columnas</strong>, selecciona únicamente los siguientes:</p>
           <div class="field-tags">
             <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Administradora</span>
+            <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Contrato</span>
             <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Tipo Usuario</span>
             <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Tipo Servicio</span>
             <span class="field-tag"><i class="fa-solid fa-circle-dot"></i>Actividad / Suministro</span>
@@ -708,7 +709,8 @@ const OFFICE_SCRIPT = `function main(workbook: ExcelScript.Workbook): void {
     const renameMap: { [key: string]: string } = {
         "num factura": "Factura",
         "admisión": "Admision",
-        "tipo usuario": "Contrato",
+        "tipo usuario": "Tipo",
+        "contrato": "Contrato",
         "tipo servicio": "Servicio",
         "actividad/suministro": "Actividad",
         "operario": "Operario",
@@ -728,7 +730,7 @@ const OFFICE_SCRIPT = `function main(workbook: ExcelScript.Workbook): void {
     // ─── 5. Identificar columnas a conservar por nombre ──────────────────────────
     const headersToKeep: string[] = [
         "Fecha", "Factura", "Admision", "Administradora",
-        "Contrato", "Servicio", "Actividad", "Operario",
+        "Contrato", "Tipo", "Servicio", "Actividad", "Operario",
         "Documento", "Numero", "Paciente",
     ];
 
@@ -796,7 +798,7 @@ const OFFICE_SCRIPT = `function main(workbook: ExcelScript.Workbook): void {
     // ─── 9. Reordenar columnas en memoria ─────────────────────────────────────────
     const desiredOrder: string[] = [
         "FACTURA", "ADMISION", "FECHA", "DOCUMENTO", "NUMERO",
-        "PACIENTE", "ADMINISTRADORA", "CONTRATO", "SERVICIO",
+        "PACIENTE", "ADMINISTRADORA", "CONTRATO", "TIPO", "SERVICIO",
         "ACTIVIDAD", "OPERARIO",
     ];
 
