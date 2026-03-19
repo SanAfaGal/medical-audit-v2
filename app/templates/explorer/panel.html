@@ -1,3 +1,54 @@
+{# ─── Macro: buscador de carpeta destino (compartido por move y copy) ──── #}
+{% macro dest_browser() %}
+  <!-- Input de búsqueda de carpeta destino -->
+  <div class="shrink-0 px-3 py-1.5 border-b border-slate-100">
+    <div class="relative">
+      <i class="fa-solid fa-magnifying-glass absolute left-2 top-1/2 -translate-y-1/2
+                 text-slate-300 text-[10px] pointer-events-none"></i>
+      <input x-model="destSearchQuery"
+             @input.debounce.300ms="searchDestFolders()"
+             @keydown.escape="clearDestSearch()"
+             type="text"
+             placeholder="Buscar carpeta destino…"
+             class="w-full text-xs border border-slate-200 rounded-md pl-6 pr-6 py-1
+                    focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white">
+      <button x-show="destSearchQuery"
+              @click="clearDestSearch()"
+              class="absolute right-1.5 top-1/2 -translate-y-1/2
+                     text-slate-300 hover:text-slate-500 transition-colors">
+        <i class="fa-solid fa-xmark text-[10px]"></i>
+      </button>
+    </div>
+  </div>
+  <!-- Resultados (visibles cuando hay texto, reemplazan la lista de navegación) -->
+  <div x-show="destSearchQuery.trim()" class="flex-1 overflow-y-auto py-1">
+    <template x-if="destSearchLoading">
+      <div class="px-3 py-4 text-[10px] text-slate-400 text-center">
+        <i class="fa-solid fa-spinner fa-spin mr-1"></i>Buscando…
+      </div>
+    </template>
+    <template x-if="!destSearchLoading && destSearchResults.length === 0">
+      <div class="px-3 py-4 text-[10px] text-slate-400 italic text-center">Sin carpetas encontradas</div>
+    </template>
+    <template x-for="dir in destSearchResults" :key="dir.path">
+      <div @click="setMoveDestination(dir.path)"
+           :class="moveBrowserPath === dir.path
+             ? 'bg-sky-50 text-sky-700'
+             : 'hover:bg-slate-50 text-slate-700'"
+           class="flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs transition-colors">
+        <i class="fa-solid fa-folder text-amber-400 w-3.5 shrink-0 text-center"></i>
+        <div class="min-w-0 flex-1">
+          <div class="truncate font-medium" x-text="dir.name"></div>
+          <div class="truncate text-[10px] text-slate-400"
+               x-text="dir.path.split('/').slice(0,-1).join('/')"></div>
+        </div>
+        <i class="fa-solid fa-check text-sky-400 text-[9px] shrink-0"
+           x-show="moveBrowserPath === dir.path"></i>
+      </div>
+    </template>
+  </div>
+{% endmacro %}
+
 {# ─── Explorador de archivos PDF — panel lateral ─────────────────────────── #}
 <div :style="explorerOpen ? `width:${panelWidth}px` : 'width:0'"
      :class="_resizing ? '' : 'transition-all duration-300'"
@@ -33,14 +84,25 @@
           <i class="fa-solid fa-arrow-left text-xs"></i>
         </button>
 
-        <!-- Ruta actual -->
-        <span class="text-xs text-slate-400 truncate flex-1 min-w-0" x-text="currentPath || rootFolder"></span>
-
-        <!-- Filtro -->
-        <input x-model="filterText"
-               type="text"
-               placeholder="Filtrar…"
-               class="text-xs border border-slate-200 rounded-md px-2 py-1 w-28 focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white">
+        <!-- Input unificado de búsqueda -->
+        <div class="relative flex-1 min-w-0">
+          <i class="fa-solid fa-magnifying-glass absolute left-2 top-1/2 -translate-y-1/2
+                     text-slate-300 text-[10px] pointer-events-none"></i>
+          <input x-ref="searchInput"
+                 x-model="searchQuery"
+                 @input.debounce.300ms="runSearch()"
+                 @keydown.escape="clearSearch(); $el.blur()"
+                 type="text"
+                 placeholder="Buscar en carpeta actual…"
+                 class="w-full text-xs border border-slate-200 rounded-md pl-6 pr-6 py-1
+                        focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white">
+          <button x-show="searchQuery"
+                  @click="clearSearch()"
+                  class="absolute right-1.5 top-1/2 -translate-y-1/2
+                         text-slate-300 hover:text-slate-500 transition-colors">
+            <i class="fa-solid fa-xmark text-[10px]"></i>
+          </button>
+        </div>
 
         <!-- Cerrar panel -->
         <button @click="explorerOpen = false"
@@ -57,16 +119,36 @@
         <div :style="`width:${listWidth}px`"
              :class="_listResizing ? '' : 'transition-none'"
              class="shrink-0 flex flex-col min-h-0 min-w-0">
+
+          <!-- ── Cabecera de resultados (solo en búsqueda) ── -->
+          <template x-if="isSearchActive()">
+            <div class="px-3 py-1 border-b border-slate-100 shrink-0 flex items-center gap-1.5">
+              <template x-if="searchLoading">
+                <span class="text-[10px] text-slate-400">
+                  <i class="fa-solid fa-spinner fa-spin mr-1"></i>Buscando…
+                </span>
+              </template>
+              <template x-if="!searchLoading">
+                <span class="text-[10px] text-slate-500"
+                      x-text="`${searchResults.length} resultado(s)`"></span>
+              </template>
+            </div>
+          </template>
+
+          <!-- ── Lista unificada ── -->
           <div class="flex-1 overflow-y-auto py-1">
-            <template x-if="entries.length === 0">
+            <template x-if="!isSearchActive() && entries.length === 0">
               <div class="px-3 py-4 text-xs text-slate-400 italic text-center">Carpeta vacía</div>
             </template>
+            <template x-if="isSearchActive() && !searchLoading && searchQuery && searchResults.length === 0">
+              <div class="px-3 py-4 text-xs text-slate-400 italic text-center">Sin resultados</div>
+            </template>
 
-            <template x-for="entry in filteredEntries()" :key="entry.path">
+            <template x-for="entry in isSearchActive() ? searchResults : entries" :key="entry.path">
               <div class="group relative">
 
-                <!-- ── Modo renombrar ── -->
-                <template x-if="renamingPath === entry.path">
+                <!-- ── Modo renombrar (solo en modo normal) ── -->
+                <template x-if="!isSearchActive() && renamingPath === entry.path">
                   <div class="flex items-center gap-1 px-2 py-1.5">
                     <i :class="entry.is_dir ? 'fa-solid fa-folder text-amber-400' : 'fa-solid fa-file-pdf text-red-400'"
                        class="w-3.5 text-center shrink-0 text-xs"></i>
@@ -89,70 +171,91 @@
                   </div>
                 </template>
 
-                <!-- ── Modo normal ── -->
-                <template x-if="renamingPath !== entry.path">
-                  <div @click="pdfMode === 'move'
-                               ? toggleMoveEntry(entry)
-                               : entry.is_dir ? navigateTo(entry.path) : (selectEntry(entry), confirmingDelete = null)"
-                       @dblclick="entry.is_dir && pdfMode !== 'move' && navigateTo(entry.path)"
+                <!-- ── Fila principal ── -->
+                <template x-if="isSearchActive() || renamingPath !== entry.path">
+                  <div @click="isSearchActive()
+                               ? navigateToSearchResult(entry)
+                               : pdfMode === 'move'
+                                 ? toggleMoveEntry(entry)
+                                 : pdfMode === 'copy'
+                                   ? toggleCopyEntry(entry)
+                                   : pdfMode === 'merge'
+                                     ? (!entry.is_dir && toggleMergePdf(entry.path))
+                                     : entry.is_dir ? navigateTo(entry.path) : (selectEntry(entry), confirmingDelete = null)"
+                       @dblclick="!isSearchActive() && entry.is_dir && pdfMode === 'none' && navigateTo(entry.path)"
                        draggable="true"
                        @dragstart="onDragStart($event, entry)"
                        @dragover.prevent
-                       @drop="entry.is_dir && onDrop($event, entry)"
-                       :class="pdfMode === 'move' && movingEntries.find(e => e.path === entry.path)
-                         ? 'bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-300'
-                         : selectedEntry && selectedEntry.path === entry.path
-                           ? 'bg-sky-50 text-sky-700'
-                           : 'hover:bg-slate-50 text-slate-700'"
+                       @drop="!isSearchActive() && entry.is_dir && onDrop($event, entry)"
+                       :class="isSearchActive()
+                         ? 'hover:bg-sky-50 text-slate-700'
+                         : pdfMode === 'move' && movingEntries.find(e => e.path === entry.path)
+                           ? 'bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-300'
+                           : pdfMode === 'copy' && copyingEntries.find(e => e.path === entry.path)
+                             ? 'bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-300'
+                             : pdfMode === 'merge' && selectedPdfs.includes(entry.path)
+                               ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-300'
+                               : selectedEntry && selectedEntry.path === entry.path
+                                 ? 'bg-sky-50 text-sky-700'
+                                 : 'hover:bg-slate-50 text-slate-700'"
                        class="relative flex items-center gap-2 px-2.5 py-1.5 cursor-pointer select-none text-xs transition-colors">
 
                     <i :class="entry.is_dir ? 'fa-solid fa-folder text-amber-400' : 'fa-solid fa-file-pdf text-red-400'"
                        class="w-3.5 text-center shrink-0"></i>
 
-                    <!-- Confirmar eliminación inline -->
-                    <template x-if="confirmingDelete === entry.path">
-                      <div class="flex items-center gap-1 flex-1 min-w-0" @click.stop>
-                        <span class="text-red-500 font-medium truncate">¿Eliminar?</span>
-                        <button @click.stop="deleteEntry(entry)"
-                                class="shrink-0 px-1.5 py-0.5 rounded bg-red-500 text-white text-[10px] font-semibold hover:bg-red-600">
-                          Sí
-                        </button>
-                        <button @click.stop="confirmingDelete = null"
-                                class="shrink-0 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] hover:bg-slate-200">
-                          No
-                        </button>
-                      </div>
-                    </template>
+                    <!-- En modo búsqueda: nombre + ruta padre -->
+                    <div x-show="isSearchActive()" class="min-w-0 flex-1">
+                      <div class="truncate text-xs font-medium" x-text="entry.name"></div>
+                      <div class="truncate text-[10px] text-slate-400"
+                           x-text="entry.path.split('/').slice(0,-1).join('/')"></div>
+                    </div>
 
-                    <!-- Nombre con tooltip -->
-                    <template x-if="confirmingDelete !== entry.path">
-                      <span class="truncate flex-1 min-w-0 pr-1"
-                            x-text="entry.name"
-                            :title="entry.name"></span>
-                    </template>
+                    <!-- En modo normal: confirmar eliminación inline -->
+                    <div x-show="!isSearchActive() && confirmingDelete === entry.path"
+                         class="flex items-center gap-1 flex-1 min-w-0" @click.stop>
+                      <span class="text-red-500 font-medium truncate">¿Eliminar?</span>
+                      <button @click.stop="deleteEntry(entry)"
+                              class="shrink-0 px-1.5 py-0.5 rounded bg-red-500 text-white text-[10px] font-semibold hover:bg-red-600">
+                        Sí
+                      </button>
+                      <button @click.stop="confirmingDelete = null"
+                              class="shrink-0 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] hover:bg-slate-200">
+                        No
+                      </button>
+                    </div>
 
-                    <!-- Botones de acción flotantes (hover) — absolutos para no empujar el nombre -->
-                    <template x-if="confirmingDelete !== entry.path">
-                      <div class="absolute right-1 top-1/2 -translate-y-1/2
-                                  hidden group-hover:flex items-center gap-0.5
-                                  bg-white/95 border border-slate-100 rounded-md shadow-sm px-0.5">
-                        <button @click.stop="startMove(entry)"
-                                class="p-1 rounded hover:bg-indigo-50 text-slate-400 hover:text-indigo-600"
-                                title="Mover">
-                          <i class="fa-solid fa-arrow-right-arrow-left text-[9px]"></i>
-                        </button>
-                        <button @click.stop="startRename(entry)"
-                                class="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"
-                                title="Renombrar">
-                          <i class="fa-solid fa-pencil text-[9px]"></i>
-                        </button>
-                        <button @click.stop="confirmingDelete = entry.path"
-                                class="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
-                                title="Eliminar">
-                          <i class="fa-solid fa-trash text-[9px]"></i>
-                        </button>
-                      </div>
-                    </template>
+                    <!-- En modo normal: nombre con tooltip -->
+                    <span x-show="!isSearchActive() && confirmingDelete !== entry.path"
+                          class="truncate flex-1 min-w-0 pr-1"
+                          x-text="entry.name"
+                          :title="entry.name"></span>
+
+                    <!-- Botones de acción flotantes (solo en modo normal) -->
+                    <div x-show="!isSearchActive() && confirmingDelete !== entry.path"
+                         class="absolute right-1 top-1/2 -translate-y-1/2
+                                hidden group-hover:flex items-center gap-0.5
+                                bg-white/95 border border-slate-100 rounded-md shadow-sm px-0.5">
+                      <button @click.stop="startMove(entry)"
+                              class="p-1 rounded hover:bg-indigo-50 text-slate-400 hover:text-indigo-600"
+                              title="Mover">
+                        <i class="fa-solid fa-arrow-right-arrow-left text-[9px]"></i>
+                      </button>
+                      <button @click.stop="startCopy(entry)"
+                              class="p-1 rounded hover:bg-teal-50 text-slate-400 hover:text-teal-600"
+                              title="Copiar">
+                        <i class="fa-solid fa-copy text-[9px]"></i>
+                      </button>
+                      <button @click.stop="startRename(entry)"
+                              class="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                              title="Renombrar">
+                        <i class="fa-solid fa-pencil text-[9px]"></i>
+                      </button>
+                      <button @click.stop="confirmingDelete = entry.path"
+                              class="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
+                              title="Eliminar">
+                        <i class="fa-solid fa-trash text-[9px]"></i>
+                      </button>
+                    </div>
 
                   </div>
                 </template>
@@ -161,22 +264,6 @@
             </template>
           </div>
 
-          <!-- Merge checkbox list (modo merge) -->
-          <template x-if="pdfMode === 'merge'">
-            <div class="border-t border-slate-100 px-2 py-2 space-y-1 max-h-32 overflow-y-auto">
-              <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Seleccionar PDFs</div>
-              <template x-for="entry in entries.filter(e => !e.is_dir)" :key="entry.path">
-                <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer hover:text-slate-800">
-                  <input type="checkbox"
-                         :value="entry.path"
-                         @change="toggleMergePdf(entry.path)"
-                         :checked="selectedPdfs.includes(entry.path)"
-                         class="accent-sky-500">
-                  <span class="truncate" x-text="entry.name"></span>
-                </label>
-              </template>
-            </div>
-          </template>
         </div>
 
         <!-- Handle de redimensionamiento entre lista y preview -->
@@ -215,9 +302,9 @@
               </div>
             </template>
 
-            <template x-if="pdfMode === 'none'">
-              <button @click="pdfMode = 'merge'"
-                      class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:border-emerald-300 hover:text-emerald-600 transition-all">
+            <template x-if="pdfMode === 'none' && entries.some(e => !e.is_dir)">
+              <button @click="startMerge()"
+                      class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:border-amber-300 hover:text-amber-600 transition-all">
                 <i class="fa-solid fa-object-group text-[10px]"></i>
                 Unir PDFs
               </button>
@@ -278,7 +365,7 @@
                 <input x-model="mergeOutputName"
                        type="text"
                        placeholder="resultado.pdf"
-                       class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                       class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400">
               </div>
               <!-- Lista de PDFs seleccionados con orden -->
               <div class="space-y-1">
@@ -296,7 +383,7 @@
               </div>
               <button @click="executeMerge()"
                       :disabled="selectedPdfs.length < 2"
-                      class="w-full py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                      class="w-full py-2 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 <i class="fa-solid fa-object-group mr-1.5"></i>
                 Unir PDFs
               </button>
@@ -319,8 +406,11 @@
                 <p class="text-[10px] text-slate-400">Haz clic en los elementos de la lista para seleccionar/deseleccionar. Luego navega a la carpeta destino y pulsa <strong>Mover aquí</strong>.</p>
               </div>
 
-              <!-- Navegador de destino -->
-              <div class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-100 bg-slate-50">
+              {{ dest_browser() }}
+
+              <!-- Navegador de destino (oculto al buscar) -->
+              <div x-show="!destSearchQuery.trim()"
+                   class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-100 bg-slate-50">
                 <button @click="moveBrowserUp()"
                         :disabled="!moveBrowserPath || moveBrowserPath === rootFolder"
                         class="p-1 rounded text-slate-400 hover:bg-slate-200 disabled:opacity-30 transition-colors">
@@ -330,8 +420,8 @@
                       x-text="moveBrowserPath || rootFolder"></span>
               </div>
 
-              <!-- Lista de carpetas disponibles como destino -->
-              <div class="flex-1 overflow-y-auto py-1">
+              <!-- Lista de subcarpetas (oculta al buscar) -->
+              <div x-show="!destSearchQuery.trim()" class="flex-1 overflow-y-auto py-1">
                 <template x-if="moveBrowserEntries.length === 0">
                   <div class="px-3 py-4 text-[10px] text-slate-400 italic text-center">Sin subcarpetas</div>
                 </template>
@@ -352,6 +442,64 @@
                         class="w-full py-2 rounded-lg bg-indigo-500 text-white text-xs font-semibold hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                   <i class="fa-solid fa-folder-arrow-down mr-1.5"></i>
                   Mover aquí
+                </button>
+              </div>
+
+            </div>
+          </template>
+
+          <!-- ── Modo Copy ──────────────────────────────────────────── -->
+          <template x-if="pdfMode === 'copy'">
+            <div class="flex-1 flex flex-col min-h-0">
+
+              <!-- Cabecera -->
+              <div class="px-3 py-2 border-b border-slate-100 shrink-0">
+                <div class="flex items-center gap-1.5 mb-1.5">
+                  <i class="fa-solid fa-copy text-teal-500 text-[10px]"></i>
+                  <span class="text-xs font-semibold text-slate-700">Copiar
+                    <span class="font-normal text-teal-600"
+                          x-text="copyingEntries.length ? `${copyingEntries.length} elemento(s)` : 'sin selección'"></span>
+                  </span>
+                </div>
+                <p class="text-[10px] text-slate-400">Haz clic en los elementos de la lista para seleccionar/deseleccionar. Luego navega a la carpeta destino y pulsa <strong>Copiar aquí</strong>.</p>
+              </div>
+
+              {{ dest_browser() }}
+
+              <!-- Navegador de destino (oculto al buscar) -->
+              <div x-show="!destSearchQuery.trim()"
+                   class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-100 bg-slate-50">
+                <button @click="moveBrowserUp()"
+                        :disabled="!moveBrowserPath || moveBrowserPath === rootFolder"
+                        class="p-1 rounded text-slate-400 hover:bg-slate-200 disabled:opacity-30 transition-colors">
+                  <i class="fa-solid fa-arrow-left text-[10px]"></i>
+                </button>
+                <span class="text-[10px] text-slate-500 truncate flex-1 min-w-0 font-mono"
+                      x-text="moveBrowserPath || rootFolder"></span>
+              </div>
+
+              <!-- Lista de subcarpetas (oculta al buscar) -->
+              <div x-show="!destSearchQuery.trim()" class="flex-1 overflow-y-auto py-1">
+                <template x-if="moveBrowserEntries.length === 0">
+                  <div class="px-3 py-4 text-[10px] text-slate-400 italic text-center">Sin subcarpetas</div>
+                </template>
+                <template x-for="dir in moveBrowserEntries" :key="dir.path">
+                  <div @click="loadMoveBrowser(dir.path)"
+                       class="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-teal-50 text-xs text-slate-700 transition-colors">
+                    <i class="fa-solid fa-folder text-amber-400 w-3.5 shrink-0 text-center"></i>
+                    <span class="truncate" x-text="dir.name"></span>
+                    <i class="fa-solid fa-chevron-right text-slate-300 text-[8px] ml-auto shrink-0"></i>
+                  </div>
+                </template>
+              </div>
+
+              <!-- Botón confirmar -->
+              <div class="shrink-0 px-3 py-2.5 border-t border-slate-100 bg-slate-50">
+                <button @click="executeCopy()"
+                        :disabled="!copyingEntries.length"
+                        class="w-full py-2 rounded-lg bg-teal-500 text-white text-xs font-semibold hover:bg-teal-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                  <i class="fa-solid fa-copy mr-1.5"></i>
+                  Copiar aquí
                 </button>
               </div>
 

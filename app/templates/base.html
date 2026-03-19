@@ -140,7 +140,6 @@
         selectedEntry: null,
         previewUrl: null,
         pdfMode: 'none',
-        filterText: '',
         renamingPath: null,
         renameValue: '',
         selectedPdfs: [],
@@ -154,6 +153,13 @@
         movingEntries: [],
         moveBrowserPath: '',
         moveBrowserEntries: [],
+        copyingEntries: [],
+        destSearchQuery: '',
+        destSearchResults: [],
+        destSearchLoading: false,
+        searchQuery: '',
+        searchResults: [],
+        searchLoading: false,
         panelWidth: 560,
         listWidth: 220,
         _resizing: false,
@@ -176,10 +182,13 @@
           }
         },
 
-        filteredEntries() {
-          if (!this.filterText) return this.entries;
-          const q = this.filterText.toLowerCase();
-          return this.entries.filter(e => e.name.toLowerCase().includes(q));
+        isSearchActive() {
+          return this.searchQuery.trim().length > 0;
+        },
+
+        clearSearch() {
+          this.searchQuery = '';
+          this.searchResults = [];
         },
 
         async load() {
@@ -209,7 +218,7 @@
           this.selectedEntry = null;
           this.previewUrl = null;
           this.pdfMode = 'none';
-          this.filterText = '';
+          this.clearSearch();
           this.load();
         },
 
@@ -220,6 +229,7 @@
           this.previewUrl = null;
           this.pdfMode = 'none';
           this.entries = [];
+          this.clearSearch();
           this.load();
         },
 
@@ -233,6 +243,7 @@
           }
           this.selectedEntry = null;
           this.previewUrl = null;
+          this.clearSearch();
           this.load();
         },
 
@@ -392,11 +403,113 @@
           }
         },
 
+        // ── Search ────────────────────────────────────────────────────────
+        async runSearch() {
+          const q = this.searchQuery.trim();
+          if (!q) { this.searchResults = []; return; }
+          this.searchLoading = true;
+          const subPath = this.currentPath.split('/').slice(1).join('/');
+          const url = `/api/explorer/search?institution_id=${this.institutionId}`
+                    + `&period_id=${this.periodId}&root=${this.rootFolder}`
+                    + `&path=${encodeURIComponent(subPath)}&q=${encodeURIComponent(q)}`;
+          try {
+            const data = await this._apiFetch(url);
+            this.searchResults = data.entries || [];
+          } catch { this.searchResults = []; }
+          this.searchLoading = false;
+        },
+
+        navigateToSearchResult(entry) {
+          this.clearSearch();
+          if (entry.is_dir) {
+            // Carpeta → entrar directamente
+            this.navigateTo(entry.path);
+          } else {
+            // Archivo → ir al padre y seleccionarlo para preview
+            const parts = entry.path.split('/');
+            const parentPath = parts.length > 1 ? parts.slice(0, -1).join('/') : this.rootFolder;
+            this.navigateTo(parentPath);
+            this.$nextTick(() => { this.selectedEntry = entry; });
+          }
+        },
+
+        // ── Destination search (compartido entre move y copy) ────────────
+        async searchDestFolders() {
+          const q = this.destSearchQuery.trim();
+          if (!q) { this.destSearchResults = []; return; }
+          this.destSearchLoading = true;
+          const url = `/api/explorer/search?institution_id=${this.institutionId}`
+                    + `&period_id=${this.periodId}&root=${this.rootFolder}`
+                    + `&q=${encodeURIComponent(q)}`;
+          try {
+            const data = await this._apiFetch(url);
+            this.destSearchResults = (data.entries || []).filter(e => e.is_dir);
+          } catch { this.destSearchResults = []; }
+          this.destSearchLoading = false;
+        },
+
+        clearDestSearch() {
+          this.destSearchQuery = '';
+          this.destSearchResults = [];
+        },
+
+        setMoveDestination(path) {
+          this.clearDestSearch();
+          this.loadMoveBrowser(path);
+        },
+
+        // ── Merge mode ────────────────────────────────────────────────────
+        startMerge() {
+          this.selectedPdfs = [];
+          this.pdfMode = 'merge';
+        },
+
+        // ── Copy mode ─────────────────────────────────────────────────────
+        startCopy(entry) {
+          this.copyingEntries = [entry];
+          this.moveBrowserPath = this.currentPath;
+          this.pdfMode = 'copy';
+          this.clearDestSearch();
+          this.loadMoveBrowser(this.moveBrowserPath);
+        },
+
+        toggleCopyEntry(entry) {
+          const idx = this.copyingEntries.findIndex(e => e.path === entry.path);
+          if (idx >= 0) this.copyingEntries.splice(idx, 1);
+          else this.copyingEntries.push(entry);
+        },
+
+        async executeCopy() {
+          if (!this.copyingEntries.length) return;
+          const dst = this.moveBrowserPath;
+          let ok = true;
+          for (const entry of this.copyingEntries) {
+            const data = await this._apiFetch('/api/explorer/copy', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                institution_id: this.institutionId,
+                period_id: this.periodId,
+                src: entry.path,
+                dst_folder: dst,
+              }),
+            });
+            if (!data.ok) { this.showToast(false, data.message); ok = false; break; }
+          }
+          if (ok) {
+            this.showToast(true, `${this.copyingEntries.length} elemento(s) copiado(s).`);
+            this.pdfMode = 'none';
+            this.copyingEntries = [];
+            this.load();
+          }
+        },
+
         // ── Move mode ─────────────────────────────────────────────────────
         startMove(entry) {
           this.movingEntries = [entry];
           this.moveBrowserPath = this.currentPath;
           this.pdfMode = 'move';
+          this.clearDestSearch();
           this.loadMoveBrowser(this.moveBrowserPath);
         },
 

@@ -17,6 +17,7 @@ from app.models.institution import Institution
 from app.models.period import AuditPeriod
 from app.models.rules import SystemSettings
 from app.schemas.explorer import (
+    CopyRequest,
     DeleteRequest,
     FileNode,
     ListResponse,
@@ -383,6 +384,85 @@ async def reorder_pages(body: ReorderRequest, db: AsyncSession = Depends(get_db)
         raise HTTPException(500, f"Error al reordenar: {e}")
 
     return OperationResult(ok=True, message="Páginas reordenadas correctamente")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Buscar archivos / carpetas por nombre (recursivo)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_SEARCH_MAX_RESULTS = 100
+
+
+@router.get("/search", response_model=ListResponse)
+async def search_entries(
+    institution_id: int = Query(...),
+    period_id: int = Query(...),
+    root: str = Query("STAGE"),
+    path: str = Query(""),
+    q: str = Query(..., min_length=1),
+    db: AsyncSession = Depends(get_db),
+):
+    """Búsqueda recursiva de archivos y carpetas cuyo nombre contiene *q*."""
+    sandbox = await _resolve_sandbox(institution_id, period_id, db)
+    rel = f"{root}/{path}".strip("/") if path else root
+    base = _safe_resolve(sandbox, rel)
+
+    if not base.is_dir():
+        return ListResponse(entries=[], current_path=rel)
+
+    q_lower = q.lower()
+    entries: list[FileNode] = []
+
+    for item in sorted(base.rglob("*"), key=lambda x: (not x.is_dir(), x.name.lower())):
+        if q_lower not in item.name.lower():
+            continue
+        if not item.is_dir() and item.suffix.lower() != ".pdf":
+            continue
+        entries.append(FileNode(
+            name=item.name,
+            path=str(item.relative_to(sandbox)).replace("\\", "/"),
+            is_dir=item.is_dir(),
+            size=item.stat().st_size if item.is_file() else None,
+        ))
+        if len(entries) >= _SEARCH_MAX_RESULTS:
+            break
+
+    return ListResponse(entries=entries, current_path=rel)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Copiar archivo o carpeta
+# ──────────────────────────────────────────────────────────────────────────────
+
+@router.post("/copy", response_model=OperationResult)
+async def copy_entry(body: CopyRequest, db: AsyncSession = Depends(get_db)):
+    """Copia un archivo o carpeta a otra carpeta destino."""
+    import shutil
+
+    sandbox = await _resolve_sandbox(body.institution_id, body.period_id, db)
+    src = _safe_resolve(sandbox, body.src)
+    dst_folder = _safe_resolve(sandbox, body.dst_folder)
+
+    if not src.exists():
+        raise HTTPException(404, "Origen no encontrado")
+    if not dst_folder.is_dir():
+        raise HTTPException(400, "Destino no es un directorio")
+    if dst_folder == src.parent:
+        raise HTTPException(400, "El origen ya se encuentra en esa carpeta")
+    # Prevent copying a folder into one of its own descendants
+    if src.is_dir() and (dst_folder == src or dst_folder.is_relative_to(src)):
+        raise HTTPException(400, "No puedes copiar una carpeta dentro de sí misma")
+
+    dst = dst_folder / src.name
+    try:
+        if src.is_file():
+            shutil.copy2(src, dst)
+        else:
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+    except OSError as e:
+        raise HTTPException(500, f"Error al copiar: {e}")
+
+    return OperationResult(ok=True, message=f'"{src.name}" copiado a {dst_folder.name}/')
 
 
 # ──────────────────────────────────────────────────────────────────────────────
