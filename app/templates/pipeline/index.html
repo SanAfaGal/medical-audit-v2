@@ -454,6 +454,81 @@
 
     </div><!-- /Terminal card -->
 
+    <!-- Annul folders review panel (CHECK_FOLDERS_WITH_EXTRA_TEXT) -->
+    <template x-if="annulData && annulData.length > 0">
+      <div :class="$store.ui.consoleOpen ? 'shrink-0' : 'flex-1 min-h-0'"
+           class="rounded-xl overflow-hidden flex flex-col"
+           style="border:1px solid var(--border);background:var(--bg-surface)">
+        <!-- Header -->
+        <div class="px-4 py-3 flex items-center justify-between border-b"
+             style="border-color:var(--border);background:var(--bg-subtle)">
+          <div class="flex items-center gap-2 flex-wrap">
+            <i class="fa-solid fa-folder-open text-sm" style="color:var(--rose,#e11d48)"></i>
+            <span class="text-sm font-semibold" style="color:var(--text-1)">Carpetas con texto extra</span>
+            <span class="text-xs px-2 py-0.5 rounded-full font-semibold"
+                  style="background:#fff0f3;color:#e11d48;border:1px solid #fecdd3"
+                  x-text="annulData.length + ' carpeta(s)'"></span>
+            <!-- Bulk action buttons -->
+            <button @click="annulData.forEach(f => f.action = 'annul')"
+                    class="ml-2 text-[10px] px-2 py-0.5 rounded font-semibold transition-colors"
+                    style="background:#fff0f3;color:#e11d48;border:1px solid #fecdd3">
+              Todas → Anular y eliminar
+            </button>
+            <button @click="annulData.forEach(f => f.action = 'skip')"
+                    class="text-[10px] px-2 py-0.5 rounded font-semibold transition-colors"
+                    style="background:var(--bg-subtle);color:var(--text-2);border:1px solid var(--border)">
+              Todas → Ignorar
+            </button>
+          </div>
+          <button @click="annulData = null" class="p-1 rounded-md transition-colors" style="color:var(--text-3)"
+                  title="Cerrar panel">
+            <i class="fa-solid fa-xmark text-xs"></i>
+          </button>
+        </div>
+
+        <!-- Folder list -->
+        <div :class="$store.ui.consoleOpen ? 'max-h-64' : 'flex-1'"
+             class="divide-y overflow-y-auto" style="border-color:var(--border)">
+          <template x-for="folder in annulData" :key="folder.folder_path">
+            <div class="flex items-center gap-3 px-4 py-2.5">
+              <!-- Folder name -->
+              <i class="fa-solid fa-folder text-sm shrink-0" style="color:var(--text-3)"></i>
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-medium truncate select-text cursor-text"
+                     style="color:var(--text-1)" x-text="folder.folder_name"></div>
+                <div x-show="folder.invoice_number"
+                     class="text-[10px]" style="color:var(--text-3)"
+                     x-text="'Factura: ' + folder.invoice_number"></div>
+              </div>
+              <!-- Action select -->
+              <select x-model="folder.action"
+                      class="text-xs border rounded-md px-2 py-1 shrink-0"
+                      style="border-color:var(--border);color:var(--text-1);background:var(--bg-surface)"
+                      :style="folder.action === 'annul'
+                              ? 'border-color:#fecdd3;color:#e11d48;background:#fff0f3'
+                              : ''">
+                <option value="skip">Ignorar por ahora</option>
+                <option value="annul">Anular y eliminar carpeta</option>
+              </select>
+            </div>
+          </template>
+        </div>
+
+        <!-- Footer: apply button -->
+        <div class="px-4 py-3 border-t flex items-center justify-between gap-3"
+             style="border-color:var(--border);background:var(--bg-subtle)">
+          <span class="text-[11px]" style="color:var(--text-3)"
+                x-text="annulData.filter(f=>f.action==='annul').length + ' carpeta(s) se anularán y eliminarán del disco'"></span>
+          <button @click="applyAnnulDecisions()"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style="background:#e11d48;color:#fff">
+            <i class="fa-solid fa-check text-[10px]"></i>
+            Aplicar decisiones
+          </button>
+        </div>
+      </div>
+    </template>
+
     <!-- Surplus review panel -->
     <template x-if="surplusData && surplusData.length > 0">
       <div :class="$store.ui.consoleOpen ? 'shrink-0' : 'flex-1 min-h-0'"
@@ -823,6 +898,7 @@ function pipeline() {
     docTypes: [],
     unmappedConfirm: null,
     surplusData: null,
+    annulData: null,
     nonPdfData: null,
     previewFile: null,
     stageStatuses: {},
@@ -985,7 +1061,8 @@ function pipeline() {
       return stageId === 'LOAD_AND_PROCESS'
           || stageId === 'LOAD_DRIVE_ZIP'
           || stageId === 'REVISAR_SOBRANTES'
-          || stageId === 'REMOVE_NON_PDF';
+          || stageId === 'REMOVE_NON_PDF'
+          || stageId === 'CHECK_FOLDERS_WITH_EXTRA_TEXT';
     },
 
     async _runBackgroundStage(stageId, institutionId, periodId) {
@@ -1200,6 +1277,37 @@ function pipeline() {
             if (data.unknown_services?.length)  { const m=`[WARN] Servicios sin mapear: ${data.unknown_services.join(', ')}`; this.logLines.push(m); this._markLine(stageId,m); }
             this.scrollLog();
 
+          } else if (stageId === 'CHECK_FOLDERS_WITH_EXTRA_TEXT') {
+            // Sync SSE — sends folder list, auditor decides per-folder action
+            let url = `/api/pipeline/run/${stageId}?institution_id=${encodeURIComponent(institutionId)}&period_id=${encodeURIComponent(periodId)}`;
+            const evtSource = new EventSource(url);
+
+            await new Promise((resolve) => {
+              evtSource.onmessage = (event) => {
+                let line = event.data;
+                try { const p = JSON.parse(event.data); line = p.msg || event.data; } catch {}
+                if (line === '[DONE]') { evtSource.close(); resolve(); return; }
+                if (line.startsWith('[DATA] ')) {
+                  try {
+                    this.annulData = JSON.parse(line.slice(7)).map(folder => ({
+                      ...folder,
+                      action: folder.action || 'skip',
+                    }));
+                  } catch(e) {}
+                  return;
+                }
+                this._markLine(stageId, line);
+                this._updateStageResult(stageId, line);
+                this.logLines.push(line);
+                this.$nextTick(() => this.scrollLog());
+              };
+              evtSource.onerror = () => {
+                evtSource.close();
+                const msg = `[ERROR] Conexión interrumpida en etapa ${stageId}`;
+                this.logLines.push(msg); this._markLine(stageId, msg); resolve();
+              };
+            });
+
           } else if (stageId === 'REVISAR_SOBRANTES') {
             // Sync SSE — blocks waiting for user interaction via [DATA] events
             let url = `/api/pipeline/run/${stageId}?institution_id=${encodeURIComponent(institutionId)}&period_id=${encodeURIComponent(periodId)}`;
@@ -1293,6 +1401,43 @@ function pipeline() {
       this.currentStageLabel = '';
       this.logLines.push('─── PIPELINE FINALIZADO ───');
       this.scrollLog();
+    },
+
+    async applyAnnulDecisions() {
+      if (!this.annulData || this.annulData.length === 0) return;
+      const toAnnul = this.annulData.filter(f => f.action === 'annul');
+      if (toAnnul.length === 0) {
+        this.annulData = null;
+        return;
+      }
+      const institutionId = this.$store.ctx.institutionId;
+      const periodId = this.$store.ctx.periodId;
+      const res = await fetch('/api/invoices/annul-folders', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          institution_id: parseInt(institutionId),
+          period_id: parseInt(periodId),
+          decisions: this.annulData.map(f => ({
+            folder_path: f.folder_path,
+            invoice_id: f.invoice_id,
+            action: f.action,
+          })),
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const msg = `[INFO] Anuladas: ${data.annulled} carpeta(s), omitidas: ${data.skipped}`;
+        this.logLines.push(msg);
+        if (data.errors?.length) {
+          data.errors.forEach(e => this.logLines.push(`[WARN] ${e}`));
+        }
+        this.scrollLog();
+        this.annulData = null;
+      } else {
+        const err = await res.json().catch(() => ({detail: 'Error desconocido'}));
+        alert('Error al aplicar decisiones: ' + (err.detail || JSON.stringify(err)));
+      }
     },
 
     async applyDelete(inv, sob) {

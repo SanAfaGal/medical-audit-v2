@@ -790,22 +790,76 @@ async def _check_invoice_number_on_files(ctx: dict) -> AsyncGenerator[str, None]
 
 @_stage("CHECK_FOLDERS_WITH_EXTRA_TEXT")
 async def _check_folders_with_extra_text(ctx: dict) -> AsyncGenerator[str, None]:
-    """Detect folders with extra text in their names."""
+    """Detect folders with extra text; send interactive payload for auditor review."""
+    import json
+
+    from sqlalchemy import select
+
+    from app.models.invoice import Invoice
     from core.inspector import FolderInspector
 
     executor = _get_executor()
     stage_path: Path = ctx["stage_path"]
     institution = ctx["institution"]
+    period = ctx["period"]
+    db: AsyncSession = ctx["db"]
 
     if not stage_path.is_dir():
         yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
     inspector = FolderInspector(stage_path, institution.invoice_id_prefix or "")
-    malformed = await executor(inspector.find_malformed_dirs)
-    for d in malformed:
-        yield plog("WARN", "Carpeta con texto extra", folder=d.name)
-    yield plog("INFO", f"Carpetas malformadas: {len(malformed)}")
+    malformed: list[Path] = await executor(inspector.find_malformed_dirs)
+
+    yield plog("INFO", f"Carpetas con texto extra encontradas: {len(malformed)}")
+
+    if not malformed:
+        yield plog("INFO", "No se encontraron carpetas con texto extra")
+        return
+
+    # Extract invoice numbers and batch-query the DB for invoice IDs
+    number_to_folder: dict[str, Path] = {}
+    no_number: list[Path] = []
+    for folder in malformed:
+        num = inspector.extract_invoice_number(folder.name)
+        if num:
+            number_to_folder[num] = folder
+        else:
+            no_number.append(folder)
+
+    invoice_number_to_id: dict[str, int] = {}
+    if number_to_folder:
+        result = await db.execute(
+            select(Invoice.invoice_number, Invoice.id).where(
+                Invoice.audit_period_id == period.id,
+                Invoice.invoice_number.in_(list(number_to_folder.keys())),
+            )
+        )
+        for inv_num, inv_id in result.all():
+            invoice_number_to_id[inv_num] = inv_id
+
+    # Build payload — one entry per malformed folder
+    payload: list[dict] = []
+    for num, folder in sorted(number_to_folder.items()):
+        yield plog("WARN", "Carpeta con texto extra", folder=folder.name)
+        payload.append({
+            "folder_name": folder.name,
+            "folder_path": str(folder),
+            "invoice_number": num,
+            "invoice_id": invoice_number_to_id.get(num),
+            "action": "skip",
+        })
+    for folder in sorted(no_number, key=lambda p: p.name):
+        yield plog("WARN", "Carpeta sin número de factura reconocible", folder=folder.name)
+        payload.append({
+            "folder_name": folder.name,
+            "folder_path": str(folder),
+            "invoice_number": None,
+            "invoice_id": None,
+            "action": "skip",
+        })
+
+    yield f"[DATA] {json.dumps(payload, ensure_ascii=False)}"
 
 
 @_stage("NORMALIZE_DIR_NAMES")

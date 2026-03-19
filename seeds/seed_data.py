@@ -42,6 +42,8 @@ DEFAULT_FOLDER_STATUSES = [
     {"status": "PENDIENTE"},
     {"status": "FALTANTE"},
     {"status": "AUDITADA"},
+    {"status": "ANULAR"},
+    {"status": "REVISAR"},
 ]
 
 

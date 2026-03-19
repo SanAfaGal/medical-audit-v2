@@ -357,3 +357,86 @@ async def delete_surplus_file(
 
     os.remove(target)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Annul folders (CHECK_FOLDERS_WITH_EXTRA_TEXT interactive action)
+# ---------------------------------------------------------------------------
+
+class FolderAnnulDecision(BaseModel):
+    folder_path: str
+    invoice_id: int | None = None
+    action: str  # "annul" | "skip"
+
+
+class BulkAnnulRequest(BaseModel):
+    institution_id: int
+    period_id: int
+    decisions: list[FolderAnnulDecision]
+
+
+@router.post("/annul-folders", status_code=200)
+async def annul_folders(data: BulkAnnulRequest, db: AsyncSession = Depends(get_db)):
+    """Apply auditor decisions for malformed folders: annul+delete or skip.
+
+    For each decision with action="annul":
+    - Updates the invoice's folder_status to ANULAR in the DB (if invoice_id provided).
+    - Deletes the folder and all its contents from disk.
+    """
+    import shutil
+
+    from sqlalchemy import select, update
+
+    from app.models.invoice import Invoice
+    from app.models.rules import FolderStatus
+    from app.paths import to_container_path
+    from app.repositories.rules_repo import RulesRepo
+
+    rules_repo = RulesRepo(db)
+    sys_settings = await rules_repo.get_system_settings()
+    if not sys_settings or not sys_settings.audit_data_root:
+        raise HTTPException(500, "audit_data_root no configurado")
+    audit_root = to_container_path(sys_settings.audit_data_root)
+
+    # Get-or-create ANULAR folder status
+    anular_status = (
+        await db.execute(select(FolderStatus).where(FolderStatus.status == "ANULAR"))
+    ).scalar_one_or_none()
+    if anular_status is None:
+        anular_status = FolderStatus(status="ANULAR")
+        db.add(anular_status)
+        await db.flush()
+
+    annulled = 0
+    skipped = 0
+    errors: list[str] = []
+
+    for decision in data.decisions:
+        if decision.action != "annul":
+            skipped += 1
+            continue
+
+        # Security: folder must be inside the audit data root
+        folder = Path(decision.folder_path)
+        try:
+            folder.relative_to(audit_root)
+        except ValueError:
+            errors.append(f"Ruta fuera del directorio de auditoría: {decision.folder_path}")
+            continue
+
+        # Update DB status
+        if decision.invoice_id is not None:
+            await db.execute(
+                update(Invoice)
+                .where(Invoice.id == decision.invoice_id)
+                .values(folder_status_id=anular_status.id)
+            )
+
+        # Delete folder from disk
+        if folder.exists() and folder.is_dir():
+            shutil.rmtree(folder)
+
+        annulled += 1
+
+    await db.commit()
+    return {"annulled": annulled, "skipped": skipped, "errors": errors}

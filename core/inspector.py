@@ -104,6 +104,19 @@ class FolderInspector:
                 result.append(path)
         return result
 
+    def extract_invoice_number(self, folder_name: str) -> str | None:
+        """Extract the invoice number digits from a folder name.
+
+        Args:
+            folder_name: Directory name to parse.
+
+        Returns:
+            The digit-only portion of the invoice identifier, or None if no
+            match is found.
+        """
+        match = self._re_dir_pattern.search(folder_name)
+        return match.group(1) if match else None
+
     def find_void_dirs(self) -> list[Path]:
         """Return directories whose names contain the void marker (``ANULAR``).
 
