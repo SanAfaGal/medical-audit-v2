@@ -7,6 +7,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _VOID_MARKER: str = "ANULAR"
+_UNKNOWN_MARKER: str = "(DESCONOCIDO)"
 
 
 class FolderInspector:
@@ -78,6 +79,30 @@ class FolderInspector:
                 if match:
                     on_disk.add(match.group(1))  # group(1) = digits only, strips prefix
         return [name for name in expected_dirs if name not in on_disk]
+
+    def find_unknown_dirs(self, known_numbers: set[str]) -> list[Path]:
+        """Return folders that match the invoice pattern but are absent from *known_numbers*.
+
+        Folders already prefixed with ``_UNKNOWN_MARKER`` are skipped so the
+        operation is idempotent when re-run.
+
+        Args:
+            known_numbers: Invoice numbers present in the database for this period.
+
+        Returns:
+            Paths of on-disk folders whose extracted invoice number has no
+            matching record in *known_numbers*.
+        """
+        result: list[Path] = []
+        for path in self.base_dir.iterdir():
+            if not path.is_dir():
+                continue
+            if path.name.startswith(_UNKNOWN_MARKER):
+                continue
+            match = self._re_dir_pattern.search(path.name)
+            if match and match.group(1) not in known_numbers:
+                result.append(path)
+        return result
 
     def find_void_dirs(self) -> list[Path]:
         """Return directories whose names contain the void marker (``ANULAR``).

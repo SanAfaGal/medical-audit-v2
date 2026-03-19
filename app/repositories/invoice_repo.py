@@ -229,6 +229,12 @@ class InvoiceRepo:
     # Pipeline helpers
     # ------------------------------------------------------------------
 
+    async def get_all_invoice_numbers(self, period_id: int) -> set[str]:
+        """Return all invoice numbers for a period regardless of folder status."""
+        q = select(Invoice.invoice_number).where(Invoice.audit_period_id == period_id)
+        result = await self.db.execute(q)
+        return set(result.scalars().all())
+
     async def get_invoice_numbers_by_status(
         self, period_id: int, status_code: str
     ) -> list[str]:

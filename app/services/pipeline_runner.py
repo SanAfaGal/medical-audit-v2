@@ -866,6 +866,61 @@ async def _check_dirs(ctx: dict) -> AsyncGenerator[str, None]:
             yield plog("WARN", "Sin carpeta en disco", folder=name, contract_type=_ct_for_folder(name, ct_map))
 
 
+@_stage("MARK_UNKNOWN_DIRS")
+async def _mark_unknown_dirs(ctx: dict) -> AsyncGenerator[str, None]:
+    """Rename STAGE folders that match the invoice pattern but have no DB record.
+
+    Folders are prefixed with '(DESCONOCIDO)'.  Already-marked folders are
+    skipped so the stage is safe to re-run.
+    """
+    from core.inspector import FolderInspector
+    from app.repositories.invoice_repo import InvoiceRepo
+
+    executor = _get_executor()
+    stage_path: Path = ctx["stage_path"]
+    institution = ctx["institution"]
+    period = ctx["period"]
+    db = ctx["db"]
+
+    if not stage_path.is_dir():
+        yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
+        return
+
+    inv_repo = InvoiceRepo(db)
+    known_numbers = await inv_repo.get_all_invoice_numbers(period.id)
+    yield plog("INFO", f"Facturas en BD para el periodo: {len(known_numbers)}")
+
+    inspector = FolderInspector(stage_path, institution.invoice_id_prefix or "")
+    unknown_dirs = await executor(inspector.find_unknown_dirs, known_numbers)
+
+    if not unknown_dirs:
+        yield plog("INFO", "No hay carpetas desconocidas.")
+        return
+
+    yield plog("INFO", f"Carpetas desconocidas encontradas: {len(unknown_dirs)}")
+
+    def _batch_rename(folders: list[Path]) -> tuple[list[str], list[str]]:
+        renamed, failed = [], []
+        for folder in folders:
+            new_path = folder.parent / f"(DESCONOCIDO) {folder.name}"
+            try:
+                folder.rename(new_path)
+                renamed.append(new_path.name)
+            except OSError as exc:
+                logger.warning("No se pudo renombrar %s: %s", folder.name, exc)
+                failed.append(folder.name)
+        return renamed, failed
+
+    renamed, failed = await executor(_batch_rename, unknown_dirs)
+
+    for name in renamed:
+        yield plog("WARN", f"Carpeta desconocida: {name}")
+    for name in failed:
+        yield plog("ERROR", f"Error al renombrar: {name}")
+
+    yield plog("INFO", f"Renombradas: {len(renamed)}, errores: {len(failed)}")
+
+
 @_stage("CHECK_REQUIRED_DOCS")
 async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
     """Verify required documents per service type; record findings for missing ones."""
