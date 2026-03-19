@@ -1410,18 +1410,19 @@ async def _download_missing_docs(ctx: dict) -> AsyncGenerator[str, None]:
     drive = DriveSync(credentials_dict=creds)
 
     id_prefix = institution.invoice_id_prefix or ""
-    total_files = 0
-    for invoice_number, doc_codes in grouped.items():
-        file_names = [
-            f"{prefix_by_code[code]}_{institution.nit}_{invoice_number}.pdf"
-            for code in doc_codes
-            if code in prefix_by_code
-        ]
-        if file_names:
-            dest_folder = stage_path / (id_prefix + invoice_number)
-            dest_folder.mkdir(parents=True, exist_ok=True)
-            await executor(drive.download_specific_files, file_names, dest_folder)
-            total_files += len(file_names)
-            yield plog("INFO", f"buscando {len(file_names)} documento(s) en Drive", folder=invoice_number)
 
-    yield plog("INFO", f"Total archivos buscados en Drive: {total_files}")
+    # Build all (file_name, dest_folder) pairs upfront across every invoice.
+    # dest_folder is created on demand by DriveSync.download_file.
+    download_requests: list[tuple[str, Path]] = [
+        (
+            f"{prefix_by_code[code]}_{institution.nit}_{id_prefix}{invoice_number}.pdf",
+            stage_path / (id_prefix + invoice_number),
+        )
+        for invoice_number, doc_codes in grouped.items()
+        for code in doc_codes
+        if code in prefix_by_code
+    ]
+
+    yield plog("INFO", f"Buscando {len(download_requests)} documento(s) en Drive...")
+    found, not_found = await executor(drive.download_specific_files, download_requests)
+    yield plog("INFO", f"Encontrados: {found}, no encontrados: {not_found}")

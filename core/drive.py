@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 _DRIVE_FOLDER_MIME: str = "application/vnd.google-apps.folder"
 _DRIVE_SCOPES: list[str] = ["https://www.googleapis.com/auth/drive.readonly"]
 _DRIVE_SEARCH_PAGE_SIZE: int = 1000
-_DRIVE_SINGLE_PAGE_SIZE: int = 1
+_DRIVE_FILE_BATCH_SIZE: int = 50  # max file names per batched OR-query
 
 # Transient HTTP status codes that warrant a retry (5xx server errors + 429 rate-limit).
 _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
@@ -182,32 +182,62 @@ class DriveSync:
         return downloaded
 
     def download_specific_files(
-        self, file_names: list[str], local_root: Path
-    ) -> None:
-        """Search for specific files by name in Drive and download them."""
-        logger.info("Starting search for %d specific files", len(file_names))
-        not_found: set[str] = set()
+        self, requests: list[tuple[str, Path]]
+    ) -> tuple[int, int]:
+        """Search for specific files by name in Drive and download them.
 
-        for name in file_names:
+        Batches all file-name lookups into chunked OR-queries to minimise
+        round-trips.  Each chunk issues a single ``files.list`` call and
+        dispatches downloads for every match found.
+
+        Args:
+            requests: Pairs of ``(file_name, dest_folder)`` to locate and
+                download.  ``dest_folder`` is created automatically if it does
+                not yet exist.
+
+        Returns:
+            ``(found_count, not_found_count)`` across all requests.
+        """
+        if not requests:
+            return 0, 0
+
+        logger.info("Searching Drive for %d specific file(s)", len(requests))
+
+        # file_name → dest_folder; duplicate names are not expected but the
+        # last mapping wins (safe fallback).
+        dest_by_name: dict[str, Path] = {name: dest for name, dest in requests}
+        names = list(dest_by_name)
+        found_count = 0
+
+        for offset in range(0, len(names), _DRIVE_FILE_BATCH_SIZE):
+            chunk = names[offset : offset + _DRIVE_FILE_BATCH_SIZE]
+            names_clause = " or ".join(f"name = '{n}'" for n in chunk)
             query = (
-                f"name = '{name}' "
-                f"and mimeType != '{_DRIVE_FOLDER_MIME}' "
-                "and trashed = false"
+                f"({names_clause})"
+                f" and mimeType != '{_DRIVE_FOLDER_MIME}'"
+                " and trashed = false"
             )
-            results = (
-                self.service.files()
-                .list(q=query, fields="files(id, name)", pageSize=_DRIVE_SINGLE_PAGE_SIZE)
-                .execute()
+            request = self.service.files().list(
+                q=query,
+                fields="files(id, name)",
+                pageSize=len(chunk),
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
             )
-            files = results.get("files", [])
+            results = self._execute_with_retry(request)
 
-            if not files:
+            matched_names: set[str] = set()
+            for file_info in results.get("files", []):
+                name = file_info["name"]
+                matched_names.add(name)
+                self.download_file(file_info["id"], name, dest_by_name[name])
+                found_count += 1
+
+            for name in sorted(set(chunk) - matched_names):
                 logger.info("File not found in Drive: %s", name)
-                not_found.add(name)
-                continue
 
-            file_info = files[0]
-            self.download_file(file_info["id"], file_info["name"], local_root)
+        not_found_count = len(requests) - found_count
+        if not_found_count:
+            logger.warning("%d file(s) not found in Drive", not_found_count)
 
-        if not_found:
-            logger.warning("Files not found in Drive: %s", sorted(not_found))
+        return found_count, not_found_count
