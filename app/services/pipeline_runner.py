@@ -1356,19 +1356,16 @@ async def _download_drive(ctx: dict) -> AsyncGenerator[str, None]:
     id_prefix = institution.invoice_id_prefix or ""
     # Folders on disk (and in Drive) are named PREFIX+invoice_number
     search_names = [id_prefix + num for num in missing]
-    for sn in search_names:
-        yield plog("INFO", f"Buscando en Drive: {sn}")
 
     stage_path.mkdir(parents=True, exist_ok=True)
+    yield plog("INFO", f"Buscando {len(search_names)} carpeta(s) en Drive...")
     downloaded_prefixed = await executor(drive.download_missing_dirs, search_names, stage_path)
     yield plog("INFO", f"Carpetas descargadas de Drive: {len(downloaded_prefixed)}/{len(missing)}")
 
     if downloaded_prefixed:
-        # Strip prefix back to plain invoice numbers for DB update
-        downloaded = [
-            name[len(id_prefix):] if (id_prefix and name.upper().startswith(id_prefix.upper())) else name
-            for name in downloaded_prefixed
-        ]
+        # search_names were built as id_prefix + invoice_number, so stripping
+        # the prefix always yields the plain invoice number.
+        downloaded = [name[len(id_prefix):] for name in downloaded_prefixed]
         updated = await inv_repo.batch_update_folder_status(period.id, downloaded, "PRESENTE")
         await db.commit()
         yield plog("INFO", f"Facturas actualizadas a PRESENTE: {updated}")

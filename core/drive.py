@@ -70,6 +70,8 @@ class DriveSync:
             q=query,
             fields="files(id, name, parents)",
             pageSize=_DRIVE_SEARCH_PAGE_SIZE,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
         )
         results = self._execute_with_retry(request)
         return results.get("files", [])
@@ -101,18 +103,15 @@ class DriveSync:
     ) -> dict:
         """Fetch one page of a Drive folder's children."""
         query = f"'{folder_id}' in parents and trashed = false"
-        return (
-            self.service.files()
-            .list(
-                q=query,
-                fields="nextPageToken, files(id, name, mimeType)",
-                pageToken=page_token,
-                pageSize=_DRIVE_SEARCH_PAGE_SIZE,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            )
-            .execute()
+        request = self.service.files().list(
+            q=query,
+            fields="nextPageToken, files(id, name, mimeType)",
+            pageToken=page_token,
+            pageSize=_DRIVE_SEARCH_PAGE_SIZE,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
         )
+        return self._execute_with_retry(request)
 
     def _process_drive_item(
         self, item: dict, local_path: Path, depth: int
@@ -151,35 +150,81 @@ class DriveSync:
         if not has_items and depth == 0:
             logger.warning("Folder appears to be empty in Drive: %s", local_path.name)
 
+    def _batch_search_folders(
+        self, targets: list[str]
+    ) -> tuple[set[str], list[dict]]:
+        """Search Drive for multiple folder names using batched OR-queries.
+
+        Each chunk of up to ``_DRIVE_FILE_BATCH_SIZE`` targets is resolved in a
+        single ``files.list`` call.  Results are matched back to targets via a
+        case-insensitive substring check (replicating Drive's ``contains``
+        semantics) and deduplicated by folder ID so each folder is downloaded
+        at most once even when it matches several targets.
+
+        Args:
+            targets: Folder names to search for.
+
+        Returns:
+            ``(found_targets, unique_folders)`` where ``found_targets`` is the
+            subset of *targets* that matched at least one Drive folder, and
+            ``unique_folders`` is the de-duplicated list of folder dicts ready
+            to download.
+        """
+        found_targets: set[str] = set()
+        folders_by_id: dict[str, dict] = {}
+
+        for offset in range(0, len(targets), _DRIVE_FILE_BATCH_SIZE):
+            chunk = targets[offset : offset + _DRIVE_FILE_BATCH_SIZE]
+            names_clause = " or ".join(f"name contains '{t}'" for t in chunk)
+            query = (
+                f"({names_clause})"
+                f" and mimeType = '{_DRIVE_FOLDER_MIME}'"
+                " and trashed = false"
+            )
+            request = self.service.files().list(
+                q=query,
+                fields="files(id, name)",
+                pageSize=_DRIVE_SEARCH_PAGE_SIZE,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            results = self._execute_with_retry(request)
+
+            for folder in results.get("files", []):
+                folders_by_id[folder["id"]] = folder
+                folder_name_lower = folder["name"].lower()
+                for target in chunk:
+                    if target.lower() in folder_name_lower:
+                        found_targets.add(target)
+
+        return found_targets, list(folders_by_id.values())
+
     def download_missing_dirs(
         self, dir_names: list[str], local_root: Path
     ) -> list[str]:
         """Search Drive for a list of folder names and download each one found.
 
         Returns:
-            Names of folders that were found in Drive and downloaded.
+            Subset of *dir_names* that were found in Drive and downloaded.
         """
-        downloaded: list[str] = []
-        for target in dir_names:
-            logger.info("Searching Drive for folder: %s", target)
-            found = self.find_folders_by_name(target)
-            logger.info("Search results for %s: %d found", target, len(found))
+        if not dir_names:
+            return []
 
-            if not found:
-                logger.warning("Folder not found in Drive: %s", target)
-                continue
+        logger.info("Searching Drive for %d folder(s)", len(dir_names))
+        found_targets, unique_folders = self._batch_search_folders(dir_names)
 
-            for folder in found:
-                dest = local_root / folder["name"]
-                self._sync_folder_tree(folder["id"], dest)
+        for folder in unique_folders:
+            self._sync_folder_tree(folder["id"], local_root / folder["name"])
 
-            downloaded.append(target)
+        not_found = set(dir_names) - found_targets
+        for target in sorted(not_found):
+            logger.warning("Folder not found in Drive: %s", target)
 
         logger.info(
             "Drive download complete: %d/%d folders found",
-            len(downloaded), len(dir_names),
+            len(found_targets), len(dir_names),
         )
-        return downloaded
+        return list(found_targets)
 
     def download_specific_files(
         self, requests: list[tuple[str, Path]]
