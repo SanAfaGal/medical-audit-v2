@@ -1563,16 +1563,27 @@ async def _compress_audit(ctx: dict) -> AsyncGenerator[str, None]:
         yield plog("WARN", f"Directorio AUDIT no existe: {audit_path}")
         return
 
-    pdfs = list(audit_path.rglob("*.pdf"))
-    total = len(pdfs)
-    yield plog("INFO", f"PDFs encontrados en AUDIT: {total}")
+    all_pdfs = list(audit_path.rglob("*.pdf"))
+    yield plog("INFO", f"PDFs encontrados en AUDIT: {len(all_pdfs)}")
 
-    if not pdfs:
+    if not all_pdfs:
         yield plog("INFO", "No hay PDFs que comprimir.")
         return
 
+    pdfs = await loop.run_in_executor(
+        None, lambda: [f for f in all_pdfs if not DocumentProcessor.is_ghostscript_compressed(f)]
+    )
+    skipped = len(all_pdfs) - len(pdfs)
+    if skipped:
+        yield plog("INFO", f"Ya comprimidos (omitidos): {skipped}")
+
+    if not pdfs:
+        yield plog("INFO", "Todos los PDFs ya estaban comprimidos.")
+        return
+
+    total = len(pdfs)
     workers = max(os.cpu_count() or 4, 4)
-    yield plog("INFO", f"Paralelismo: {workers} workers")
+    yield plog("INFO", f"Por comprimir: {total} — paralelismo: {workers} workers")
 
     totals: dict[str, int] = {"success": 0, "failed": 0, "bytes_before": 0, "bytes_after": 0}
     chunks = [pdfs[i : i + _COMPRESS_CHUNK] for i in range(0, total, _COMPRESS_CHUNK)]

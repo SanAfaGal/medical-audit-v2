@@ -74,6 +74,22 @@ class DocumentProcessor:
             return False
 
     @staticmethod
+    def is_ghostscript_compressed(file_path: Path) -> bool:
+        """Return True if the PDF was already processed by Ghostscript.
+
+        Ghostscript always writes its name into the /Producer metadata field.
+        Reading metadata with fitz is fast (~1 ms/file) and avoids re-compressing.
+        """
+        try:
+            import fitz
+
+            with fitz.open(file_path) as doc:
+                producer = (doc.metadata.get("producer") or "").lower()
+            return "ghostscript" in producer
+        except Exception:
+            return False
+
+    @staticmethod
     def compress_with_ghostscript(file_path: Path, quality: str = _GS_DEFAULT_QUALITY) -> bool:
         """Compress a PDF using Ghostscript."""
         temp = file_path.with_suffix(".opt.tmp")
