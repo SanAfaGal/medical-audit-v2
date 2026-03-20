@@ -67,7 +67,8 @@ class DocumentScanner:
         Returns:
             Matching file paths.
         """
-        criteria = tuple(prefixes) if isinstance(prefixes, list) else prefixes
+        upper = [p.upper() for p in prefixes] if isinstance(prefixes, list) else prefixes.upper()
+        criteria = tuple(upper) if isinstance(upper, list) else upper
         return [f for f in self.base_dir.rglob("*") if f.is_file() and f.name.upper().startswith(criteria)]
 
     def list_dirs(self) -> list[Path]:

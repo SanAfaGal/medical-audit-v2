@@ -176,26 +176,57 @@ class TestNormalize:
 # ---------------------------------------------------------------------------
 
 
+def _mock_repos(*, admins=None, contracts=None, services=None, agreements=None, service_types=None):
+    """Build pre-configured (MockRulesRepo, MockInstRepo) for ingest tests."""
+    admin_list = (
+        admins
+        if admins is not None
+        else [
+            SimpleNamespace(id=10, raw_name="NUEVA EPS", canonical_name="EPS NUEVA"),
+        ]
+    )
+    contract_list = (
+        contracts
+        if contracts is not None
+        else [
+            SimpleNamespace(id=30, raw_name="C001", canonical_name="C001"),
+        ]
+    )
+    service_list = (
+        services
+        if services is not None
+        else [
+            SimpleNamespace(id=20, raw_service="URGENCIAS", service_type_id=99),
+        ]
+    )
+    agreement_list = (
+        agreements
+        if agreements is not None
+        else [
+            SimpleNamespace(
+                id=5,
+                administrator=SimpleNamespace(raw_name="NUEVA EPS"),
+                contract=SimpleNamespace(raw_name="C001"),
+            ),
+        ]
+    )
+    st_list = service_types if service_types is not None else [SimpleNamespace(id=99, priority=1)]
+
+    MockRulesRepo = AsyncMock()
+    MockRulesRepo.get_folder_status_by_status = AsyncMock(return_value=SimpleNamespace(id=2))
+    MockRulesRepo.get_service_types = AsyncMock(return_value=st_list)
+
+    MockInstRepo = AsyncMock()
+    MockInstRepo.get_all_administrators = AsyncMock(return_value=admin_list)
+    MockInstRepo.get_all_contracts = AsyncMock(return_value=contract_list)
+    MockInstRepo.get_services = AsyncMock(return_value=service_list)
+    MockInstRepo.get_agreements = AsyncMock(return_value=agreement_list)
+
+    return MockRulesRepo, MockInstRepo
+
+
 class TestIngest:
-    """Integration-lite tests for billing.ingest using AsyncMock."""
-
-    def _make_institution(self, name="Hospital Test"):
-        return SimpleNamespace(id=1, name=name)
-
-    def _make_admin(self, canonical=None):
-        return SimpleNamespace(id=10, canonical_admin=canonical)
-
-    def _make_service(self, service_type_id=99):
-        return SimpleNamespace(id=20, service_type_id=service_type_id)
-
-    def _make_contract(self, canonical=None):
-        return SimpleNamespace(id=30, canonical_contract=canonical)
-
-    def _make_folder_status(self):
-        return SimpleNamespace(id=2)
-
-    def _make_service_type(self, st_id=99):
-        return SimpleNamespace(id=st_id)
+    """Tests for billing.ingest using mocked repos (current bulk-insert API)."""
 
     @pytest.fixture
     def mock_db(self):
@@ -204,88 +235,49 @@ class TestIngest:
     async def test_inserted_count_for_mapped_admin(self, mock_db):
         from app.services.billing import ingest
 
-        institution = self._make_institution()
-        default_st = self._make_service_type(99)
-        default_fs = self._make_folder_status()
-        admin = self._make_admin(canonical="EPS NUEVA")
-        service = self._make_service(service_type_id=99)
-        contract = self._make_contract(canonical="C001")
-
+        mock_rules, mock_inst = _mock_repos()
         with (
-            patch("app.services.billing.RulesRepo") as MockRulesRepo,
-            patch("app.services.billing.InstitutionRepo") as MockInstRepo,
-            patch("app.services.billing.InvoiceRepo") as MockInvRepo,
+            patch("app.services.billing.RulesRepo", return_value=mock_rules),
+            patch("app.services.billing.InstitutionRepo", return_value=mock_inst),
         ):
-            MockRulesRepo.return_value.get_service_type_by_code = AsyncMock(return_value=default_st)
-            MockRulesRepo.return_value.get_folder_status_by_status = AsyncMock(return_value=default_fs)
-            MockInstRepo.return_value.upsert_admin = AsyncMock(return_value=admin)
-            MockInstRepo.return_value.upsert_contract = AsyncMock(return_value=contract)
-            MockInstRepo.return_value.upsert_service = AsyncMock(return_value=service)
-            MockInvRepo.return_value.upsert_invoice = AsyncMock(return_value=SimpleNamespace(id=1))
-            mock_db.commit = AsyncMock()
-
-            result = await ingest(_make_excel_bytes(), institution, period_id=1, db=mock_db)
+            result = await ingest(_make_excel_bytes(), SimpleNamespace(id=1, name="H"), period_id=1, db=mock_db)
 
         assert result["inserted"] == 1
         assert result["skipped"] == 0
 
-    async def test_skips_row_when_admin_not_mapped(self, mock_db):
+    async def test_unknown_admin_reported(self, mock_db):
         from app.services.billing import ingest
 
-        institution = self._make_institution()
-        default_st = self._make_service_type()
-        default_fs = self._make_folder_status()
-        admin = self._make_admin(canonical=None)  # not mapped
-
+        mock_rules, mock_inst = _mock_repos(admins=[SimpleNamespace(id=10, raw_name="NUEVA EPS", canonical_name=None)])
         with (
-            patch("app.services.billing.RulesRepo") as MockRulesRepo,
-            patch("app.services.billing.InstitutionRepo") as MockInstRepo,
-            patch("app.services.billing.InvoiceRepo"),
+            patch("app.services.billing.RulesRepo", return_value=mock_rules),
+            patch("app.services.billing.InstitutionRepo", return_value=mock_inst),
         ):
-            MockRulesRepo.return_value.get_service_type_by_code = AsyncMock(return_value=default_st)
-            MockRulesRepo.return_value.get_folder_status_by_status = AsyncMock(return_value=default_fs)
-            MockInstRepo.return_value.upsert_admin = AsyncMock(return_value=admin)
-            mock_db.commit = AsyncMock()
+            result = await ingest(_make_excel_bytes(), SimpleNamespace(id=1, name="H"), period_id=1, db=mock_db)
 
-            result = await ingest(_make_excel_bytes(), institution, period_id=1, db=mock_db)
-
-        assert result["inserted"] == 0
-        assert result["skipped"] == 1
         assert "NUEVA EPS" in result["unknown_admins"]
 
-    async def test_unknown_service_recorded(self, mock_db):
+    async def test_unknown_service_reported(self, mock_db):
         from app.services.billing import ingest
 
-        institution = self._make_institution()
-        default_st = self._make_service_type(st_id=99)  # GENERAL id
-        default_fs = self._make_folder_status()
-        admin = self._make_admin(canonical="EPS NUEVA")
-        # service still at default (GENERAL)
-        service = self._make_service(service_type_id=99)
-
+        mock_rules, mock_inst = _mock_repos(
+            services=[SimpleNamespace(id=20, raw_service="URGENCIAS", service_type_id=None)]
+        )
         with (
-            patch("app.services.billing.RulesRepo") as MockRulesRepo,
-            patch("app.services.billing.InstitutionRepo") as MockInstRepo,
-            patch("app.services.billing.InvoiceRepo") as MockInvRepo,
+            patch("app.services.billing.RulesRepo", return_value=mock_rules),
+            patch("app.services.billing.InstitutionRepo", return_value=mock_inst),
         ):
-            MockRulesRepo.return_value.get_service_type_by_code = AsyncMock(return_value=default_st)
-            MockRulesRepo.return_value.get_folder_status_by_status = AsyncMock(return_value=default_fs)
-            MockInstRepo.return_value.upsert_admin = AsyncMock(return_value=admin)
-            MockInstRepo.return_value.upsert_contract = AsyncMock(return_value=self._make_contract("C"))
-            MockInstRepo.return_value.upsert_service = AsyncMock(return_value=service)
-            MockInvRepo.return_value.upsert_invoice = AsyncMock(return_value=SimpleNamespace(id=1))
-            mock_db.commit = AsyncMock()
-
-            result = await ingest(_make_excel_bytes(), institution, period_id=1, db=mock_db)
+            result = await ingest(_make_excel_bytes(), SimpleNamespace(id=1, name="H"), period_id=1, db=mock_db)
 
         assert "URGENCIAS" in result["unknown_services"]
 
-    async def test_raises_if_default_service_type_missing(self, mock_db):
+    async def test_raises_if_default_folder_status_missing(self, mock_db):
         from app.services.billing import ingest
 
-        with patch("app.services.billing.RulesRepo") as MockRulesRepo:
-            MockRulesRepo.return_value.get_service_type_by_code = AsyncMock(return_value=None)
-            MockRulesRepo.return_value.get_folder_status_by_status = AsyncMock(return_value=SimpleNamespace(id=1))
-
-            with pytest.raises(RuntimeError, match="GENERAL"):
-                await ingest(_make_excel_bytes(), self._make_institution(), period_id=1, db=mock_db)
+        mock_rules = AsyncMock()
+        mock_rules.get_folder_status_by_status = AsyncMock(return_value=None)
+        with (
+            patch("app.services.billing.RulesRepo", return_value=mock_rules),
+            pytest.raises(RuntimeError, match="PRESENTE"),
+        ):
+            await ingest(_make_excel_bytes(), SimpleNamespace(id=1, name="H"), period_id=1, db=mock_db)

@@ -1,5 +1,5 @@
 # backward compat shim
-from app.models.institution import (
+from app.models.institution import (  # noqa: F401
     Institution,
     Administrator,
     Contract,
@@ -7,4 +7,4 @@ from app.models.institution import (
     Agreement,
     Service,
     ServiceTypeDocument,
-)  # noqa: F401
+)

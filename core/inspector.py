@@ -20,6 +20,7 @@ class FolderInspector:
 
     def __init__(self, base_dir: Path, id_prefix: str = "") -> None:
         self.base_dir = Path(base_dir)
+        self._id_prefix = id_prefix.upper()
         _esc = re.escape(id_prefix)
         # When there is no prefix the separator token is meaningless — omitting it
         # prevents the wildcard from consuming the first digit of a numeric-only ID.
@@ -69,8 +70,9 @@ class FolderInspector:
             if path.is_dir():
                 match = self._re_dir_pattern.search(path.name)
                 if match:
-                    on_disk.add(match.group(1))  # group(1) = digits only, strips prefix
-        return [name for name in expected_dirs if name not in on_disk]
+                    # Reconstruct full invoice ID (prefix + digits) for comparison
+                    on_disk.add(self._id_prefix + match.group(1))
+        return [name for name in expected_dirs if name.upper() not in on_disk]
 
     def find_unknown_dirs(self, known_numbers: set[str]) -> list[Path]:
         """Return folders that match the invoice pattern but are absent from *known_numbers*.
