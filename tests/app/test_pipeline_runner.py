@@ -67,6 +67,7 @@ class TestStageRegistry:
             "REVISAR_SOBRANTES",
             "VERIFY_CUFE",
             "ORGANIZE",
+            "COMPRESS_AUDIT",
             "DOWNLOAD_DRIVE",
             "DOWNLOAD_MISSING_DOCS",
         }

@@ -1544,3 +1544,60 @@ async def _download_missing_docs(ctx: dict) -> AsyncGenerator[str, None]:
     yield plog("INFO", f"Buscando {len(download_requests)} documento(s) en Drive...")
     found, not_found = await executor(drive.download_specific_files, download_requests)
     yield plog("INFO", f"Encontrados: {found}, no encontrados: {not_found}")
+
+
+_COMPRESS_CHUNK = 50  # files per progress report
+
+
+@_stage("COMPRESS_AUDIT")
+async def _compress_audit(ctx: dict) -> AsyncGenerator[str, None]:
+    """Compress all PDFs in AUDIT using Ghostscript (ebook quality)."""
+    import os
+
+    from core.processor import DocumentProcessor
+
+    loop = asyncio.get_running_loop()
+    audit_path: Path = ctx["audit_path"]
+
+    if not audit_path.is_dir():
+        yield plog("WARN", f"Directorio AUDIT no existe: {audit_path}")
+        return
+
+    pdfs = list(audit_path.rglob("*.pdf"))
+    total = len(pdfs)
+    yield plog("INFO", f"PDFs encontrados en AUDIT: {total}")
+
+    if not pdfs:
+        yield plog("INFO", "No hay PDFs que comprimir.")
+        return
+
+    workers = max(os.cpu_count() or 4, 4)
+    yield plog("INFO", f"Paralelismo: {workers} workers")
+
+    totals: dict[str, int] = {"success": 0, "failed": 0, "bytes_before": 0, "bytes_after": 0}
+    chunks = [pdfs[i : i + _COMPRESS_CHUNK] for i in range(0, total, _COMPRESS_CHUNK)]
+
+    for i, chunk in enumerate(chunks, 1):
+        result = await loop.run_in_executor(None, lambda c=chunk: DocumentProcessor.batch_compress(c, "ebook", workers))
+        for key in totals:
+            totals[key] += result[key]
+        processed = min(i * _COMPRESS_CHUNK, total)
+        yield plog(
+            "INFO",
+            f"Progreso: {processed}/{total} ({processed / total * 100:.0f}%) — éxitos: {totals['success']}, fallos: {totals['failed']}",
+        )
+
+    yield plog("INFO", f"Compresión completada — exitosos: {totals['success']}, fallidos: {totals['failed']}")
+
+    if totals["bytes_before"]:
+        before_mb = totals["bytes_before"] / (1024 * 1024)
+        after_mb = totals["bytes_after"] / (1024 * 1024)
+        saved_mb = before_mb - after_mb
+        pct = saved_mb / before_mb * 100
+        yield plog("INFO", f"Tamaño: {before_mb:.1f} MB → {after_mb:.1f} MB  (ahorro {saved_mb:.1f} MB · {pct:.1f}%)")
+
+    if totals["failed"]:
+        yield plog(
+            "WARN",
+            f"{totals['failed']} PDF(s) no pudieron comprimirse (Ghostscript no instalado o error en archivo)",
+        )

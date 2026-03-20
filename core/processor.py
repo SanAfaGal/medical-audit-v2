@@ -111,6 +111,38 @@ class DocumentProcessor:
             return False
 
     @classmethod
+    def batch_compress(
+        cls,
+        files: list[Path],
+        quality: str = _GS_DEFAULT_QUALITY,
+        max_workers: int | None = None,
+    ) -> dict[str, int]:
+        """Compress PDFs in parallel using Ghostscript.
+
+        max_workers defaults to cpu_count (each GS call occupies ~1 core).
+        Returns dict with keys: success, failed, bytes_before, bytes_after.
+        """
+        workers = max_workers or max(os.cpu_count() or 4, 4)
+        results: dict[str, int] = {"success": 0, "failed": 0, "bytes_before": 0, "bytes_after": 0}
+
+        def _compress_one(f: Path) -> tuple[str, int, int]:
+            orig = f.stat().st_size
+            ok = cls.compress_with_ghostscript(f, quality)
+            if not ok:
+                return "failed", orig, orig
+            return "success", orig, f.stat().st_size
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(_compress_one, f): f for f in files}
+            for future in as_completed(futures):
+                status, before, after = future.result()
+                results[status] += 1
+                results["bytes_before"] += before
+                results["bytes_after"] += after
+
+        return results
+
+    @classmethod
     def batch_ocr(cls, files: list[Path], max_workers: int = 4) -> dict[str, int]:
         """Run OCR on a list of files in parallel with a progress bar."""
         results: dict[str, int] = {"success": 0, "failed": 0}
