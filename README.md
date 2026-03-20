@@ -196,6 +196,10 @@ Go to `http://localhost:8000` → **Configuración → Sistema** and set the pat
 | `http://localhost:8000/docs` | Swagger UI (dev only, `DOCS_ENABLED=true`) |
 | `http://localhost:8080` | Adminer database UI (dev only) |
 
+### Production Deployment
+
+See **[docs/DEPLOY.md](docs/DEPLOY.md)** for the full production deploy checklist (pull → sync → migrate → restart → health check).
+
 ---
 
 ## Environment Variables
