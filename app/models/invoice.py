@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -12,7 +12,13 @@ from app.models.base import Base
 
 class Invoice(Base):
     __tablename__ = "invoices"
-    __table_args__ = (UniqueConstraint("audit_period_id", "invoice_number"),)
+    __table_args__ = (
+        UniqueConstraint("audit_period_id", "invoice_number"),
+        Index("ix_invoices_audit_period_id", "audit_period_id"),
+        Index("ix_invoices_folder_status_id", "folder_status_id"),
+        Index("ix_invoices_service_type_id", "service_type_id"),
+        Index("ix_invoices_agreement_id", "agreement_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     audit_period_id: Mapped[int] = mapped_column(ForeignKey("audit_periods.id", ondelete="CASCADE"))

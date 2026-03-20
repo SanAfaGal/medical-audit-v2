@@ -93,7 +93,7 @@ jobs:
         run: alembic upgrade head
 
       - name: Run DB tests with coverage
-        run: pytest -m db -ra --tb=short --cov=core --cov=app --cov-report=term-missing
+        run: pytest -m db -ra --tb=short --cov=core --cov=app --cov-report=term-missing --cov-fail-under=60
 
   build:
     name: Docker Build
