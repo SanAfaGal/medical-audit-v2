@@ -35,12 +35,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "ruff",
-    "mypy",
+    "ruff>=0.4,<0.9",
+    "mypy>=1.10,<2",
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
     "httpx",
+    "detect-secrets>=1.5.0,<2",
+    "vulture>=2.15,<3",
 ]
 
 [tool.setuptools.packages.find]
@@ -71,8 +73,38 @@ target-version = "py311"
 
 [tool.mypy]
 python_version = "3.11"
-ignore_missing_imports = true
-# Start permissive — tighten gradually as the codebase is annotated
-warn_return_any = false
+warn_return_any = true
 warn_unused_ignores = true
 no_implicit_reexport = false
+
+[[tool.mypy.overrides]]
+# Third-party libraries without stubs
+module = [
+    "fitz.*",
+    "pdfplumber.*",
+    "ocrmypdf.*",
+    "playwright.*",
+    "google.*",
+    "googleapiclient.*",
+    "tqdm.*",
+    "structlog.*",
+    "prometheus_fastapi_instrumentator.*",
+    "py7zr.*",
+    "rarfile.*",
+]
+ignore_missing_imports = true
+
+[tool.vulture]
+min_confidence = 80
+paths = ["app", "core"]
+ignore_names = [
+    "test_*",
+    "setUp",
+    "tearDown",
+]
+
+[dependency-groups]
+dev = [
+    "detect-secrets>=1.5.0",
+    "vulture>=2.15",
+]
