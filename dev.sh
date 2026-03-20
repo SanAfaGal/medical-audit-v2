@@ -23,6 +23,14 @@ case "$CMD" in
     docker compose down
     ;;
 
+  start)
+    echo -e "${GREEN}Starting database + backend...${NC}"
+    docker compose up -d
+    echo -e "${CYAN}Waiting for database to be ready...${NC}"
+    sleep 2
+    uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ;;
+
   serve)
     echo -e "${GREEN}Starting backend (native)...${NC}"
     uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -132,7 +140,8 @@ case "$CMD" in
     echo -e "  ${RED}nuke${NC}                 Destroy all volumes (asks confirmation)"
     echo ""
     echo -e "${BOLD}Backend (native):${NC}"
-    echo -e "  ${GREEN}serve${NC}                Start uvicorn with hot-reload (0.0.0.0:8000)"
+    echo -e "  ${GREEN}start${NC}                Start database + backend (todo en uno)
+  ${GREEN}serve${NC}                Start uvicorn with hot-reload (0.0.0.0:8000)"
     echo -e "  ${GREEN}migrate${NC}              Apply pending Alembic migrations"
     echo -e "  ${GREEN}migration${NC} <msg>      Generate a new Alembic migration"
     echo -e "  ${GREEN}seed${NC}                 Run database seed script"
