@@ -39,9 +39,14 @@ class FolderInspector:
             List of directories with non-conforming names.
         """
         skip_set = set(skip) if skip else set()
+        try:
+            entries = list(self.base_dir.iterdir())
+        except PermissionError as exc:
+            logger.error("No se puede leer el directorio %s: %s", self.base_dir, exc)
+            return []
         return [
             path
-            for path in self.base_dir.iterdir()
+            for path in entries
             if path.is_dir() and path not in skip_set and not self._re_dir_name.match(path.name.upper())
         ]
 
@@ -66,13 +71,19 @@ class FolderInspector:
             Identifiers that are absent from the filesystem.
         """
         on_disk: set[str] = set()
-        for path in self.base_dir.iterdir():
+        try:
+            entries = list(self.base_dir.iterdir())
+        except PermissionError as exc:
+            logger.error("No se puede leer el directorio %s: %s", self.base_dir, exc)
+            return list(expected_dirs)
+        for path in entries:
             if path.is_dir():
                 match = self._re_dir_pattern.search(path.name)
                 if match:
-                    # Reconstruct full invoice ID (prefix + digits) for comparison
-                    on_disk.add(self._id_prefix + match.group(1))
-        return [name for name in expected_dirs if name.upper() not in on_disk]
+                    # DB stores only the numeric portion (e.g. "12345"), not the full
+                    # folder name which may include a prefix (e.g. "HSL12345").
+                    on_disk.add(match.group(1))
+        return [name for name in expected_dirs if name not in on_disk]
 
     def find_unknown_dirs(self, known_numbers: set[str]) -> list[Path]:
         """Return folders that match the invoice pattern but are absent from *known_numbers*.

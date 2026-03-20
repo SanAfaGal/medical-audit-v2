@@ -35,14 +35,17 @@ class TestFindMalformedDirs:
 
 
 class TestFindMissingDirs:
+    # DB stores only the numeric portion (e.g. "123"), not the full folder name
+    # ("HSL123"). find_missing_dirs must handle the prefix transparently.
+
     def test_existing_dir_not_missing(self, inspector: FolderInspector):
-        missing = inspector.find_missing_dirs(["HSL123"])
-        assert "HSL123" not in missing
+        missing = inspector.find_missing_dirs(["123"])
+        assert "123" not in missing
 
     def test_absent_dir_is_missing(self, inspector: FolderInspector):
-        missing = inspector.find_missing_dirs(["HSL123", "HSL999"])
-        assert "HSL999" in missing
-        assert "HSL123" not in missing
+        missing = inspector.find_missing_dirs(["123", "999"])
+        assert "999" in missing
+        assert "123" not in missing
 
     def test_empty_expected_returns_empty(self, inspector: FolderInspector):
         assert inspector.find_missing_dirs([]) == []
