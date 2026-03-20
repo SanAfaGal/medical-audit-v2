@@ -44,12 +44,27 @@ class InstitutionRepo:
         await self.db.refresh(institution)
         return institution
 
+    _UPDATABLE_FIELDS = frozenset(
+        {
+            "name",
+            "nit",
+            "invoice_prefix",
+            "sihos_url",
+            "sihos_code",
+            "sihos_user",
+            "sihos_password",
+            "drive_credentials_enc",
+            "base_path",
+        }
+    )
+
     async def update(self, institution_id: int, data: dict) -> Institution | None:
         institution = await self.db.get(Institution, institution_id)
         if not institution:
             return None
         for key, value in data.items():
-            setattr(institution, key, value)
+            if key in self._UPDATABLE_FIELDS:
+                setattr(institution, key, value)
         await self.db.flush()
         return institution
 

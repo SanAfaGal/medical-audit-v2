@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from asyncpg import ForeignKeyViolationError
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -107,10 +108,8 @@ async def delete_service_type(service_type_id: int, db: AsyncSession = Depends(g
         await db.commit()
     except HTTPException:
         raise
-    except Exception as e:
-        if "foreign key" in str(e).lower() or "fk" in str(e).lower():
-            raise HTTPException(409, "No se puede eliminar: hay facturas o servicios que usan este tipo")
-        raise
+    except ForeignKeyViolationError:
+        raise HTTPException(409, "No se puede eliminar: hay facturas o servicios que usan este tipo")
 
 
 # ------------------------------------------------------------------
@@ -127,10 +126,8 @@ async def delete_doc_type(doc_type_id: int, db: AsyncSession = Depends(get_db)):
         await db.commit()
     except HTTPException:
         raise
-    except Exception as e:
-        if "foreign key" in str(e).lower() or "fk" in str(e).lower():
-            raise HTTPException(409, "No se puede eliminar: hay hallazgos que usan este tipo")
-        raise
+    except ForeignKeyViolationError:
+        raise HTTPException(409, "No se puede eliminar: hay hallazgos que usan este tipo")
 
 
 # ------------------------------------------------------------------
@@ -163,10 +160,8 @@ async def delete_folder_status(fs_id: int, db: AsyncSession = Depends(get_db)):
         await db.commit()
     except HTTPException:
         raise
-    except Exception as e:
-        if "foreign key" in str(e).lower() or "fk" in str(e).lower():
-            raise HTTPException(409, "No se puede eliminar: hay facturas que usan este estado")
-        raise
+    except ForeignKeyViolationError:
+        raise HTTPException(409, "No se puede eliminar: hay facturas que usan este estado")
 
 
 # ------------------------------------------------------------------

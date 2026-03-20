@@ -49,13 +49,18 @@ class DocumentProcessor:
         ]
 
         try:
-            subprocess.run(cmd, check=True, capture_output=True)
+            subprocess.run(cmd, check=True, capture_output=True, timeout=120)
             if temp.exists():
                 temp.replace(file_path)
                 return True
             return False
         except FileNotFoundError:
             logger.error("ocrmypdf not found in PATH — install it or add it to your system PATH")
+            return False
+        except subprocess.TimeoutExpired:
+            logger.error("OCR timed out for %s", file_path.name)
+            if temp.exists():
+                temp.unlink()
             return False
         except subprocess.CalledProcessError as exc:
             logger.error("OCR subprocess failed for %s: %s", file_path.name, exc)
@@ -85,7 +90,7 @@ class DocumentProcessor:
             str(file_path),
         ]
         try:
-            subprocess.run(cmd, check=True, capture_output=True)
+            subprocess.run(cmd, check=True, capture_output=True, timeout=120)
             temp.replace(file_path)
             return True
         except FileNotFoundError:
@@ -93,6 +98,11 @@ class DocumentProcessor:
                 "Ghostscript (%s) not found in PATH — install it or add it to your system PATH",
                 gs,
             )
+            return False
+        except subprocess.TimeoutExpired:
+            logger.error("Ghostscript timed out for %s", file_path.name)
+            if temp.exists():
+                temp.unlink()
             return False
         except subprocess.CalledProcessError as exc:
             logger.error("Ghostscript compression failed for %s: %s", file_path.name, exc)

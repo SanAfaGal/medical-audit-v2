@@ -100,11 +100,16 @@ async def upload_drive_credentials(
     if institution is None:
         raise HTTPException(status_code=404, detail="Institución no encontrada")
 
-    raw = await file.read()
+    _MAX_SIZE = 64 * 1024
+    raw = await file.read(_MAX_SIZE + 1)
+    if len(raw) > _MAX_SIZE:
+        raise HTTPException(status_code=413, detail="Archivo demasiado grande (máx 64 KB)")
     try:
-        _json.loads(raw)  # validate it's valid JSON
+        data = _json.loads(raw)
     except _json.JSONDecodeError:
         raise HTTPException(status_code=422, detail="El archivo no es JSON válido")
+    if not {"type", "project_id", "private_key", "client_email"}.issubset(data):
+        raise HTTPException(status_code=422, detail="No es un service account de Google válido")
 
     institution.drive_credentials_enc = crypto.encrypt(raw.decode("utf-8"))
     await db.commit()

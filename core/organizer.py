@@ -153,7 +153,10 @@ class InvoiceOrganizer:
                 stats.not_found += 1
                 continue
 
-            destination_path = self.archive_dir / row["Ruta"]
+            raw_ruta = row["Ruta"]
+            destination_path = (self.archive_dir / raw_ruta).resolve()
+            if not destination_path.is_relative_to(self.archive_dir.resolve()):
+                raise ValueError(f"Path traversal detectado: {raw_ruta!r}")
             self._move_single_invoice(str(invoice_id), source_path, destination_path, dry_run, stats)
 
         return TransferSummary(

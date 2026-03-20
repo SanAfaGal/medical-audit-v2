@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -21,6 +21,10 @@ from app.schemas.invoice import (
 )
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
+
+
+class BatchDeleteRequest(BaseModel):
+    invoice_ids: list[int] = Field(..., min_length=1, max_length=1000)
 
 
 @router.get("/ids", response_model=list[int])
@@ -143,12 +147,9 @@ async def batch_update_status(data: BatchStatusUpdate, db: AsyncSession = Depend
 
 
 @router.post("/batch-delete", status_code=200)
-async def batch_delete_invoices(data: dict, db: AsyncSession = Depends(get_db)):
-    invoice_ids = data.get("invoice_ids", [])
-    if not invoice_ids:
-        return {"deleted": 0}
+async def batch_delete_invoices(data: BatchDeleteRequest, db: AsyncSession = Depends(get_db)):
     repo = InvoiceRepo(db)
-    deleted = await repo.batch_delete_invoices(invoice_ids)
+    deleted = await repo.batch_delete_invoices(data.invoice_ids)
     await db.commit()
     return {"deleted": deleted}
 

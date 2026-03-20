@@ -71,7 +71,7 @@ async def request_logging_middleware(request: Request, call_next):
             method=request.method,
             path=request.url.path,
             latency_ms=latency_ms,
-            error=str(exc),
+            error=type(exc).__name__,
         )
         raise
 
