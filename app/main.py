@@ -42,6 +42,20 @@ async def health() -> JSONResponse:
     """Used by Docker HEALTHCHECK and nginx upstream probes."""
     return JSONResponse({"status": "ok"})
 
+
+@app.get("/health/db", include_in_schema=False)
+async def health_db() -> JSONResponse:
+    """Deep health check: verifies the database connection is alive."""
+    from sqlalchemy import text
+    from app.database import AsyncSessionLocal
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+        return JSONResponse({"status": "ok", "db": "ok"})
+    except Exception as exc:
+        logger.warning("health_db_failed", error=str(exc))
+        return JSONResponse({"status": "degraded", "db": "unavailable"}, status_code=503)
+
 # --- Routers ---
 from app.routers.pages import router as pages_router
 from app.routers.api.hospitals import router as hospitals_router

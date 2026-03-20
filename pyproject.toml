@@ -67,3 +67,11 @@ fail_under = 60
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+# Start permissive — tighten gradually as the codebase is annotated
+warn_return_any = false
+warn_unused_ignores = true
+no_implicit_reexport = false
