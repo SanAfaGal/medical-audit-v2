@@ -17,14 +17,14 @@ from app.services.pipeline_runner import _build_context, _STAGE_HANDLERS, execut
 class TestBuildContext:
     def test_all_keys_present(self, minimal_institution, minimal_period):
         db = AsyncMock()
-        ctx = _build_context(minimal_institution, minimal_period, db, {})
+        ctx = _build_context(minimal_institution, minimal_period, db, {}, "/data")
         for key in ("institution", "period", "db", "base_path", "drive_path", "stage_path", "audit_path"):
             assert key in ctx
 
     def test_paths_derived_from_base(self, minimal_institution, minimal_period):
         db = AsyncMock()
-        ctx = _build_context(minimal_institution, minimal_period, db, {})
-        base = Path(minimal_institution.base_path) / minimal_period.period_label
+        ctx = _build_context(minimal_institution, minimal_period, db, {}, "/data")
+        base = Path("/data") / minimal_institution.name / minimal_period.period_label
         assert ctx["base_path"] == base
         assert ctx["drive_path"] == base / "DRIVE"
         assert ctx["stage_path"] == base / "STAGE"
@@ -32,7 +32,7 @@ class TestBuildContext:
 
     def test_extra_keys_merged(self, minimal_institution, minimal_period):
         db = AsyncMock()
-        ctx = _build_context(minimal_institution, minimal_period, db, {"invoice_numbers": ["X"]})
+        ctx = _build_context(minimal_institution, minimal_period, db, {"invoice_numbers": ["X"]}, "/data")
         assert ctx["invoice_numbers"] == ["X"]
 
 
@@ -41,18 +41,19 @@ class TestBuildContext:
 # ---------------------------------------------------------------------------
 
 class TestStageRegistry:
-    def test_all_20_stages_registered(self):
+    def test_all_stages_registered(self):
         expected = {
-            "LOAD_AND_PROCESS", "RUN_STAGING", "REMOVE_NON_PDF", "CHECK_INVALID_FILES",
-            "NORMALIZE_FILES", "LIST_UNREADABLE_PDFS", "DELETE_UNREADABLE_PDFS",
-            "DOWNLOAD_INVOICES_FROM_SIHOS", "CHECK_INVOICES", "VERIFY_INVOICE_CODE",
+            "LOAD_AND_PROCESS", "RECATEGORIZE_SERVICES", "RUN_STAGING",
+            "CHECK_NESTED_FOLDERS", "REMOVE_NON_PDF", "NORMALIZE_FILES",
+            "LIST_UNREADABLE_PDFS", "DELETE_UNREADABLE_PDFS",
+            "DOWNLOAD_INVOICES_FROM_SIHOS", "DOWNLOAD_MEDICATION_SHEETS",
+            "CHECK_INVOICES", "VERIFY_INVOICE_CODE",
             "CHECK_INVOICE_NUMBER_ON_FILES", "CHECK_FOLDERS_WITH_EXTRA_TEXT",
-            "NORMALIZE_DIR_NAMES", "CHECK_DIRS",
-            "CHECK_REQUIRED_DOCS", "VERIFY_CUFE", "TAG_MISSING_CUFE",
+            "NORMALIZE_DIR_NAMES", "CHECK_DIRS", "MARK_UNKNOWN_DIRS",
+            "CHECK_REQUIRED_DOCS", "REVISAR_SOBRANTES", "VERIFY_CUFE",
             "ORGANIZE", "DOWNLOAD_DRIVE", "DOWNLOAD_MISSING_DOCS",
         }
-        assert expected.issubset(set(_STAGE_HANDLERS.keys()))
-        assert len(_STAGE_HANDLERS) == 20
+        assert expected == set(_STAGE_HANDLERS.keys())
 
 
 # ---------------------------------------------------------------------------
@@ -65,20 +66,24 @@ class TestExecute:
         lines = [line async for line in execute("UNKNOWN_STAGE", minimal_institution, minimal_period, db)]
         assert any("[ERROR]" in line and "desconocida" in line for line in lines)
 
-    async def test_known_stage_yields_info_start_and_end(self, minimal_institution, minimal_period, tmp_path):
-        db = AsyncMock()
-        # Use REMOVE_NON_PDF with a tmp_path as stage so it runs without crashing
+    async def test_known_stage_runs_without_error(self, minimal_institution, minimal_period, tmp_path):
+        """REMOVE_NON_PDF with empty STAGE should complete cleanly (no ERROR lines)."""
         inst = SimpleNamespace(**vars(minimal_institution))
-        inst.base_path = str(tmp_path)
         period = SimpleNamespace(**vars(minimal_period))
         period.period_label = "."
 
-        # Create the STAGE directory
-        (tmp_path / "STAGE").mkdir()
+        # Create the STAGE directory at the path _build_context will resolve
+        stage_dir = tmp_path / inst.name / "STAGE"
+        stage_dir.mkdir(parents=True)
 
-        lines = [line async for line in execute("REMOVE_NON_PDF", inst, period, db)]
-        assert any("[INFO] Iniciando etapa: REMOVE_NON_PDF" in line for line in lines)
-        assert any("[INFO] Etapa completada: REMOVE_NON_PDF" in line for line in lines)
+        db = AsyncMock()
+        fake_settings = SimpleNamespace(audit_data_root=str(tmp_path))
+        with patch("app.services.pipeline_runner.RulesRepo") as mock_repo:
+            mock_repo.return_value.get_system_settings = AsyncMock(return_value=fake_settings)
+            lines = [line async for line in execute("REMOVE_NON_PDF", inst, period, db)]
+
+        assert any("[INFO]" in line for line in lines)
+        assert not any("[ERROR]" in line for line in lines)
 
     async def test_stage_exception_yields_error_line(self, minimal_institution, minimal_period):
         db = AsyncMock()
@@ -106,7 +111,6 @@ class TestStageGuards:
 
     @pytest.mark.parametrize("stage_name", [
         "REMOVE_NON_PDF",
-        "CHECK_INVALID_FILES",
         "NORMALIZE_FILES",
         "LIST_UNREADABLE_PDFS",
         "DELETE_UNREADABLE_PDFS",
@@ -116,7 +120,6 @@ class TestStageGuards:
         "CHECK_DIRS",
         "CHECK_REQUIRED_DOCS",
         "VERIFY_CUFE",
-        "TAG_MISSING_CUFE",
         "ORGANIZE",
     ])
     async def test_nonexistent_stage_dir_yields_warn_or_error(
@@ -124,12 +127,12 @@ class TestStageGuards:
     ):
         db = AsyncMock()
         inst = SimpleNamespace(**vars(minimal_institution))
-        inst.base_path = str(tmp_path / "nonexistent")
         period = SimpleNamespace(**vars(minimal_period))
 
         handler = _STAGE_HANDLERS[stage_name]
         from app.services.pipeline_runner import _build_context
-        ctx = _build_context(inst, period, db, {})
+        # audit_data_root points to tmp_path; STAGE subdir is never created → path absent
+        ctx = _build_context(inst, period, db, {}, str(tmp_path))
 
         lines = [line async for line in handler(ctx)]
         assert any("[WARN]" in line or "[ERROR]" in line for line in lines), (
@@ -142,26 +145,28 @@ class TestStageGuards:
 # ---------------------------------------------------------------------------
 
 class TestRemoveNonPdfStage:
-    async def test_removes_non_pdf_file(self, tmp_path: Path, minimal_institution, minimal_period):
+    async def test_scans_non_pdf_files(self, tmp_path: Path, minimal_institution, minimal_period):
         from app.services.pipeline_runner import _build_context, _STAGE_HANDLERS
 
         inst = SimpleNamespace(**vars(minimal_institution))
-        inst.base_path = str(tmp_path)
         period = SimpleNamespace(**vars(minimal_period))
         period.period_label = "."
 
-        stage_dir = tmp_path / "STAGE"
-        stage_dir.mkdir()
+        # _build_context resolves: audit_data_root / inst.name / period_label / "STAGE"
+        # With period_label="." → audit_data_root / inst.name / "STAGE"
+        stage_dir = tmp_path / inst.name / "STAGE"
+        stage_dir.mkdir(parents=True)
         (stage_dir / "notes.txt").write_text("ignore me")
-        (stage_dir / "keep.pdf").write_bytes(b"")
+        (stage_dir / "valid.pdf").write_bytes(b"%PDF-1.4 test")  # minimal valid header
 
         db = AsyncMock()
-        ctx = _build_context(inst, period, db, {})
+        ctx = _build_context(inst, period, db, {}, str(tmp_path))
         handler = _STAGE_HANDLERS["REMOVE_NON_PDF"]
         lines = [line async for line in handler(ctx)]
 
-        assert any("1" in line and ("eliminado" in line.lower() or "no-pdf" in line.lower()) for line in lines)
-        assert not (stage_dir / "notes.txt").exists()
-        assert (stage_dir / "keep.pdf").exists()
+        # Stage is scan-only: files are NOT deleted, [DATA] is emitted for UI review
+        assert any("1" in line and "no-pdf" in line.lower() for line in lines)
+        assert (stage_dir / "notes.txt").exists()   # scan only — no deletion
+        assert (stage_dir / "valid.pdf").exists()
 
 

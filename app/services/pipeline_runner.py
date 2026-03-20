@@ -321,7 +321,6 @@ async def _remove_non_pdf(ctx: dict) -> AsyncGenerator[str, None]:
     """Scan STAGE for non-PDF files and corrupt PDFs; emit [DATA] for user review."""
     from core.ops import IMAGE_EXTENSIONS
     from core.reader import DocumentReader
-    from core.scanner import DocumentScanner
 
     executor = _get_executor()
     stage_path: Path = ctx["stage_path"]
@@ -330,46 +329,50 @@ async def _remove_non_pdf(ctx: dict) -> AsyncGenerator[str, None]:
         yield plog("WARN", f"Directorio STAGE no existe: {stage_path}")
         return
 
-    def _build_non_pdf_list(s_path: Path) -> list[dict]:
-        scanner = DocumentScanner(s_path)
-        files = scanner.find_non_pdf()
-        result = []
-        for f in files:
-            ext = f.suffix.lstrip(".").lower()
+    def _scan(s_path: Path) -> tuple[list[dict], list[Path]]:
+        """Single rglob pass → returns (non_pdf_metadata, pdf_candidates)."""
+        non_pdfs: list[dict] = []
+        pdf_candidates: list[Path] = []
+        for f in s_path.rglob("*"):
+            if not f.is_file():
+                continue
+            if f.suffix.lower() != ".pdf":
+                ext = f.suffix.lstrip(".").lower()
+                try:
+                    size_kb = round(f.stat().st_size / 1024, 1)
+                except OSError:
+                    size_kb = 0.0
+                non_pdfs.append({
+                    "rel_path": f.relative_to(s_path).as_posix(),
+                    "filename": f.name,
+                    "extension": ext,
+                    "size_kb": size_kb,
+                    "is_image": ext in IMAGE_EXTENSIONS,
+                })
+            else:
+                pdf_candidates.append(f)
+        return non_pdfs, pdf_candidates
+
+    non_pdf_list, pdf_candidates = await executor(_scan, stage_path)
+
+    # Check each PDF for corruption concurrently via the asyncio executor —
+    # avoids the nested ThreadPoolExecutor that find_unreadable() would create.
+    can_open_results: list[bool] = await asyncio.gather(
+        *[executor(DocumentReader._can_open, f) for f in pdf_candidates]
+    ) if pdf_candidates else []
+
+    corrupt_list: list[dict] = []
+    for f, ok in zip(pdf_candidates, can_open_results):
+        if not ok:
             try:
                 size_kb = round(f.stat().st_size / 1024, 1)
             except OSError:
                 size_kb = 0.0
-            result.append({
-                "rel_path": f.relative_to(s_path).as_posix(),
-                "filename": f.name,
-                "extension": ext,
-                "size_kb": size_kb,
-                "is_image": ext in IMAGE_EXTENSIONS,
-            })
-        return result
-
-    def _build_corrupt_list(s_path: Path) -> list[dict]:
-        scanner = DocumentScanner(s_path)
-        all_pdfs = scanner.find_by_extension("pdf")
-        invalid = DocumentReader.find_unreadable(all_pdfs)
-        result = []
-        for f in invalid:
-            try:
-                size_kb = round(f.stat().st_size / 1024, 1)
-            except OSError:
-                size_kb = 0.0
-            result.append({
-                "rel_path": f.relative_to(s_path).as_posix(),
+            corrupt_list.append({
+                "rel_path": f.relative_to(stage_path).as_posix(),
                 "filename": f.name,
                 "size_kb": size_kb,
             })
-        return result
-
-    non_pdf_list, corrupt_list = await asyncio.gather(
-        executor(_build_non_pdf_list, stage_path),
-        executor(_build_corrupt_list, stage_path),
-    )
 
     yield plog("INFO", f"Archivos no-PDF encontrados: {len(non_pdf_list)}")
     yield plog("INFO", f"PDFs corruptos encontrados: {len(corrupt_list)}")
