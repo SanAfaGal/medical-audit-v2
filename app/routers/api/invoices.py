@@ -127,7 +127,8 @@ async def update_status(
         raise HTTPException(404, "Factura no encontrada")
     await repo.update_folder_status(invoice_id, data.folder_status_id)
     await db.commit()
-    return await repo.get_by_id(invoice_id)
+    await db.refresh(invoice)
+    return invoice
 
 
 @router.post("/batch-status", status_code=200)
