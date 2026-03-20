@@ -36,9 +36,6 @@ jobs:
   test-unit:
     name: Unit Tests (no DB)
     runs-on: ubuntu-latest
-    # NOTE: 7 tests pre-existentes fallando (billing mocks, inspector, scanner Windows)
-    # continúa en error hasta resolver — no bloquear por tests ajenos al cambio actual
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
