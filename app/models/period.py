@@ -1,4 +1,5 @@
 """ORM model for audit periods."""
+
 from __future__ import annotations
 
 import datetime
@@ -24,4 +25,4 @@ class AuditPeriod(Base):
 
 
 from app.models.institution import Institution  # noqa: E402
-from app.models.invoice import Invoice          # noqa: E402
+from app.models.invoice import Invoice  # noqa: E402

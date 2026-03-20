@@ -1,4 +1,5 @@
 """Run: python seeds/seed_data.py — Populates default service types, doc types, and folder statuses."""
+
 import asyncio
 import sys
 import os
@@ -10,31 +11,31 @@ from app.database import AsyncSessionLocal
 from app.models.rules import DocType, FolderStatus, ServiceType
 
 DEFAULT_SERVICE_TYPES = [
-    {"code": "GENERAL",     "display_name": "General",            "priority": 0},
-    {"code": "SOAT",        "display_name": "SOAT",               "priority": 10},
-    {"code": "LABORATORIO", "display_name": "Laboratorio",        "priority": 20},
-    {"code": "ECG",         "display_name": "Electrocardiograma", "priority": 20},
-    {"code": "RADIOGRAFIA", "display_name": "Radiografía",        "priority": 20},
-    {"code": "ODONTOLOGIA", "display_name": "Odontología",        "priority": 20},
-    {"code": "POLICLINICA", "display_name": "Policlínica",        "priority": 20},
-    {"code": "URGENCIAS",   "display_name": "Urgencias",          "priority": 20},
-    {"code": "AMBULANCIA",  "display_name": "Ambulancia",         "priority": 30},
+    {"code": "GENERAL", "display_name": "General", "priority": 0},
+    {"code": "SOAT", "display_name": "SOAT", "priority": 10},
+    {"code": "LABORATORIO", "display_name": "Laboratorio", "priority": 20},
+    {"code": "ECG", "display_name": "Electrocardiograma", "priority": 20},
+    {"code": "RADIOGRAFIA", "display_name": "Radiografía", "priority": 20},
+    {"code": "ODONTOLOGIA", "display_name": "Odontología", "priority": 20},
+    {"code": "POLICLINICA", "display_name": "Policlínica", "priority": 20},
+    {"code": "URGENCIAS", "display_name": "Urgencias", "priority": 20},
+    {"code": "AMBULANCIA", "display_name": "Ambulancia", "priority": 30},
 ]
 
 DEFAULT_DOC_TYPES = [
-    {"code": "FACTURA",      "description": "Factura",           "prefix": "FEV"},
-    {"code": "FIRMA",        "description": "Firma",             "prefix": "CRC"},
-    {"code": "HISTORIA",     "description": "Historia clínica",  "prefix": "EPI"},
-    {"code": "VALIDACION",   "description": "Validación",        "prefix": "OPF"},
-    {"code": "RESULTADOS",   "description": "Resultados",        "prefix": "PDX"},
-    {"code": "BITACORA",     "description": "Bitácora",          "prefix": "TAP"},
-    {"code": "RESOLUCION",   "description": "Resolución",        "prefix": "LDP"},
-    {"code": "MEDICAMENTOS", "description": "Medicamentos",      "prefix": "HAM"},
-    {"code": "AUTORIZACION", "description": "Autorización",      "prefix": "PDE"},
-    {"code": "CARPETA",      "description": "Carpeta",           "prefix": None},
-    {"code": "ORDEN",        "description": "Orden médica",      "prefix": None},
-    {"code": "FURIPS",       "description": "FURIPS",            "prefix": None},
-    {"code": "CUFE",         "description": "CUFE",              "prefix": None},
+    {"code": "FACTURA", "description": "Factura", "prefix": "FEV"},
+    {"code": "FIRMA", "description": "Firma", "prefix": "CRC"},
+    {"code": "HISTORIA", "description": "Historia clínica", "prefix": "EPI"},
+    {"code": "VALIDACION", "description": "Validación", "prefix": "OPF"},
+    {"code": "RESULTADOS", "description": "Resultados", "prefix": "PDX"},
+    {"code": "BITACORA", "description": "Bitácora", "prefix": "TAP"},
+    {"code": "RESOLUCION", "description": "Resolución", "prefix": "LDP"},
+    {"code": "MEDICAMENTOS", "description": "Medicamentos", "prefix": "HAM"},
+    {"code": "AUTORIZACION", "description": "Autorización", "prefix": "PDE"},
+    {"code": "CARPETA", "description": "Carpeta", "prefix": None},
+    {"code": "ORDEN", "description": "Orden médica", "prefix": None},
+    {"code": "FURIPS", "description": "FURIPS", "prefix": None},
+    {"code": "CUFE", "description": "CUFE", "prefix": None},
 ]
 
 DEFAULT_FOLDER_STATUSES = [

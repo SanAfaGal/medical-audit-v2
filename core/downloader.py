@@ -126,13 +126,10 @@ class SihosDownloader:
             if page is None:
                 return
             for invoice_number in invoice_list:
-                url = (
-                    "{}/modulos/facturacion/imprifact.php"
-                    "?CodiDocu={}&NumeDocu={}&MostSubCeCo=1".format(
-                        self._base_url.rstrip("/"),
-                        self._invoice_doc_code,
-                        invoice_number,
-                    )
+                url = "{}/modulos/facturacion/imprifact.php?CodiDocu={}&NumeDocu={}&MostSubCeCo=1".format(
+                    self._base_url.rstrip("/"),
+                    self._invoice_doc_code,
+                    invoice_number,
                 )
                 invoice_folder = self._output_dir / f"{self._invoice_id_prefix}{invoice_number}"
                 invoice_folder.mkdir(parents=True, exist_ok=True)
@@ -142,13 +139,9 @@ class SihosDownloader:
                 try:
                     await page.goto(url)
                     await page.pdf(path=str(out_path), format=_INVOICE_PAGE_FORMAT)
-                    logger.info(
-                        "Downloaded invoice %s to %s", invoice_number, out_path
-                    )
+                    logger.info("Downloaded invoice %s to %s", invoice_number, out_path)
                 except (PlaywrightTimeoutError, PlaywrightError) as exc:
-                    logger.error(
-                        "Failed to download invoice %s: %s", invoice_number, exc
-                    )
+                    logger.error("Failed to download invoice %s: %s", invoice_number, exc)
 
     async def _async_download_medication_sheets(
         self, targets: list[tuple[str, str, str, str]], file_prefix: str
@@ -159,8 +152,7 @@ class SihosDownloader:
                 return
             for invoice_number, admission, id_type, id_number in targets:
                 url = (
-                    "{}/modulos/comun/medicamentos/impriconso.php"
-                    "?ConsAdmi={}&TipoDocu={}&NumeUsua={}&SinModu=1".format(
+                    "{}/modulos/comun/medicamentos/impriconso.php?ConsAdmi={}&TipoDocu={}&NumeUsua={}&SinModu=1".format(
                         self._base_url.rstrip("/"), admission, id_type, id_number
                     )
                 )

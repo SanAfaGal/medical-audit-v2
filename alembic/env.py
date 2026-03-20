@@ -1,4 +1,5 @@
 """Alembic env.py — async-compatible migration environment."""
+
 from __future__ import annotations
 
 import asyncio
@@ -11,6 +12,7 @@ from sqlalchemy import pool
 # Load .env so DATABASE_URL is available without pydantic-settings at migration time
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass  # python-dotenv optional; set DATABASE_URL in environment directly

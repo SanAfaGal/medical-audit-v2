@@ -24,13 +24,11 @@ class FolderInspector:
         # When there is no prefix the separator token is meaningless — omitting it
         # prevents the wildcard from consuming the first digit of a numeric-only ID.
         _sep = r"[^a-zA-Z0-9]?" if id_prefix else ""
-        self._re_dir_name      = re.compile(rf"^{_esc}\d+$",           re.IGNORECASE)
-        self._re_dir_pattern   = re.compile(rf"{_esc}{_sep}(\d+)",    re.IGNORECASE)
-        self._re_folder_suffix = re.compile(rf"({_esc}{_sep}\d+)$",   re.IGNORECASE)
+        self._re_dir_name = re.compile(rf"^{_esc}\d+$", re.IGNORECASE)
+        self._re_dir_pattern = re.compile(rf"{_esc}{_sep}(\d+)", re.IGNORECASE)
+        self._re_folder_suffix = re.compile(rf"({_esc}{_sep}\d+)$", re.IGNORECASE)
 
-    def find_malformed_dirs(
-        self, skip: list[Path] | None = None
-    ) -> list[Path]:
+    def find_malformed_dirs(self, skip: list[Path] | None = None) -> list[Path]:
         """Return directories whose names do not match the expected invoice pattern.
 
         Args:
@@ -43,9 +41,7 @@ class FolderInspector:
         return [
             path
             for path in self.base_dir.iterdir()
-            if path.is_dir()
-            and path not in skip_set
-            and not self._re_dir_name.match(path.name.upper())
+            if path.is_dir() and path not in skip_set and not self._re_dir_name.match(path.name.upper())
         ]
 
     def resolve_dir_paths(self, dir_names: list[str]) -> list[Path]:
@@ -57,11 +53,7 @@ class FolderInspector:
         Returns:
             Paths of matching directories.
         """
-        return [
-            path
-            for path in self.base_dir.iterdir()
-            if path.is_dir() and path.name in dir_names
-        ]
+        return [path for path in self.base_dir.iterdir() if path.is_dir() and path.name in dir_names]
 
     def find_missing_dirs(self, expected_dirs: list[str]) -> list[str]:
         """Compare expected directory IDs against the directories on disk.
@@ -123,15 +115,9 @@ class FolderInspector:
         Returns:
             Directories marked for cancellation.
         """
-        return [
-            d
-            for d in self.base_dir.iterdir()
-            if d.is_dir() and _VOID_MARKER in d.name.upper()
-        ]
+        return [d for d in self.base_dir.iterdir() if d.is_dir() and _VOID_MARKER in d.name.upper()]
 
-    def find_mismatched_files(
-        self, skip_dirs: list[Path] | None = None
-    ) -> list[Path]:
+    def find_mismatched_files(self, skip_dirs: list[Path] | None = None) -> list[Path]:
         """Return files whose invoice suffix does not match their parent folder name.
 
         Args:
@@ -203,11 +189,7 @@ class FolderInspector:
             Directories missing at least one file with the required prefix.
         """
         skip_set = set(skip) if skip else set()
-        dirs_to_scan = (
-            target_dirs
-            if target_dirs is not None
-            else [p for p in self.base_dir.rglob("*") if p.is_dir()]
-        )
+        dirs_to_scan = target_dirs if target_dirs is not None else [p for p in self.base_dir.rglob("*") if p.is_dir()]
 
         criteria: str | tuple[str, ...]
         criteria = tuple(p.upper() for p in prefixes) if isinstance(prefixes, list) else prefixes.upper()
@@ -215,9 +197,5 @@ class FolderInspector:
         return [
             d
             for d in dirs_to_scan
-            if d not in skip_set
-            and not any(
-                f.is_file() and f.name.upper().startswith(criteria)
-                for f in d.iterdir()
-            )
+            if d not in skip_set and not any(f.is_file() and f.name.upper().startswith(criteria) for f in d.iterdir())
         ]

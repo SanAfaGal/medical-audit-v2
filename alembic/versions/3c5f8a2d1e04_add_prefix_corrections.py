@@ -5,6 +5,7 @@ Revises: 7929537df5a9
 Create Date: 2026-03-13 00:00:00.000000
 
 """
+
 from __future__ import annotations
 
 from typing import Sequence, Union
@@ -19,17 +20,17 @@ depends_on: Union[str, Sequence[str], None] = None
 
 # Default corrections provided by the domain team
 _DEFAULT_CORRECTIONS = [
-    ("OPD",  "OPF"),
-    ("FVE",  "FEV"),
+    ("OPD", "OPF"),
+    ("FVE", "FEV"),
     ("FHEV", "HEV"),
-    ("PED",  "PDE"),
+    ("PED", "PDE"),
     ("OHEV", "HEV"),
     ("FOPF", "OPF"),
-    ("OPG",  "OPF"),
-    ("FVS",  "FEV"),
+    ("OPG", "OPF"),
+    ("FVS", "FEV"),
     ("FEPI", "EPI"),
-    ("HVE",  "HEV"),
-    ("OTR",  "OPF"),
+    ("HVE", "HEV"),
+    ("OTR", "OPF"),
 ]
 
 

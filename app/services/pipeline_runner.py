@@ -1,4 +1,5 @@
 """Pipeline runner: async generator that executes stages and yields log lines."""
+
 from __future__ import annotations
 
 import asyncio
@@ -25,9 +26,11 @@ _STAGE_HANDLERS: dict[str, "_StageHandler"] = {}
 
 def _stage(name: str):
     """Decorator to register a stage handler."""
+
     def decorator(fn):
         _STAGE_HANDLERS[name] = fn
         return fn
+
     return decorator
 
 
@@ -42,16 +45,19 @@ _StageHandler = "async def f(ctx: dict) -> AsyncGenerator[str, None]"
 # Context builder
 # ---------------------------------------------------------------------------
 
-def _build_context(institution: Institution, period: AuditPeriod, db: AsyncSession, extra: dict, audit_data_root: str) -> dict:
+
+def _build_context(
+    institution: Institution, period: AuditPeriod, db: AsyncSession, extra: dict, audit_data_root: str
+) -> dict:
     base = to_container_path(audit_data_root) / institution.name / period.period_label
     return {
         "institution": institution,
-        "period":      period,
-        "db":          db,
-        "base_path":   base,
-        "drive_path":  base / "DRIVE",
-        "stage_path":  base / "STAGE",
-        "audit_path":  base / "AUDIT",
+        "period": period,
+        "db": db,
+        "base_path": base,
+        "drive_path": base / "DRIVE",
+        "stage_path": base / "STAGE",
+        "audit_path": base / "AUDIT",
         **extra,
     }
 
@@ -59,6 +65,7 @@ def _build_context(institution: Institution, period: AuditPeriod, db: AsyncSessi
 # ---------------------------------------------------------------------------
 # Executor helper
 # ---------------------------------------------------------------------------
+
 
 def _get_executor():
     """Return a callable that runs a sync function in the default thread executor."""
@@ -73,6 +80,7 @@ def _get_executor():
 # ---------------------------------------------------------------------------
 # Log formatting helpers
 # ---------------------------------------------------------------------------
+
 
 def plog(
     level: str,
@@ -131,6 +139,7 @@ def _ct_for_folder(folder: str, ct_map: dict[str, str]) -> str | None:
 # Main entry point
 # ---------------------------------------------------------------------------
 
+
 async def execute(
     stage: str,
     institution: Institution,
@@ -164,6 +173,7 @@ async def execute(
 # Stage implementations
 # ---------------------------------------------------------------------------
 
+
 @_stage("LOAD_AND_PROCESS")
 async def _load_and_process(ctx: dict) -> AsyncGenerator[str, None]:
     """Load SIHOS Excel and upsert invoices. Requires ctx['file_bytes'] and ctx['period_code']."""
@@ -190,9 +200,11 @@ async def _load_and_process(ctx: dict) -> AsyncGenerator[str, None]:
     # Guardar el Excel para permitir re-categorización posterior
     base_path: Path = ctx["base_path"]
     executor = _get_executor()
+
     def _save_excel(path: Path, data: bytes) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
+
     await executor(_save_excel, base_path / "sihos.xlsx", file_bytes)
     yield plog("INFO", "Excel guardado para futuras re-categorizaciones.")
 
@@ -200,7 +212,6 @@ async def _load_and_process(ctx: dict) -> AsyncGenerator[str, None]:
 @_stage("RECATEGORIZE_SERVICES")
 async def _recategorize_services(ctx: dict) -> AsyncGenerator[str, None]:
     """Re-apply current service mappings to all invoices in the period without reloading from SIHOS."""
-    from app.repositories.institution_repo import InstitutionRepo
     from app.repositories.invoice_repo import InvoiceRepo
     from app.repositories.rules_repo import RulesRepo
     from app.services.billing import load_excel, _normalize
@@ -222,17 +233,13 @@ async def _recategorize_services(ctx: dict) -> AsyncGenerator[str, None]:
     df = await executor(_normalize, raw_df)
 
     # Cargar mapeos actuales de servicios
-    inst_repo = InstitutionRepo(db)
     rules_repo = RulesRepo(db)
 
     from sqlalchemy import select as sa_select
     from app.models.institution import Service as ServiceModel
-    result = await db.execute(
-        sa_select(ServiceModel).where(ServiceModel.institution_id == institution.id)
-    )
-    service_map: dict[str, int | None] = {
-        s.raw_service: s.service_type_id for s in result.scalars().all()
-    }
+
+    result = await db.execute(sa_select(ServiceModel).where(ServiceModel.institution_id == institution.id))
+    service_map: dict[str, int | None] = {s.raw_service: s.service_type_id for s in result.scalars().all()}
 
     service_types = await rules_repo.get_service_types()
     priority_map: dict[int, int] = {st.id: st.priority for st in service_types}
@@ -313,7 +320,9 @@ async def _check_nested_folders(ctx: dict) -> AsyncGenerator[str, None]:
     yield plog("WARN", f"{len(nested)} carpeta(s) con subcarpetas anidadas detectadas en STAGE:")
     for name, subs in nested:
         yield plog("WARN", f"subcarpetas: {', '.join(subs)}", folder=name)
-    yield plog("WARN", "Revisa y aplana estas carpetas para que los archivos queden directamente en la carpeta de factura.")
+    yield plog(
+        "WARN", "Revisa y aplana estas carpetas para que los archivos queden directamente en la carpeta de factura."
+    )
 
 
 @_stage("REMOVE_NON_PDF")
@@ -342,13 +351,15 @@ async def _remove_non_pdf(ctx: dict) -> AsyncGenerator[str, None]:
                     size_kb = round(f.stat().st_size / 1024, 1)
                 except OSError:
                     size_kb = 0.0
-                non_pdfs.append({
-                    "rel_path": f.relative_to(s_path).as_posix(),
-                    "filename": f.name,
-                    "extension": ext,
-                    "size_kb": size_kb,
-                    "is_image": ext in IMAGE_EXTENSIONS,
-                })
+                non_pdfs.append(
+                    {
+                        "rel_path": f.relative_to(s_path).as_posix(),
+                        "filename": f.name,
+                        "extension": ext,
+                        "size_kb": size_kb,
+                        "is_image": ext in IMAGE_EXTENSIONS,
+                    }
+                )
             else:
                 pdf_candidates.append(f)
         return non_pdfs, pdf_candidates
@@ -357,9 +368,9 @@ async def _remove_non_pdf(ctx: dict) -> AsyncGenerator[str, None]:
 
     # Check each PDF for corruption concurrently via the asyncio executor —
     # avoids the nested ThreadPoolExecutor that find_unreadable() would create.
-    can_open_results: list[bool] = await asyncio.gather(
-        *[executor(DocumentReader._can_open, f) for f in pdf_candidates]
-    ) if pdf_candidates else []
+    can_open_results: list[bool] = (
+        await asyncio.gather(*[executor(DocumentReader._can_open, f) for f in pdf_candidates]) if pdf_candidates else []
+    )
 
     corrupt_list: list[dict] = []
     for f, ok in zip(pdf_candidates, can_open_results):
@@ -368,11 +379,13 @@ async def _remove_non_pdf(ctx: dict) -> AsyncGenerator[str, None]:
                 size_kb = round(f.stat().st_size / 1024, 1)
             except OSError:
                 size_kb = 0.0
-            corrupt_list.append({
-                "rel_path": f.relative_to(stage_path).as_posix(),
-                "filename": f.name,
-                "size_kb": size_kb,
-            })
+            corrupt_list.append(
+                {
+                    "rel_path": f.relative_to(stage_path).as_posix(),
+                    "filename": f.name,
+                    "size_kb": size_kb,
+                }
+            )
 
     yield plog("INFO", f"Archivos no-PDF encontrados: {len(non_pdf_list)}")
     yield plog("INFO", f"PDFs corruptos encontrados: {len(corrupt_list)}")
@@ -389,9 +402,7 @@ async def _remove_non_pdf(ctx: dict) -> AsyncGenerator[str, None]:
     yield f"[DATA] {json.dumps(data, ensure_ascii=False)}"
 
 
-def _apply_prefix_corrections(
-    stage_path: Path, corrections: dict[str, str]
-) -> tuple[int, list[tuple[str, str, str]]]:
+def _apply_prefix_corrections(stage_path: Path, corrections: dict[str, str]) -> tuple[int, list[tuple[str, str, str]]]:
     """Rename PDFs whose prefix matches a known wrong prefix to the correct one.
 
     Returns ``(renamed_count, [(folder_name, old_name, new_name)])``.
@@ -403,7 +414,7 @@ def _apply_prefix_corrections(
         stem = pdf.stem
         for wrong, correct in corrections.items():
             if stem.upper().startswith(wrong.upper()):
-                remainder = stem[len(wrong):]
+                remainder = stem[len(wrong) :]
                 new_name = correct + remainder + pdf.suffix
                 pdf.rename(pdf.parent / new_name)
                 renamed += 1
@@ -455,9 +466,7 @@ async def _normalize_files(ctx: dict) -> AsyncGenerator[str, None]:
     prefixes = await rules_repo.get_all_active_doc_type_prefixes()
 
     scanner = DocumentScanner(stage_path)
-    invalid = await executor(
-        scanner.find_invalid_names, prefixes, institution.invoice_id_prefix or "", institution.nit
-    )
+    invalid = await executor(scanner.find_invalid_names, prefixes, institution.invoice_id_prefix or "", institution.nit)
     yield plog("INFO", f"Archivos con nombre inválido: {len(invalid)}")
 
     if invalid:
@@ -580,7 +589,9 @@ async def _download_invoices_from_sihos(ctx: dict) -> AsyncGenerator[str, None]:
     doc_type_id: int = ctx.get("doc_type_id", 0)
 
     if not doc_type_id:
-        yield plog("ERROR", "No se seleccionó un tipo de documento. Elige uno en el panel antes de ejecutar esta etapa.")
+        yield plog(
+            "ERROR", "No se seleccionó un tipo de documento. Elige uno en el panel antes de ejecutar esta etapa."
+        )
         return
 
     if not institution.sihos_user or not institution.sihos_password:
@@ -650,7 +661,9 @@ async def _download_medication_sheets(ctx: dict) -> AsyncGenerator[str, None]:
     doc_type_id: int = ctx.get("doc_type_id", 0)
 
     if not doc_type_id:
-        yield plog("ERROR", "No se seleccionó un tipo de documento. Elige uno en el panel antes de ejecutar esta etapa.")
+        yield plog(
+            "ERROR", "No se seleccionó un tipo de documento. Elige uno en el panel antes de ejecutar esta etapa."
+        )
         return
 
     if not institution.sihos_user or not institution.sihos_password:
@@ -678,8 +691,7 @@ async def _download_medication_sheets(ctx: dict) -> AsyncGenerator[str, None]:
     )
     result = await db.execute(stmt)
     targets: list[tuple[str, str, str, str]] = [
-        (row.invoice_number, row.admission, row.id_type, row.id_number)
-        for row in result.all()
+        (row.invoice_number, row.admission, row.id_type, row.id_number) for row in result.all()
     ]
 
     if not targets:
@@ -845,22 +857,26 @@ async def _check_folders_with_extra_text(ctx: dict) -> AsyncGenerator[str, None]
     payload: list[dict] = []
     for num, folder in sorted(number_to_folder.items()):
         yield plog("WARN", "Carpeta con texto extra", folder=folder.name)
-        payload.append({
-            "folder_name": folder.name,
-            "folder_path": str(folder),
-            "invoice_number": num,
-            "invoice_id": invoice_number_to_id.get(num),
-            "action": "skip",
-        })
+        payload.append(
+            {
+                "folder_name": folder.name,
+                "folder_path": str(folder),
+                "invoice_number": num,
+                "invoice_id": invoice_number_to_id.get(num),
+                "action": "skip",
+            }
+        )
     for folder in sorted(no_number, key=lambda p: p.name):
         yield plog("WARN", "Carpeta sin número de factura reconocible", folder=folder.name)
-        payload.append({
-            "folder_name": folder.name,
-            "folder_path": str(folder),
-            "invoice_number": None,
-            "invoice_id": None,
-            "action": "skip",
-        })
+        payload.append(
+            {
+                "folder_name": folder.name,
+                "folder_path": str(folder),
+                "invoice_number": None,
+                "invoice_id": None,
+                "action": "skip",
+            }
+        )
 
     yield f"[DATA] {json.dumps(payload, ensure_ascii=False)}"
 
@@ -1011,10 +1027,7 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
     inspector = FolderInspector(stage_path, id_prefix)
 
     # Snapshot data needed in executor (avoids passing SQLAlchemy objects to thread)
-    invoice_data = [
-        (inv.id, inv.invoice_number, inv.service_type_id)
-        for inv in presente_invoices
-    ]
+    invoice_data = [(inv.id, inv.invoice_number, inv.service_type_id) for inv in presente_invoices]
 
     def _check_all_folders(
         inv_data: list[tuple[int, str, int | None]],
@@ -1025,10 +1038,7 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
             required_dt_ids = std_map.get(svc_type_id, [])
             if not required_dt_ids:
                 continue
-            required_prefixes = {
-                str(dt_id): prefix_map.get(dt_id, [])
-                for dt_id in required_dt_ids
-            }
+            required_prefixes = {str(dt_id): prefix_map.get(dt_id, []) for dt_id in required_dt_ids}
             folder = stage_path / (id_prefix + inv_number)
             missing_codes = inspector.check_required_docs(folder, required_prefixes)
             if missing_codes:
@@ -1039,9 +1049,7 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
 
     # Bulk upsert all findings in one DB call
     all_findings: list[tuple[int, int]] = [
-        (inv_id, dt_id)
-        for inv_id, (_, dt_ids) in findings_map.items()
-        for dt_id in dt_ids
+        (inv_id, dt_id) for inv_id, (_, dt_ids) in findings_map.items() for dt_id in dt_ids
     ]
     total_findings = len(all_findings)
     await finding_repo.bulk_upsert_findings(all_findings)
@@ -1054,9 +1062,7 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
         yield plog("WARN", f"Faltantes ({doc_str})", folder=inv_number, contract_type=ct)
 
     if invoices_with_findings:
-        updated = await inv_repo.batch_update_folder_status(
-            period.id, invoices_with_findings, "PENDIENTE"
-        )
+        updated = await inv_repo.batch_update_folder_status(period.id, invoices_with_findings, "PENDIENTE")
         yield plog("INFO", f"Facturas marcadas PENDIENTE: {updated}")
 
     await db.commit()
@@ -1104,7 +1110,6 @@ def _compute_surplus_suggestions(sobrantes, faltantes, SequenceMatcher):
 async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
     """Identify surplus files per invoice folder and suggest doc-type renames."""
     import json
-    from difflib import SequenceMatcher
 
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
@@ -1112,7 +1117,6 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
     from app.models.finding import MissingFile
     from app.models.institution import Agreement
     from app.models.invoice import Invoice
-    from app.repositories.invoice_repo import InvoiceRepo
     from app.repositories.rules_repo import RulesRepo
 
     stage_path: Path = ctx["stage_path"]
@@ -1174,6 +1178,7 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
         s_prefix_map: dict,
     ) -> tuple[list[dict], list[str], int]:
         from difflib import SequenceMatcher as SM
+
         items_out: list[dict] = []
         log_lines: list[str] = []
         total = 0
@@ -1186,11 +1191,14 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
             inv_data = inv_snap.get(folder_key)
             if inv_data is None:
                 inv_data = next(
-                    (v for k, v in inv_snap.items()
-                     if folder_key == k
-                     or folder_key.startswith(k + "_")
-                     or folder_key.startswith(k + " ")
-                     or folder_key.endswith(k)),
+                    (
+                        v
+                        for k, v in inv_snap.items()
+                        if folder_key == k
+                        or folder_key.startswith(k + "_")
+                        or folder_key.startswith(k + " ")
+                        or folder_key.endswith(k)
+                    ),
                     None,
                 )
             if inv_data is None:
@@ -1198,15 +1206,12 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
 
             required_dt_ids = s_std_map.get(inv_data["service_type_id"], [])
             required_prefixes = [
-                s_prefix_map[dt_id]
-                for dt_id in required_dt_ids
-                if dt_id in s_prefix_map and s_prefix_map[dt_id]
+                s_prefix_map[dt_id] for dt_id in required_dt_ids if dt_id in s_prefix_map and s_prefix_map[dt_id]
             ]
 
             all_files = [f for f in folder.iterdir() if f.is_file()]
             sobrantes = [
-                f for f in all_files
-                if not any(f.name.upper().startswith(p.upper()) for p in required_prefixes)
+                f for f in all_files if not any(f.name.upper().startswith(p.upper()) for p in required_prefixes)
             ]
             if not sobrantes:
                 continue
@@ -1242,40 +1247,47 @@ async def _revisar_sobrantes(ctx: dict) -> AsyncGenerator[str, None]:
                                 "confidence": "low",
                             }
 
-            items_out.append({
-                "invoice_id": inv_data["id"],
-                "invoice_number": inv_data["invoice_number"],
-                "admin_type": inv_data["admin_type"],
-                "service_type": inv_data["service_type"],
-                "folder_path": str(folder),
-                "sobrantes": [
-                    {
-                        "filename": f.name,
-                        **suggestions.get(f.name, {
-                            "suggested_doc_type_id": None,
-                            "suggested_code": None,
-                            "suggested_prefix": None,
-                            "confidence": None,
-                        }),
-                    }
-                    for f in sobrantes
-                ],
-                "faltantes": [
-                    {"doc_type_id": ft["doc_type_id"], "code": ft["code"], "description": ft["description"]}
-                    for ft in faltantes_data
-                ],
-            })
+            items_out.append(
+                {
+                    "invoice_id": inv_data["id"],
+                    "invoice_number": inv_data["invoice_number"],
+                    "admin_type": inv_data["admin_type"],
+                    "service_type": inv_data["service_type"],
+                    "folder_path": str(folder),
+                    "sobrantes": [
+                        {
+                            "filename": f.name,
+                            **suggestions.get(
+                                f.name,
+                                {
+                                    "suggested_doc_type_id": None,
+                                    "suggested_code": None,
+                                    "suggested_prefix": None,
+                                    "confidence": None,
+                                },
+                            ),
+                        }
+                        for f in sobrantes
+                    ],
+                    "faltantes": [
+                        {"doc_type_id": ft["doc_type_id"], "code": ft["code"], "description": ft["description"]}
+                        for ft in faltantes_data
+                    ],
+                }
+            )
             total += len(sobrantes)
             log_lines.append(
-                plog("INFO", f"{len(sobrantes)} sobrante(s), {len(faltantes_data)} faltante(s)",
-                     folder=folder.name, contract_type=inv_data.get("admin_type"))
+                plog(
+                    "INFO",
+                    f"{len(sobrantes)} sobrante(s), {len(faltantes_data)} faltante(s)",
+                    folder=folder.name,
+                    contract_type=inv_data.get("admin_type"),
+                )
             )
 
         return items_out, log_lines, total
 
-    items, log_lines, total_sobrantes = await executor(
-        _scan_folders, stage_path, invoice_snapshot, std_map, prefix_map
-    )
+    items, log_lines, total_sobrantes = await executor(_scan_folders, stage_path, invoice_snapshot, std_map, prefix_map)
 
     for line in log_lines:
         yield line
@@ -1370,7 +1382,8 @@ async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
             key = folder_name.upper()
             source = next(
                 (
-                    p for name, p in staging_index.items()
+                    p
+                    for name, p in staging_index.items()
                     if (name.startswith(key) and (len(name) == len(key) or not name[len(key)].isalnum()))
                     or (id_prefix and name.endswith(inv.invoice_number.upper()))
                 ),
@@ -1391,11 +1404,7 @@ async def _organize(ctx: dict) -> AsyncGenerator[str, None]:
             )
         else:
             admin_name = "SIN ADMINISTRADORA"
-        contract_name = (
-            ic.contract.canonical_name
-            if ic and ic.contract and ic.contract.canonical_name
-            else None
-        )
+        contract_name = ic.contract.canonical_name if ic and ic.contract and ic.contract.canonical_name else None
         dest = (
             audit_path / admin_name / contract_name / source.name
             if contract_name
@@ -1477,7 +1486,7 @@ async def _download_drive(ctx: dict) -> AsyncGenerator[str, None]:
     if downloaded_prefixed:
         # search_names were built as id_prefix + invoice_number, so stripping
         # the prefix always yields the plain invoice number.
-        downloaded = [name[len(id_prefix):] for name in downloaded_prefixed]
+        downloaded = [name[len(id_prefix) :] for name in downloaded_prefixed]
         updated = await inv_repo.batch_update_folder_status(period.id, downloaded, "PRESENTE")
         await db.commit()
         yield plog("INFO", f"Facturas actualizadas a PRESENTE: {updated}")

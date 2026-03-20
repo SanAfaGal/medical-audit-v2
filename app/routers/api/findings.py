@@ -1,4 +1,5 @@
 """API router for missing files (audit findings)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -36,18 +37,14 @@ async def resolve_missing_file(
     await repo.resolve_missing_file(invoice_id, doc_type_id)
     await db.commit()
     files = await repo.get_for_invoice(invoice_id)
-    resolved = next(
-        (f for f in files if f.doc_type_id == doc_type_id), None
-    )
+    resolved = next((f for f in files if f.doc_type_id == doc_type_id), None)
     if not resolved:
         raise HTTPException(404, "Archivo no encontrado")
     return MissingFileOut.model_validate(resolved)
 
 
 @router.delete("/{invoice_id}/{doc_type_id}", status_code=204)
-async def delete_missing_file(
-    invoice_id: int, doc_type_id: int, db: AsyncSession = Depends(get_db)
-):
+async def delete_missing_file(invoice_id: int, doc_type_id: int, db: AsyncSession = Depends(get_db)):
     repo = MissingFileRepo(db)
     await repo.delete_missing_file(invoice_id, doc_type_id)
     await db.commit()

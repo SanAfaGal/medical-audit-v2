@@ -37,9 +37,7 @@ class DriveSync:
     """
 
     def __init__(self, credentials_dict: dict) -> None:
-        self.creds = service_account.Credentials.from_service_account_info(
-            credentials_dict, scopes=_DRIVE_SCOPES
-        )
+        self.creds = service_account.Credentials.from_service_account_info(credentials_dict, scopes=_DRIVE_SCOPES)
         self.service = build("drive", "v3", credentials=self.creds)
 
     def _execute_with_retry(self, request) -> dict:
@@ -53,7 +51,10 @@ class DriveSync:
                     raise
                 logger.warning(
                     "Drive API HTTP %s — retrying in %.0fs (attempt %d/%d)…",
-                    exc.status_code, delay, attempt + 1, _MAX_RETRIES,
+                    exc.status_code,
+                    delay,
+                    attempt + 1,
+                    _MAX_RETRIES,
                 )
                 time.sleep(delay)
                 delay *= 2
@@ -61,11 +62,7 @@ class DriveSync:
 
     def find_folders_by_name(self, folder_name: str) -> list[dict]:
         """Search Drive for folders whose names contain the given string."""
-        query = (
-            f"name contains '{folder_name}' "
-            f"and mimeType = '{_DRIVE_FOLDER_MIME}' "
-            "and trashed = false"
-        )
+        query = f"name contains '{folder_name}' and mimeType = '{_DRIVE_FOLDER_MIME}' and trashed = false"
         request = self.service.files().list(
             q=query,
             fields="files(id, name, parents)",
@@ -76,9 +73,7 @@ class DriveSync:
         results = self._execute_with_retry(request)
         return results.get("files", [])
 
-    def download_file(
-        self, file_id: str, file_name: str, local_dir: Path
-    ) -> None:
+    def download_file(self, file_id: str, file_name: str, local_dir: Path) -> None:
         """Download a single file from Drive to the local filesystem."""
         local_dir.mkdir(parents=True, exist_ok=True)
         file_path = local_dir / file_name
@@ -98,9 +93,7 @@ class DriveSync:
         except (OSError, HttpError) as exc:
             logger.error("Failed to download file %s: %s", file_name, exc)
 
-    def _list_folder_contents(
-        self, folder_id: str, page_token: str | None
-    ) -> dict:
+    def _list_folder_contents(self, folder_id: str, page_token: str | None) -> dict:
         """Fetch one page of a Drive folder's children."""
         query = f"'{folder_id}' in parents and trashed = false"
         request = self.service.files().list(
@@ -113,9 +106,7 @@ class DriveSync:
         )
         return self._execute_with_retry(request)
 
-    def _process_drive_item(
-        self, item: dict, local_path: Path, depth: int
-    ) -> None:
+    def _process_drive_item(self, item: dict, local_path: Path, depth: int) -> None:
         """Route a single Drive item to download or recurse into a sub-folder."""
         if item["mimeType"] == _DRIVE_FOLDER_MIME:
             self._sync_folder_tree(item["id"], local_path / item["name"], depth + 1)
@@ -124,9 +115,7 @@ class DriveSync:
         else:
             logger.info("Skipping Google native file: %s", item["name"])
 
-    def _sync_folder_tree(
-        self, folder_id: str, local_path: Path, depth: int = 0
-    ) -> None:
+    def _sync_folder_tree(self, folder_id: str, local_path: Path, depth: int = 0) -> None:
         """Recursively download the contents of a Drive folder."""
         logger.info("Processing folder %s (depth %d)", local_path.name, depth)
 
@@ -150,9 +139,7 @@ class DriveSync:
         if not has_items and depth == 0:
             logger.warning("Folder appears to be empty in Drive: %s", local_path.name)
 
-    def _batch_search_folders(
-        self, targets: list[str]
-    ) -> tuple[set[str], list[dict]]:
+    def _batch_search_folders(self, targets: list[str]) -> tuple[set[str], list[dict]]:
         """Search Drive for multiple folder names using batched OR-queries.
 
         Each chunk of up to ``_DRIVE_FILE_BATCH_SIZE`` targets is resolved in a
@@ -176,11 +163,7 @@ class DriveSync:
         for offset in range(0, len(targets), _DRIVE_FILE_BATCH_SIZE):
             chunk = targets[offset : offset + _DRIVE_FILE_BATCH_SIZE]
             names_clause = " or ".join(f"name contains '{t}'" for t in chunk)
-            query = (
-                f"({names_clause})"
-                f" and mimeType = '{_DRIVE_FOLDER_MIME}'"
-                " and trashed = false"
-            )
+            query = f"({names_clause}) and mimeType = '{_DRIVE_FOLDER_MIME}' and trashed = false"
             request = self.service.files().list(
                 q=query,
                 fields="files(id, name)",
@@ -199,9 +182,7 @@ class DriveSync:
 
         return found_targets, list(folders_by_id.values())
 
-    def download_missing_dirs(
-        self, dir_names: list[str], local_root: Path
-    ) -> list[str]:
+    def download_missing_dirs(self, dir_names: list[str], local_root: Path) -> list[str]:
         """Search Drive for a list of folder names and download each one found.
 
         Returns:
@@ -222,13 +203,12 @@ class DriveSync:
 
         logger.info(
             "Drive download complete: %d/%d folders found",
-            len(found_targets), len(dir_names),
+            len(found_targets),
+            len(dir_names),
         )
         return list(found_targets)
 
-    def download_specific_files(
-        self, requests: list[tuple[str, Path]]
-    ) -> tuple[int, int]:
+    def download_specific_files(self, requests: list[tuple[str, Path]]) -> tuple[int, int]:
         """Search for specific files by name in Drive and download them.
 
         Batches all file-name lookups into chunked OR-queries to minimise
@@ -257,11 +237,7 @@ class DriveSync:
         for offset in range(0, len(names), _DRIVE_FILE_BATCH_SIZE):
             chunk = names[offset : offset + _DRIVE_FILE_BATCH_SIZE]
             names_clause = " or ".join(f"name = '{n}'" for n in chunk)
-            query = (
-                f"({names_clause})"
-                f" and mimeType != '{_DRIVE_FOLDER_MIME}'"
-                " and trashed = false"
-            )
+            query = f"({names_clause}) and mimeType != '{_DRIVE_FOLDER_MIME}' and trashed = false"
             request = self.service.files().list(
                 q=query,
                 fields="files(id, name)",

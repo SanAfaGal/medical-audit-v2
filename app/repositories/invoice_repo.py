@@ -1,4 +1,5 @@
 """Async repository for invoices and audit periods."""
+
 from __future__ import annotations
 
 import datetime
@@ -46,9 +47,7 @@ class InvoiceRepo:
                 date_to=date_to,
                 period_label=period_label,
             )
-            .on_conflict_do_nothing(
-                index_elements=["institution_id", "date_from", "date_to", "period_label"]
-            )
+            .on_conflict_do_nothing(index_elements=["institution_id", "date_from", "date_to", "period_label"])
             .returning(AuditPeriod)
         )
         result = await self.db.execute(stmt)
@@ -82,9 +81,7 @@ class InvoiceRepo:
     async def get_by_id(self, invoice_id: int) -> Invoice | None:
         return await self.db.get(Invoice, invoice_id)
 
-    async def upsert_invoice(
-        self, audit_period_id: int, invoice_number: str, data: dict
-    ) -> Invoice:
+    async def upsert_invoice(self, audit_period_id: int, invoice_number: str, data: dict) -> Invoice:
         """Insert invoice; on conflict do nothing (preserve existing missing files)."""
         stmt = (
             pg_insert(Invoice)
@@ -143,21 +140,22 @@ class InvoiceRepo:
         if search:
             terms = [t.strip() for t in search.split(";") if t.strip()]
             if terms:
-                q = q.where(or_(*[
+                q = q.where(
                     or_(
-                        Invoice.invoice_number.ilike(f"%{t.upper()}%"),
-                        Invoice.patient_name.ilike(f"%{t}%"),
+                        *[
+                            or_(
+                                Invoice.invoice_number.ilike(f"%{t.upper()}%"),
+                                Invoice.patient_name.ilike(f"%{t}%"),
+                            )
+                            for t in terms
+                        ]
                     )
-                    for t in terms
-                ]))
-        if has_finding_doc_type_id is not None:
-            subq = (
-                select(MissingFile.id)
-                .where(
-                    MissingFile.invoice_id == Invoice.id,
-                    MissingFile.doc_type_id == has_finding_doc_type_id,
-                    MissingFile.resolved_at.is_(None),
                 )
+        if has_finding_doc_type_id is not None:
+            subq = select(MissingFile.id).where(
+                MissingFile.invoice_id == Invoice.id,
+                MissingFile.doc_type_id == has_finding_doc_type_id,
+                MissingFile.resolved_at.is_(None),
             )
             q = q.where(exists(subq))
 
@@ -182,22 +180,16 @@ class InvoiceRepo:
         return list(result.scalars().all()), total
 
     async def update_folder_status(self, invoice_id: int, folder_status_id: int) -> None:
-        await self.db.execute(
-            update(Invoice).where(Invoice.id == invoice_id).values(folder_status_id=folder_status_id)
-        )
+        await self.db.execute(update(Invoice).where(Invoice.id == invoice_id).values(folder_status_id=folder_status_id))
         await self.db.flush()
 
     async def batch_update_status(self, invoice_ids: list[int], folder_status_id: int) -> None:
         await self.db.execute(
-            update(Invoice)
-            .where(Invoice.id.in_(invoice_ids))
-            .values(folder_status_id=folder_status_id)
+            update(Invoice).where(Invoice.id.in_(invoice_ids)).values(folder_status_id=folder_status_id)
         )
         await self.db.flush()
 
-    async def batch_update_service_type(
-        self, period_id: int, updates: dict[str, int | None]
-    ) -> int:
+    async def batch_update_service_type(self, period_id: int, updates: dict[str, int | None]) -> int:
         """Update service_type_id for invoices by invoice_number. Returns count updated."""
         count = 0
         for invoice_number, service_type_id in updates.items():
@@ -219,9 +211,7 @@ class InvoiceRepo:
         return True
 
     async def batch_delete_invoices(self, invoice_ids: list[int]) -> int:
-        result = await self.db.execute(
-            delete(Invoice).where(Invoice.id.in_(invoice_ids))
-        )
+        result = await self.db.execute(delete(Invoice).where(Invoice.id.in_(invoice_ids)))
         await self.db.flush()
         return result.rowcount
 
@@ -235,9 +225,7 @@ class InvoiceRepo:
         result = await self.db.execute(q)
         return set(result.scalars().all())
 
-    async def get_invoice_numbers_by_status(
-        self, period_id: int, status_code: str
-    ) -> list[str]:
+    async def get_invoice_numbers_by_status(self, period_id: int, status_code: str) -> list[str]:
         """Return invoice numbers for a period filtered by folder status code."""
         q = (
             select(Invoice.invoice_number)
@@ -250,9 +238,7 @@ class InvoiceRepo:
         result = await self.db.execute(q)
         return list(result.scalars().all())
 
-    async def get_invoices_by_status_code(
-        self, period_id: int, status_code: str
-    ) -> list[Invoice]:
+    async def get_invoices_by_status_code(self, period_id: int, status_code: str) -> list[Invoice]:
         """Return Invoice objects for a period filtered by folder status code."""
         q = (
             select(Invoice)
@@ -265,9 +251,7 @@ class InvoiceRepo:
         result = await self.db.execute(q)
         return list(result.scalars().all())
 
-    async def batch_update_folder_status(
-        self, period_id: int, invoice_numbers: list[str], status_code: str
-    ) -> int:
+    async def batch_update_folder_status(self, period_id: int, invoice_numbers: list[str], status_code: str) -> int:
         """Update folder_status for invoices matching the given numbers.
 
         Returns:
@@ -275,9 +259,7 @@ class InvoiceRepo:
         """
         if not invoice_numbers:
             return 0
-        fs_result = await self.db.execute(
-            select(FolderStatus).where(FolderStatus.status == status_code)
-        )
+        fs_result = await self.db.execute(select(FolderStatus).where(FolderStatus.status == status_code))
         fs = fs_result.scalar_one_or_none()
         if not fs:
             raise ValueError(f"FolderStatus '{status_code}' not found")
@@ -299,8 +281,7 @@ class InvoiceRepo:
             .join(FolderStatus, Invoice.folder_status_id == FolderStatus.id)
             .outerjoin(
                 MissingFile,
-                (MissingFile.invoice_id == Invoice.id)
-                & (MissingFile.resolved_at.is_(None)),
+                (MissingFile.invoice_id == Invoice.id) & (MissingFile.resolved_at.is_(None)),
             )
             .where(
                 Invoice.audit_period_id == period_id,
@@ -316,9 +297,7 @@ class InvoiceRepo:
         result = await self.db.execute(q)
         return list(result.scalars().all())
 
-    async def batch_update_to_auditada(
-        self, period_id: int, invoice_numbers: list[str]
-    ) -> int:
+    async def batch_update_to_auditada(self, period_id: int, invoice_numbers: list[str]) -> int:
         """Update invoices to AUDITADA status by invoice number.
 
         Returns:
@@ -362,21 +341,22 @@ class InvoiceRepo:
         if search:
             terms = [t.strip() for t in search.split(";") if t.strip()]
             if terms:
-                q = q.where(or_(*[
+                q = q.where(
                     or_(
-                        Invoice.invoice_number.ilike(f"%{t.upper()}%"),
-                        Invoice.patient_name.ilike(f"%{t}%"),
+                        *[
+                            or_(
+                                Invoice.invoice_number.ilike(f"%{t.upper()}%"),
+                                Invoice.patient_name.ilike(f"%{t}%"),
+                            )
+                            for t in terms
+                        ]
                     )
-                    for t in terms
-                ]))
-        if has_finding_doc_type_id is not None:
-            subq = (
-                select(MissingFile.id)
-                .where(
-                    MissingFile.invoice_id == Invoice.id,
-                    MissingFile.doc_type_id == has_finding_doc_type_id,
-                    MissingFile.resolved_at.is_(None),
                 )
+        if has_finding_doc_type_id is not None:
+            subq = select(MissingFile.id).where(
+                MissingFile.invoice_id == Invoice.id,
+                MissingFile.doc_type_id == has_finding_doc_type_id,
+                MissingFile.resolved_at.is_(None),
             )
             q = q.where(exists(subq))
         result = await self.db.execute(q.order_by(Invoice.invoice_number))
@@ -410,9 +390,7 @@ class InvoiceRepo:
 
         return {"total": total, "by_status": by_status, "total_findings": total_findings}
 
-    async def get_service_type_distribution(
-        self, period_id: int
-    ) -> dict[str, int]:
+    async def get_service_type_distribution(self, period_id: int) -> dict[str, int]:
         """Return count of invoices per service type code for a period."""
         q = (
             select(ServiceType.code, func.count(Invoice.id))

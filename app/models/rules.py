@@ -1,4 +1,5 @@
 """ORM models for dynamic business rules: service types, doc types, folder statuses."""
+
 from __future__ import annotations
 
 from sqlalchemy import Integer, String, Text
@@ -22,7 +23,7 @@ class DocType(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     description: Mapped[str] = mapped_column(String(200), nullable=False)
-    prefix: Mapped[str | None] = mapped_column(String(20))      # single prefix, not JSON
+    prefix: Mapped[str | None] = mapped_column(String(20))  # single prefix, not JSON
     notes: Mapped[str | None] = mapped_column(Text)
 
 
@@ -40,6 +41,7 @@ class PrefixCorrection(Base):
     Used by the NORMALIZE_FILES pipeline stage to fix mis-prefixed PDFs
     before the main standardization pass (e.g. OPD → OPF, FVE → FEV).
     """
+
     __tablename__ = "prefix_corrections"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -50,9 +52,8 @@ class PrefixCorrection(Base):
 
 class SystemSettings(Base):
     """Single-row global configuration (id is always 1)."""
+
     __tablename__ = "system_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     audit_data_root: Mapped[str | None] = mapped_column(String(500))
-
-

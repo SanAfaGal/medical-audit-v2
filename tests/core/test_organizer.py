@@ -1,4 +1,5 @@
 """Tests for core/organizer.py — LeafFolderFinder, FolderCopier, InvoiceOrganizer."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,6 +13,7 @@ from core.organizer import FolderCopier, InvoiceOrganizer, LeafFolderFinder
 # ---------------------------------------------------------------------------
 # LeafFolderFinder
 # ---------------------------------------------------------------------------
+
 
 class TestLeafFolderFinder:
     def test_has_files_true(self, tmp_path: Path):
@@ -50,6 +52,7 @@ class TestLeafFolderFinder:
 # FolderCopier
 # ---------------------------------------------------------------------------
 
+
 class TestFolderCopier:
     def test_moves_folder_without_prefix(self, tmp_path: Path):
         src = tmp_path / "src" / "HSL123"
@@ -74,6 +77,7 @@ class TestFolderCopier:
 # ---------------------------------------------------------------------------
 # InvoiceOrganizer
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def organizer_setup(tmp_path: Path):

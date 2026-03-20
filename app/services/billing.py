@@ -1,4 +1,5 @@
 """BillingIngester: load SIHOS Excel and upsert invoices into PostgreSQL."""
+
 from __future__ import annotations
 
 import io
@@ -11,15 +12,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.institution import Administrator, Agreement, Contract, Institution, Service
 from app.models.invoice import Invoice
 from app.repositories.institution_repo import InstitutionRepo
-from app.repositories.invoice_repo import InvoiceRepo
 from app.repositories.rules_repo import RulesRepo
 
 logger = logging.getLogger(__name__)
 
 # Columns expected in the new SIHOS Excel export (uppercase format)
 _SIHOS_COLUMNS = [
-    "FACTURA", "FECHA", "DOCUMENTO", "NUMERO", "PACIENTE",
-    "ADMINISTRADORA", "CONTRATO", "SERVICIO", "OPERARIO",
+    "FACTURA",
+    "FECHA",
+    "DOCUMENTO",
+    "NUMERO",
+    "PACIENTE",
+    "ADMINISTRADORA",
+    "CONTRATO",
+    "SERVICIO",
+    "OPERARIO",
 ]
 
 _DEFAULT_FOLDER_STATUS = "PRESENTE"
@@ -77,21 +84,22 @@ async def ingest(
     skipped = int(df["FECHA"].isna().sum())
 
     # ── Phase 1: collect unique raw strings from the Excel ────────────────
-    col = lambda name: df[name].str.strip().dropna() if name in df.columns else pd.Series(dtype=str)
+    def col(name):
+        return df[name].str.strip().dropna() if name in df.columns else pd.Series(dtype=str)
 
-    raw_admins: set[str]    = set(col("ADMINISTRADORA").unique()) - {""}
+    raw_admins: set[str] = set(col("ADMINISTRADORA").unique()) - {""}
     raw_contracts: set[str] = set(col("CONTRATO").unique()) - {""}
-    raw_services: set[str]  = set(col("SERVICIO").unique()) - {""}
+    raw_services: set[str] = set(col("SERVICIO").unique()) - {""}
 
     # ── Phase 2: pre-load existing global rows ────────────────────────────
     adm_cache: dict[str, Administrator] = {a.raw_name: a for a in await inst_repo.get_all_administrators()}
-    ctr_cache: dict[str, Contract]      = {c.raw_name: c for c in await inst_repo.get_all_contracts()}
-    svc_cache: dict[str, Service]       = {s.raw_service: s for s in await inst_repo.get_services(institution.id)}
+    ctr_cache: dict[str, Contract] = {c.raw_name: c for c in await inst_repo.get_all_contracts()}
+    svc_cache: dict[str, Service] = {s.raw_service: s for s in await inst_repo.get_services(institution.id)}
 
     # ── Phase 3: bulk-insert only new global entries ──────────────────────
-    new_admins    = raw_admins    - adm_cache.keys()
+    new_admins = raw_admins - adm_cache.keys()
     new_contracts = raw_contracts - ctr_cache.keys()
-    new_services  = raw_services  - svc_cache.keys()
+    new_services = raw_services - svc_cache.keys()
 
     if new_admins:
         await db.execute(
@@ -114,19 +122,18 @@ async def ingest(
     if new_services:
         await db.execute(
             pg_insert(Service)
-            .values([
-                {"institution_id": institution.id, "raw_service": r, "service_type_id": None}
-                for r in new_services
-            ])
+            .values(
+                [{"institution_id": institution.id, "raw_service": r, "service_type_id": None} for r in new_services]
+            )
             .on_conflict_do_nothing()
         )
         await db.flush()
         svc_cache = {s.raw_service: s for s in await inst_repo.get_services(institution.id)}
 
     # Track unknowns for the summary report
-    unknown_admins    = [r for r in raw_admins    if adm_cache.get(r) and adm_cache[r].canonical_name is None]
+    unknown_admins = [r for r in raw_admins if adm_cache.get(r) and adm_cache[r].canonical_name is None]
     unknown_contracts = [r for r in raw_contracts if ctr_cache.get(r) and ctr_cache[r].canonical_name is None]
-    unknown_services  = [r for r in raw_services  if svc_cache.get(r) and svc_cache[r].service_type_id is None]
+    unknown_services = [r for r in raw_services if svc_cache.get(r) and svc_cache[r].service_type_id is None]
 
     if scan_only:
         if save_mappings_only:
@@ -148,14 +155,13 @@ async def ingest(
     # ── Phase 3b: load/create agreements for new pairs ────────────────────
     ic_list = await inst_repo.get_agreements()
     ic_cache: dict[tuple[str, str], Agreement] = {
-        (ic.administrator.raw_name, ic.contract.raw_name): ic
-        for ic in ic_list
+        (ic.administrator.raw_name, ic.contract.raw_name): ic for ic in ic_list
     }
 
     # Collect unique (raw_admin, raw_contract) pairs from Excel
     raw_pairs: set[tuple[str, str]] = set()
     for _, row in df.iterrows():
-        raw_admin    = str(row.get("ADMINISTRADORA", "") or "").strip()
+        raw_admin = str(row.get("ADMINISTRADORA", "") or "").strip()
         raw_contract = str(row.get("CONTRATO", "") or "").strip()
         if raw_admin:
             raw_pairs.add((raw_admin, raw_contract))
@@ -165,7 +171,7 @@ async def ingest(
         new_ic_values = [
             {
                 "administrator_id": adm_cache[a].id,
-                "contract_id":      ctr_cache[c].id,
+                "contract_id": ctr_cache[c].id,
                 "contract_type_id": None,
             }
             for a, c in new_pairs
@@ -175,16 +181,11 @@ async def ingest(
             await db.execute(
                 pg_insert(Agreement)
                 .values(new_ic_values)
-                .on_conflict_do_nothing(
-                    index_elements=["administrator_id", "contract_id"]
-                )
+                .on_conflict_do_nothing(index_elements=["administrator_id", "contract_id"])
             )
             await db.flush()
             ic_list = await inst_repo.get_agreements()
-            ic_cache = {
-                (ic.administrator.raw_name, ic.contract.raw_name): ic
-                for ic in ic_list
-            }
+            ic_cache = {(ic.administrator.raw_name, ic.contract.raw_name): ic for ic in ic_list}
 
     # ── Phase 4: build invoice_map entirely in memory ────────────────────
     service_types = await rules_repo.get_service_types()
@@ -198,15 +199,16 @@ async def ingest(
             continue
 
         invoice_number = str(row["FACTURA"])
-        raw_admin    = str(row.get("ADMINISTRADORA", "") or "").strip()
+        raw_admin = str(row.get("ADMINISTRADORA", "") or "").strip()
         raw_contract = str(row.get("CONTRATO", "") or "").strip()
-        raw_service  = str(row.get("SERVICIO", "") or "").strip()
+        raw_service = str(row.get("SERVICIO", "") or "").strip()
 
-        ic      = ic_cache.get((raw_admin, raw_contract)) if raw_admin else None
+        ic = ic_cache.get((raw_admin, raw_contract)) if raw_admin else None
         service = svc_cache.get(raw_service) if raw_service else None
         service_type_id = service.service_type_id if service else None
 
         if invoice_number not in invoice_map:
+
             def _str(val, maxlen=None):
                 """Convert a pandas cell to str, returning None for NaN/empty."""
                 if val is None or (not isinstance(val, str) and pd.isna(val)):
@@ -215,15 +217,15 @@ async def ingest(
                 return (s[:maxlen] if maxlen else s) or None
 
             invoice_map[invoice_number] = {
-                "date":                    invoice_date,
-                "id_type":                 _str(row.get("DOCUMENTO"), 10),
-                "id_number":               _str(row.get("NUMERO"), 50),
-                "patient_name":            _str(row.get("PACIENTE"), 300),
-                "employee":                _str(row.get("OPERARIO"), 200),
-                "admission":               _str(row.get("ADMISION")),
+                "date": invoice_date,
+                "id_type": _str(row.get("DOCUMENTO"), 10),
+                "id_number": _str(row.get("NUMERO"), 50),
+                "patient_name": _str(row.get("PACIENTE"), 300),
+                "employee": _str(row.get("OPERARIO"), 200),
+                "admission": _str(row.get("ADMISION")),
                 "agreement_id": ic.id if ic else None,
-                "folder_status_id":        default_fs.id,
-                "_service_type_ids":       set(),
+                "folder_status_id": default_fs.id,
+                "_service_type_ids": set(),
             }
 
         if service_type_id is not None:
@@ -235,11 +237,13 @@ async def ingest(
         st_ids: set[int] = data.pop("_service_type_ids")
         best_st_id = max(st_ids, key=lambda sid: priority_map.get(sid, 0)) if st_ids else None
         data["service_type_id"] = best_st_id
-        invoice_values.append({
-            "audit_period_id": period_id,
-            "invoice_number":  invoice_number,
-            **data,
-        })
+        invoice_values.append(
+            {
+                "audit_period_id": period_id,
+                "invoice_number": invoice_number,
+                **data,
+            }
+        )
 
     inserted = 0
     if invoice_values:
@@ -253,7 +257,10 @@ async def ingest(
     await db.commit()
     logger.info(
         "ingest: institution=%s period_id=%s inserted=%d skipped=%d",
-        institution.name, period_id, inserted, skipped,
+        institution.name,
+        period_id,
+        inserted,
+        skipped,
     )
     return {
         "scan_only": False,

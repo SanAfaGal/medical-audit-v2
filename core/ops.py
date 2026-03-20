@@ -58,9 +58,7 @@ class DocumentOps:
     def __init__(self, base_dir: Path, id_prefix: str = "") -> None:
         self.base_dir = Path(base_dir)
         _esc = re.escape(id_prefix)
-        self._re_dir_id_loose = re.compile(
-            rf"({_esc})[^a-zA-Z]*?(\d+)", re.IGNORECASE
-        )
+        self._re_dir_id_loose = re.compile(rf"({_esc})[^a-zA-Z]*?(\d+)", re.IGNORECASE)
 
     def remove_files(self, files: list[Path]) -> int:
         """Delete a list of files and return the count of successful deletions."""
@@ -73,9 +71,7 @@ class DocumentOps:
                 logger.error("Could not delete file %s: %s", f, exc)
         return count
 
-    def relocate_misplaced(
-        self, source_dir: Path, dry_run: bool = True
-    ) -> None:
+    def relocate_misplaced(self, source_dir: Path, dry_run: bool = True) -> None:
         """Move files from the source directory to their correct folder."""
         for f in source_dir.rglob("*"):
             if not f.is_file():
@@ -95,13 +91,9 @@ class DocumentOps:
                 try:
                     shutil.move(str(f), str(destination))
                 except (shutil.Error, OSError) as exc:
-                    logger.error(
-                        "Could not move %s to %s: %s", f, destination, exc
-                    )
+                    logger.error("Could not move %s to %s: %s", f, destination, exc)
             else:
-                logger.warning(
-                    "Destination folder does not exist, skipping: %s", destination
-                )
+                logger.warning("Destination folder does not exist, skipping: %s", destination)
 
     def apply_prefix_renames(
         self,
@@ -242,9 +234,7 @@ class DocumentOps:
         for dir_path in dirs:
             match = self._re_dir_id_loose.search(dir_path.name)
             if not match:
-                logger.warning(
-                    "Cannot extract canonical name from: %s", dir_path.name
-                )
+                logger.warning("Cannot extract canonical name from: %s", dir_path.name)
                 continue
             canonical = (match.group(1) + match.group(2)).upper()
             new_path = dir_path.parent / canonical

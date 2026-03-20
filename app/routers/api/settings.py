@@ -1,4 +1,5 @@
 """API router for business rules settings (service types, doc types, folder statuses)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,6 +31,7 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 # Service types
 # ------------------------------------------------------------------
 
+
 @router.get("/service-types", response_model=list[ServiceTypeOut])
 async def list_service_types(db: AsyncSession = Depends(get_db)):
     return await RulesRepo(db).get_service_types()
@@ -44,13 +46,9 @@ async def create_service_type(data: ServiceTypeCreate, db: AsyncSession = Depend
 
 
 @router.patch("/service-types/{service_type_id}", response_model=ServiceTypeOut)
-async def update_service_type(
-    service_type_id: int, data: ServiceTypeUpdate, db: AsyncSession = Depends(get_db)
-):
+async def update_service_type(service_type_id: int, data: ServiceTypeUpdate, db: AsyncSession = Depends(get_db)):
     repo = RulesRepo(db)
-    obj = await repo.update_service_type(
-        service_type_id, {k: v for k, v in data.model_dump().items() if v is not None}
-    )
+    obj = await repo.update_service_type(service_type_id, {k: v for k, v in data.model_dump().items() if v is not None})
     if not obj:
         raise HTTPException(404, "Tipo de servicio no encontrado")
     await db.commit()
@@ -60,6 +58,7 @@ async def update_service_type(
 # ------------------------------------------------------------------
 # Doc types
 # ------------------------------------------------------------------
+
 
 @router.get("/doc-types", response_model=list[DocTypeOut])
 async def list_doc_types(db: AsyncSession = Depends(get_db)):
@@ -75,13 +74,9 @@ async def create_doc_type(data: DocTypeCreate, db: AsyncSession = Depends(get_db
 
 
 @router.patch("/doc-types/{doc_type_id}", response_model=DocTypeOut)
-async def update_doc_type(
-    doc_type_id: int, data: DocTypeUpdate, db: AsyncSession = Depends(get_db)
-):
+async def update_doc_type(doc_type_id: int, data: DocTypeUpdate, db: AsyncSession = Depends(get_db)):
     repo = RulesRepo(db)
-    obj = await repo.update_doc_type(
-        doc_type_id, {k: v for k, v in data.model_dump().items() if v is not None}
-    )
+    obj = await repo.update_doc_type(doc_type_id, {k: v for k, v in data.model_dump().items() if v is not None})
     if not obj:
         raise HTTPException(404, "Tipo de documento no encontrado")
     await db.commit()
@@ -92,6 +87,7 @@ async def update_doc_type(
 # Folder statuses
 # ------------------------------------------------------------------
 
+
 @router.get("/folder-statuses", response_model=list[FolderStatusOut])
 async def list_folder_statuses(db: AsyncSession = Depends(get_db)):
     return await RulesRepo(db).get_folder_statuses()
@@ -100,6 +96,7 @@ async def list_folder_statuses(db: AsyncSession = Depends(get_db)):
 # ------------------------------------------------------------------
 # Service type delete
 # ------------------------------------------------------------------
+
 
 @router.delete("/service-types/{service_type_id}", status_code=204)
 async def delete_service_type(service_type_id: int, db: AsyncSession = Depends(get_db)):
@@ -120,6 +117,7 @@ async def delete_service_type(service_type_id: int, db: AsyncSession = Depends(g
 # Doc type delete
 # ------------------------------------------------------------------
 
+
 @router.delete("/doc-types/{doc_type_id}", status_code=204)
 async def delete_doc_type(doc_type_id: int, db: AsyncSession = Depends(get_db)):
     try:
@@ -139,6 +137,7 @@ async def delete_doc_type(doc_type_id: int, db: AsyncSession = Depends(get_db)):
 # Folder status create / update / delete
 # ------------------------------------------------------------------
 
+
 @router.post("/folder-statuses", response_model=FolderStatusOut, status_code=201)
 async def create_folder_status(data: FolderStatusCreate, db: AsyncSession = Depends(get_db)):
     obj = await RulesRepo(db).create_folder_status(data.status)
@@ -147,9 +146,7 @@ async def create_folder_status(data: FolderStatusCreate, db: AsyncSession = Depe
 
 
 @router.patch("/folder-statuses/{fs_id}", response_model=FolderStatusOut)
-async def update_folder_status(
-    fs_id: int, data: FolderStatusUpdate, db: AsyncSession = Depends(get_db)
-):
+async def update_folder_status(fs_id: int, data: FolderStatusUpdate, db: AsyncSession = Depends(get_db)):
     obj = await RulesRepo(db).update_folder_status_obj(fs_id, data.status)
     if not obj:
         raise HTTPException(404, "Estado no encontrado")
@@ -175,6 +172,7 @@ async def delete_folder_status(fs_id: int, db: AsyncSession = Depends(get_db)):
 # ------------------------------------------------------------------
 # Prefix corrections
 # ------------------------------------------------------------------
+
 
 @router.get("/prefix-corrections", response_model=list[PrefixCorrectionOut])
 async def list_prefix_corrections(db: AsyncSession = Depends(get_db)):
@@ -213,6 +211,7 @@ async def delete_prefix_correction(correction_id: int, db: AsyncSession = Depend
 # System settings
 # ------------------------------------------------------------------
 
+
 @router.get("/system", response_model=SystemSettingsOut)
 async def get_system_settings(db: AsyncSession = Depends(get_db)):
     obj = await RulesRepo(db).get_system_settings()
@@ -223,8 +222,6 @@ async def get_system_settings(db: AsyncSession = Depends(get_db)):
 
 @router.patch("/system", response_model=SystemSettingsOut)
 async def update_system_settings(data: SystemSettingsUpdate, db: AsyncSession = Depends(get_db)):
-    obj = await RulesRepo(db).save_system_settings(
-        {k: v for k, v in data.model_dump().items() if v is not None}
-    )
+    obj = await RulesRepo(db).save_system_settings({k: v for k, v in data.model_dump().items() if v is not None})
     await db.commit()
     return obj

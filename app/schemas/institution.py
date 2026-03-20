@@ -1,17 +1,18 @@
 """Pydantic schemas for institutions, administrators, contracts, contract_types, agreements, and services."""
+
 from pydantic import BaseModel
 
 
 class InstitutionCreate(BaseModel):
-    name: str                           # internal unique key, e.g. "SANTA_LUCIA"
-    display_name: str                   # human-readable, e.g. "Hospital Santa Lucia"
+    name: str  # internal unique key, e.g. "SANTA_LUCIA"
+    display_name: str  # human-readable, e.g. "Hospital Santa Lucia"
     nit: str
     invoice_id_prefix: str | None = None
     sihos_base_url: str | None = None
     sihos_doc_code: str | None = None
     sihos_user: str | None = None
-    sihos_password: str | None = None   # plaintext — encrypted before DB insert
-    drive_credentials_json: str | None = None   # plaintext JSON — encrypted before DB insert
+    sihos_password: str | None = None  # plaintext — encrypted before DB insert
+    drive_credentials_json: str | None = None  # plaintext JSON — encrypted before DB insert
 
 
 class InstitutionUpdate(BaseModel):
@@ -22,8 +23,8 @@ class InstitutionUpdate(BaseModel):
     sihos_base_url: str | None = None
     sihos_doc_code: str | None = None
     sihos_user: str | None = None
-    sihos_password: str | None = None   # plaintext — encrypted before DB insert
-    drive_credentials_json: str | None = None   # plaintext JSON — encrypted before DB insert
+    sihos_password: str | None = None  # plaintext — encrypted before DB insert
+    drive_credentials_json: str | None = None  # plaintext JSON — encrypted before DB insert
 
 
 class InstitutionOut(BaseModel):
@@ -47,6 +48,7 @@ class InstitutionOut(BaseModel):
 # ContractType
 # ------------------------------------------------------------------
 
+
 class ContractTypeOut(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -69,6 +71,7 @@ class ContractTypeUpdate(BaseModel):
 # Administrator (global)
 # ------------------------------------------------------------------
 
+
 class AdministratorOut(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -90,6 +93,7 @@ class AdministratorUpdate(BaseModel):
 # Contract (global)
 # ------------------------------------------------------------------
 
+
 class ContractOut(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -110,6 +114,7 @@ class ContractUpdate(BaseModel):
 # ------------------------------------------------------------------
 # Agreement
 # ------------------------------------------------------------------
+
 
 class AgreementOut(BaseModel):
     model_config = {"from_attributes": True}
@@ -136,6 +141,7 @@ class AgreementUpdate(BaseModel):
 # ------------------------------------------------------------------
 # Service
 # ------------------------------------------------------------------
+
 
 class ServiceOut(BaseModel):
     model_config = {"from_attributes": True}

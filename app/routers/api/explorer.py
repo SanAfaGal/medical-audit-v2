@@ -1,9 +1,9 @@
 """Router para el explorador de archivos PDF integrado en la UI."""
+
 from __future__ import annotations
 
 import asyncio
 import base64
-import os
 from pathlib import Path
 
 import aiofiles
@@ -35,6 +35,7 @@ router = APIRouter(prefix="/explorer", tags=["explorer"])
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers de seguridad (sandbox)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 async def _resolve_sandbox(institution_id: int, period_id: int, db: AsyncSession) -> Path:
     """Devuelve la ruta sandbox: audit_data_root / institution.name / period.period_label."""
@@ -79,6 +80,7 @@ def _safe_resolve(sandbox: Path, rel: str) -> Path:
 # Listar directorio
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @router.get("/list", response_model=ListResponse)
 async def list_directory(
     institution_id: int = Query(...),
@@ -102,18 +104,22 @@ async def list_directory(
     try:
         for item in sorted(target.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
             if item.is_dir():
-                entries.append(FileNode(
-                    name=item.name,
-                    path=str(item.relative_to(sandbox)).replace("\\", "/"),
-                    is_dir=True,
-                ))
+                entries.append(
+                    FileNode(
+                        name=item.name,
+                        path=str(item.relative_to(sandbox)).replace("\\", "/"),
+                        is_dir=True,
+                    )
+                )
             elif item.suffix.lower() == ".pdf":
-                entries.append(FileNode(
-                    name=item.name,
-                    path=str(item.relative_to(sandbox)).replace("\\", "/"),
-                    is_dir=False,
-                    size=item.stat().st_size,
-                ))
+                entries.append(
+                    FileNode(
+                        name=item.name,
+                        path=str(item.relative_to(sandbox)).replace("\\", "/"),
+                        is_dir=False,
+                        size=item.stat().st_size,
+                    )
+                )
     except PermissionError as e:
         raise HTTPException(403, f"Sin permiso para leer el directorio: {e}")
 
@@ -123,6 +129,7 @@ async def list_directory(
 # ──────────────────────────────────────────────────────────────────────────────
 # Servir PDF
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @router.get("/file")
 async def serve_file(
@@ -156,6 +163,7 @@ async def serve_file(
 # Miniaturas
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @router.get("/thumbnails")
 async def get_thumbnails(
     institution_id: int = Query(...),
@@ -172,6 +180,7 @@ async def get_thumbnails(
 
     def _render() -> list[str]:
         import fitz  # PyMuPDF
+
         doc = fitz.open(str(target))
         result = []
         matrix = fitz.Matrix(0.5, 0.5)
@@ -189,6 +198,7 @@ async def get_thumbnails(
 # ──────────────────────────────────────────────────────────────────────────────
 # Renombrar
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @router.post("/rename", response_model=OperationResult)
 async def rename_entry(body: RenameRequest, db: AsyncSession = Depends(get_db)):
@@ -218,6 +228,7 @@ async def rename_entry(body: RenameRequest, db: AsyncSession = Depends(get_db)):
 # Mover
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @router.post("/move", response_model=OperationResult)
 async def move_entry(body: MoveRequest, db: AsyncSession = Depends(get_db)):
     """Mueve un archivo o carpeta a otra carpeta destino."""
@@ -243,6 +254,7 @@ async def move_entry(body: MoveRequest, db: AsyncSession = Depends(get_db)):
 # Unir PDFs (merge)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @router.post("/merge", response_model=OperationResult)
 async def merge_pdfs(body: MergeRequest, db: AsyncSession = Depends(get_db)):
     """Une múltiples PDFs en uno solo."""
@@ -263,6 +275,7 @@ async def merge_pdfs(body: MergeRequest, db: AsyncSession = Depends(get_db)):
 
     def _merge():
         import fitz
+
         merged = fitz.open()
         for p in resolved_paths:
             doc = fitz.open(str(p))
@@ -278,6 +291,7 @@ async def merge_pdfs(body: MergeRequest, db: AsyncSession = Depends(get_db)):
 # ──────────────────────────────────────────────────────────────────────────────
 # Dividir PDF (split)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def _parse_ranges(ranges_str: str, total_pages: int) -> list[list[int]]:
     """Parsea un string de rangos como '1-3, 5' (1-based) a listas de índices 0-based."""
@@ -309,6 +323,7 @@ async def split_pdf(body: SplitRequest, db: AsyncSession = Depends(get_db)):
 
     def _split():
         import fitz
+
         doc = fitz.open(str(src))
         total = doc.page_count
         stem = src.stem
@@ -343,6 +358,7 @@ async def split_pdf(body: SplitRequest, db: AsyncSession = Depends(get_db)):
 # Reordenar páginas
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @router.post("/reorder", response_model=OperationResult)
 async def reorder_pages(body: ReorderRequest, db: AsyncSession = Depends(get_db)):
     """Reordena las páginas de un PDF (modifica el archivo in-place)."""
@@ -354,21 +370,18 @@ async def reorder_pages(body: ReorderRequest, db: AsyncSession = Depends(get_db)
 
     def _reorder():
         import fitz
+
         doc = fitz.open(str(src))
         page_count = doc.page_count
         order = list(body.page_order)
 
         if len(order) != page_count:
             doc.close()
-            raise ValueError(
-                f"Se enviaron {len(order)} páginas pero el PDF tiene {page_count}"
-            )
+            raise ValueError(f"Se enviaron {len(order)} páginas pero el PDF tiene {page_count}")
         for idx in order:
             if idx < 0 or idx >= page_count:
                 doc.close()
-                raise ValueError(
-                    f"Índice de página inválido: {idx} (rango válido 0–{page_count - 1})"
-                )
+                raise ValueError(f"Índice de página inválido: {idx} (rango válido 0–{page_count - 1})")
 
         doc.select(order)
         # tobytes() evita guardar sobre el mismo archivo abierto (problema en Windows)
@@ -418,12 +431,14 @@ async def search_entries(
             continue
         if not item.is_dir() and item.suffix.lower() != ".pdf":
             continue
-        entries.append(FileNode(
-            name=item.name,
-            path=str(item.relative_to(sandbox)).replace("\\", "/"),
-            is_dir=item.is_dir(),
-            size=item.stat().st_size if item.is_file() else None,
-        ))
+        entries.append(
+            FileNode(
+                name=item.name,
+                path=str(item.relative_to(sandbox)).replace("\\", "/"),
+                is_dir=item.is_dir(),
+                size=item.stat().st_size if item.is_file() else None,
+            )
+        )
         if len(entries) >= _SEARCH_MAX_RESULTS:
             break
 
@@ -433,6 +448,7 @@ async def search_entries(
 # ──────────────────────────────────────────────────────────────────────────────
 # Copiar archivo o carpeta
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @router.post("/copy", response_model=OperationResult)
 async def copy_entry(body: CopyRequest, db: AsyncSession = Depends(get_db)):
@@ -469,6 +485,7 @@ async def copy_entry(body: CopyRequest, db: AsyncSession = Depends(get_db)):
 # Eliminar archivo o carpeta
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @router.post("/delete", response_model=OperationResult)
 async def delete_entry(body: DeleteRequest, db: AsyncSession = Depends(get_db)):
     """Elimina un archivo o carpeta (con todo su contenido si es carpeta)."""
@@ -499,11 +516,13 @@ async def delete_entry(body: DeleteRequest, db: AsyncSession = Depends(get_db)):
 # Ocultar consola Windows
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @router.post("/console-hide", response_model=OperationResult)
 async def console_hide():
     """Oculta la ventana de consola de Windows."""
     try:
         import ctypes
+
         hwnd = ctypes.windll.kernel32.GetConsoleWindow()
         if hwnd:
             ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE = 0

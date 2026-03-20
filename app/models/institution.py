@@ -1,10 +1,11 @@
 """ORM models for institutions, administrators, contracts, contract types, services, and service-type-document mappings."""
+
 from __future__ import annotations
 
 import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Integer, LargeBinary, String, UniqueConstraint, func
-from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -27,11 +28,14 @@ class Institution(Base):
 
     services: Mapped[list[Service]] = relationship(back_populates="institution", cascade="all, delete-orphan")
     periods: Mapped[list[AuditPeriod]] = relationship(back_populates="institution", cascade="all, delete-orphan")
-    service_type_documents: Mapped[list[ServiceTypeDocument]] = relationship(back_populates="institution", cascade="all, delete-orphan")
+    service_type_documents: Mapped[list[ServiceTypeDocument]] = relationship(
+        back_populates="institution", cascade="all, delete-orphan"
+    )
 
 
 class ContractType(Base):
     """Global contract type (EPS, SOAT, ARL, etc.) — assigned manually by user."""
+
     __tablename__ = "contract_types"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -41,6 +45,7 @@ class ContractType(Base):
 
 class Administrator(Base):
     """Global administrator — same company shared across institutions."""
+
     __tablename__ = "administrators"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -50,6 +55,7 @@ class Administrator(Base):
 
 class Contract(Base):
     """Global contract — same contract identifier shared across institutions."""
+
     __tablename__ = "contracts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -59,6 +65,7 @@ class Contract(Base):
 
 class Agreement(Base):
     """Links an administrator+contract pair with an optional contract type."""
+
     __tablename__ = "agreements"
     __table_args__ = (UniqueConstraint("administrator_id", "contract_id"),)
 
@@ -75,6 +82,7 @@ class Agreement(Base):
 
 class Service(Base):
     """Raw SIHOS service strings mapped to a ServiceType."""
+
     __tablename__ = "services"
     __table_args__ = (UniqueConstraint("institution_id", "raw_service"),)
 
@@ -88,6 +96,7 @@ class Service(Base):
 
 class ServiceTypeDocument(Base):
     """Links a service type to a required document type, scoped to an institution."""
+
     __tablename__ = "service_type_documents"
     __table_args__ = (UniqueConstraint("institution_id", "service_type_id", "doc_type_id"),)
 

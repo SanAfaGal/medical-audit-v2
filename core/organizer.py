@@ -36,11 +36,7 @@ class FolderCopier:
 
     def _build_destination(self, folder: Path, use_prefix: bool) -> Path:
         """Build the destination path, optionally prefixing with the parent name."""
-        name = (
-            f"{folder.parent.name}_{folder.name}"
-            if use_prefix
-            else folder.name
-        )
+        name = f"{folder.parent.name}_{folder.name}" if use_prefix else folder.name
         return self.target_root / name
 
 
@@ -56,11 +52,7 @@ class LeafFolderFinder:
 
     def find_leaf_folders(self, source_root: Path) -> list[Path]:
         """Scan a source root recursively and return directories containing files."""
-        return [
-            folder
-            for folder in Path(source_root).rglob("*")
-            if folder.is_dir() and self.has_files(folder)
-        ]
+        return [folder for folder in Path(source_root).rglob("*") if folder.is_dir() and self.has_files(folder)]
 
 
 @dataclass
@@ -162,9 +154,7 @@ class InvoiceOrganizer:
                 continue
 
             destination_path = self.archive_dir / row["Ruta"]
-            self._move_single_invoice(
-                str(invoice_id), source_path, destination_path, dry_run, stats
-            )
+            self._move_single_invoice(str(invoice_id), source_path, destination_path, dry_run, stats)
 
         return TransferSummary(
             moved=stats.moved,

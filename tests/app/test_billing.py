@@ -1,10 +1,11 @@
 """Tests for app/services/billing.py — pure pandas tests + ingest with mocked repos."""
+
 from __future__ import annotations
 
 import io
 import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pandas as pd
 import pytest
@@ -15,6 +16,7 @@ from app.services.billing import _normalize, load_excel
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_excel_bytes(**overrides) -> bytes:
     """Create a minimal valid SIHOS Excel as bytes."""
@@ -40,19 +42,35 @@ def _make_excel_bytes(**overrides) -> bytes:
 # load_excel
 # ---------------------------------------------------------------------------
 
+
 class TestLoadExcel:
     def test_reads_all_expected_columns(self):
         data = load_excel(_make_excel_bytes())
-        expected = {"FACTURA", "FECHA", "DOCUMENTO", "NUMERO", "PACIENTE",
-                    "ADMINISTRADORA", "CONTRATO", "SERVICIO", "OPERARIO"}
+        expected = {
+            "FACTURA",
+            "FECHA",
+            "DOCUMENTO",
+            "NUMERO",
+            "PACIENTE",
+            "ADMINISTRADORA",
+            "CONTRATO",
+            "SERVICIO",
+            "OPERARIO",
+        }
         assert set(data.columns) == expected
 
     def test_drops_extra_columns(self):
         # Add an extra column to the Excel
         row = {
-            "FACTURA": "FV1", "FECHA": "2024-01-01", "DOCUMENTO": "CC",
-            "NUMERO": "1", "PACIENTE": "P", "ADMINISTRADORA": "A",
-            "CONTRATO": "C", "SERVICIO": "S", "OPERARIO": "O",
+            "FACTURA": "FV1",
+            "FECHA": "2024-01-01",
+            "DOCUMENTO": "CC",
+            "NUMERO": "1",
+            "PACIENTE": "P",
+            "ADMINISTRADORA": "A",
+            "CONTRATO": "C",
+            "SERVICIO": "S",
+            "OPERARIO": "O",
             "EXTRA_COLUMN": "should_be_dropped",
         }
         df = pd.DataFrame([row])
@@ -75,58 +93,79 @@ class TestLoadExcel:
 # _normalize
 # ---------------------------------------------------------------------------
 
+
 class TestNormalize:
     def test_strips_and_uppercases_factura(self):
-        df = pd.DataFrame([{
-            "FACTURA": "  fv123  ",
-            "FECHA": "2024-01-15",
-            "ADMINISTRADORA": "EPS",
-        }])
+        df = pd.DataFrame(
+            [
+                {
+                    "FACTURA": "  fv123  ",
+                    "FECHA": "2024-01-15",
+                    "ADMINISTRADORA": "EPS",
+                }
+            ]
+        )
         result = _normalize(df)
         assert result["FACTURA"].iloc[0] == "FV123"
 
     def test_drops_rows_with_empty_factura(self):
-        df = pd.DataFrame([
-            {"FACTURA": "FV1", "FECHA": "2024-01-15", "ADMINISTRADORA": "EPS"},
-            {"FACTURA": "",    "FECHA": "2024-01-15", "ADMINISTRADORA": "EPS"},
-            {"FACTURA": None,  "FECHA": "2024-01-15", "ADMINISTRADORA": "EPS"},
-        ])
+        df = pd.DataFrame(
+            [
+                {"FACTURA": "FV1", "FECHA": "2024-01-15", "ADMINISTRADORA": "EPS"},
+                {"FACTURA": "", "FECHA": "2024-01-15", "ADMINISTRADORA": "EPS"},
+                {"FACTURA": None, "FECHA": "2024-01-15", "ADMINISTRADORA": "EPS"},
+            ]
+        )
         result = _normalize(df)
         assert len(result) == 1
         assert result["FACTURA"].iloc[0] == "FV1"
 
     def test_drops_rows_with_null_administradora(self):
-        df = pd.DataFrame([
-            {"FACTURA": "FV1", "FECHA": "2024-01-15", "ADMINISTRADORA": "EPS"},
-            {"FACTURA": "FV2", "FECHA": "2024-01-15", "ADMINISTRADORA": None},
-        ])
+        df = pd.DataFrame(
+            [
+                {"FACTURA": "FV1", "FECHA": "2024-01-15", "ADMINISTRADORA": "EPS"},
+                {"FACTURA": "FV2", "FECHA": "2024-01-15", "ADMINISTRADORA": None},
+            ]
+        )
         result = _normalize(df)
         assert len(result) == 1
 
     def test_parses_fecha_to_date(self):
-        df = pd.DataFrame([{
-            "FACTURA": "FV1",
-            "FECHA": "2024-03-20",
-            "ADMINISTRADORA": "EPS",
-        }])
+        df = pd.DataFrame(
+            [
+                {
+                    "FACTURA": "FV1",
+                    "FECHA": "2024-03-20",
+                    "ADMINISTRADORA": "EPS",
+                }
+            ]
+        )
         result = _normalize(df)
         assert result["FECHA"].iloc[0] == datetime.date(2024, 3, 20)
 
     def test_invalid_fecha_becomes_nat(self):
-        df = pd.DataFrame([{
-            "FACTURA": "FV1",
-            "FECHA": "not-a-date",
-            "ADMINISTRADORA": "EPS",
-        }])
+        df = pd.DataFrame(
+            [
+                {
+                    "FACTURA": "FV1",
+                    "FECHA": "not-a-date",
+                    "ADMINISTRADORA": "EPS",
+                }
+            ]
+        )
         result = _normalize(df)
         assert pd.isna(result["FECHA"].iloc[0])
 
     def test_returns_copy_does_not_mutate_input(self):
-        df = pd.DataFrame([{
-            "FACTURA": "  fv1  ",
-            "FECHA": "2024-01-01",
-            "ADMINISTRADORA": "EPS",
-        }])
+        df = pd.DataFrame(
+            [
+                {
+                    "FACTURA": "  fv1  ",
+                    "FECHA": "2024-01-01",
+                    "ADMINISTRADORA": "EPS",
+                }
+            ]
+        )
         original_factura = df["FACTURA"].iloc[0]
         _normalize(df)
         assert df["FACTURA"].iloc[0] == original_factura
@@ -135,6 +174,7 @@ class TestNormalize:
 # ---------------------------------------------------------------------------
 # ingest — mocked repos
 # ---------------------------------------------------------------------------
+
 
 class TestIngest:
     """Integration-lite tests for billing.ingest using AsyncMock."""

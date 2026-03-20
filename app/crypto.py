@@ -1,4 +1,5 @@
 """Fernet-based encryption/decryption for secrets stored in the database."""
+
 import base64
 
 from cryptography.fernet import Fernet

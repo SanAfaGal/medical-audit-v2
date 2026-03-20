@@ -1,11 +1,12 @@
 """Tests for core/standardizer.py — pure naming logic + filesystem renames."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from core.standardizer import FilenameStandardizer, RenameResult
+from core.standardizer import FilenameStandardizer
 
 
 @pytest.fixture
@@ -21,6 +22,7 @@ def standardizer(nit: str, id_prefix: str) -> FilenameStandardizer:
 # build_canonical_name — pure logic (no filesystem)
 # ---------------------------------------------------------------------------
 
+
 class TestBuildCanonicalName:
     def test_id_from_parent_folder(self, tmp_path: Path, standardizer: FilenameStandardizer, nit: str, id_prefix: str):
         folder = tmp_path / f"{id_prefix}456"
@@ -31,7 +33,9 @@ class TestBuildCanonicalName:
         assert name == f"FEV_{nit}_{id_prefix}456.pdf"
         assert reason == "Ok"
 
-    def test_id_from_filename_fallback(self, tmp_path: Path, standardizer: FilenameStandardizer, nit: str, id_prefix: str):
+    def test_id_from_filename_fallback(
+        self, tmp_path: Path, standardizer: FilenameStandardizer, nit: str, id_prefix: str
+    ):
         folder = tmp_path / "unknown_folder"
         folder.mkdir()
         f = folder / f"fev_900_{id_prefix}789.pdf"
@@ -76,6 +80,7 @@ class TestBuildCanonicalName:
 # run — filesystem renames
 # ---------------------------------------------------------------------------
 
+
 class TestRun:
     def test_renames_invalid_file(self, tmp_path: Path, standardizer: FilenameStandardizer, nit: str, id_prefix: str):
         folder = tmp_path / f"{id_prefix}1"
@@ -86,7 +91,9 @@ class TestRun:
         assert any(r.status == "SUCCESS" for r in results)
         assert (folder / f"FEV_{nit}_{id_prefix}1.pdf").exists()
 
-    def test_already_named_correctly_is_skipped(self, tmp_path: Path, standardizer: FilenameStandardizer, nit: str, id_prefix: str):
+    def test_already_named_correctly_is_skipped(
+        self, tmp_path: Path, standardizer: FilenameStandardizer, nit: str, id_prefix: str
+    ):
         folder = tmp_path / f"{id_prefix}1"
         folder.mkdir()
         correct = folder / f"FEV_{nit}_{id_prefix}1.pdf"
@@ -94,7 +101,9 @@ class TestRun:
         results = standardizer.run([correct])
         assert results == []  # nothing to rename
 
-    def test_rejected_when_target_exists(self, tmp_path: Path, standardizer: FilenameStandardizer, nit: str, id_prefix: str):
+    def test_rejected_when_target_exists(
+        self, tmp_path: Path, standardizer: FilenameStandardizer, nit: str, id_prefix: str
+    ):
         folder = tmp_path / f"{id_prefix}1"
         folder.mkdir()
         source = folder / "fev_wrongname.pdf"

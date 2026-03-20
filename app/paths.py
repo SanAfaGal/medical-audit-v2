@@ -1,4 +1,5 @@
 """Path utilities: resolve audit data root to a filesystem path."""
+
 from pathlib import Path
 
 

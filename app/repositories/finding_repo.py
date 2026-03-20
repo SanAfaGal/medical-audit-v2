@@ -1,4 +1,5 @@
 """Async repository for missing files (audit findings)."""
+
 from __future__ import annotations
 
 import datetime
@@ -16,9 +17,7 @@ class MissingFileRepo:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def record_missing_file(
-        self, invoice_id: int, doc_type_id: int, expected_path: str
-    ) -> MissingFile:
+    async def record_missing_file(self, invoice_id: int, doc_type_id: int, expected_path: str) -> MissingFile:
         """Insert missing file record; no-op if already exists (INSERT OR IGNORE)."""
         stmt = (
             pg_insert(MissingFile)
@@ -65,16 +64,12 @@ class MissingFileRepo:
 
     async def get_for_invoice(self, invoice_id: int) -> list[MissingFile]:
         result = await self.db.execute(
-            select(MissingFile)
-            .where(MissingFile.invoice_id == invoice_id)
-            .order_by(MissingFile.doc_type_id)
+            select(MissingFile).where(MissingFile.invoice_id == invoice_id).order_by(MissingFile.doc_type_id)
         )
         return list(result.scalars().all())
 
     async def delete_all_for_invoice(self, invoice_id: int) -> None:
-        await self.db.execute(
-            delete(MissingFile).where(MissingFile.invoice_id == invoice_id)
-        )
+        await self.db.execute(delete(MissingFile).where(MissingFile.invoice_id == invoice_id))
         await self.db.flush()
 
     # ------------------------------------------------------------------
@@ -91,17 +86,12 @@ class MissingFileRepo:
             return
         await self.db.execute(
             pg_insert(MissingFile)
-            .values([
-                {"invoice_id": inv_id, "doc_type_id": dt_id, "expected_path": ""}
-                for inv_id, dt_id in findings
-            ])
+            .values([{"invoice_id": inv_id, "doc_type_id": dt_id, "expected_path": ""} for inv_id, dt_id in findings])
             .on_conflict_do_nothing(index_elements=["invoice_id", "doc_type_id"])
         )
         await self.db.flush()
 
-    async def get_findings_grouped_by_invoice(
-        self, period_id: int
-    ) -> dict[str, list[str]]:
+    async def get_findings_grouped_by_invoice(self, period_id: int) -> dict[str, list[str]]:
         """Return unresolved findings grouped by invoice number.
 
         Returns:
@@ -129,6 +119,7 @@ class MissingFileRepo:
     async def get_findings_summary(self, period_id: int) -> list[dict]:
         """Return unresolved finding counts per doc type for a period, sorted descending."""
         from app.models.rules import DocType
+
         q = (
             select(DocType.id, DocType.code, func.count(MissingFile.invoice_id.distinct()).label("cnt"))
             .join(MissingFile, MissingFile.doc_type_id == DocType.id)
@@ -147,8 +138,6 @@ class MissingFileRepo:
         """Delete all findings for multiple invoices at once. Returns rows deleted."""
         if not invoice_ids:
             return 0
-        result = await self.db.execute(
-            delete(MissingFile).where(MissingFile.invoice_id.in_(invoice_ids))
-        )
+        result = await self.db.execute(delete(MissingFile).where(MissingFile.invoice_id.in_(invoice_ids)))
         await self.db.flush()
         return result.rowcount

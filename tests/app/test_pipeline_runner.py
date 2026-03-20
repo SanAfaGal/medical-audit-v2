@@ -1,9 +1,10 @@
 """Tests for app/services/pipeline_runner.py — dispatch + stage error handling."""
+
 from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -13,6 +14,7 @@ from app.services.pipeline_runner import _build_context, _STAGE_HANDLERS, execut
 # ---------------------------------------------------------------------------
 # _build_context
 # ---------------------------------------------------------------------------
+
 
 class TestBuildContext:
     def test_all_keys_present(self, minimal_institution, minimal_period):
@@ -40,18 +42,33 @@ class TestBuildContext:
 # Stage registry
 # ---------------------------------------------------------------------------
 
+
 class TestStageRegistry:
     def test_all_stages_registered(self):
         expected = {
-            "LOAD_AND_PROCESS", "RECATEGORIZE_SERVICES", "RUN_STAGING",
-            "CHECK_NESTED_FOLDERS", "REMOVE_NON_PDF", "NORMALIZE_FILES",
-            "LIST_UNREADABLE_PDFS", "DELETE_UNREADABLE_PDFS",
-            "DOWNLOAD_INVOICES_FROM_SIHOS", "DOWNLOAD_MEDICATION_SHEETS",
-            "CHECK_INVOICES", "VERIFY_INVOICE_CODE",
-            "CHECK_INVOICE_NUMBER_ON_FILES", "CHECK_FOLDERS_WITH_EXTRA_TEXT",
-            "NORMALIZE_DIR_NAMES", "CHECK_DIRS", "MARK_UNKNOWN_DIRS",
-            "CHECK_REQUIRED_DOCS", "REVISAR_SOBRANTES", "VERIFY_CUFE",
-            "ORGANIZE", "DOWNLOAD_DRIVE", "DOWNLOAD_MISSING_DOCS",
+            "LOAD_AND_PROCESS",
+            "RECATEGORIZE_SERVICES",
+            "RUN_STAGING",
+            "CHECK_NESTED_FOLDERS",
+            "REMOVE_NON_PDF",
+            "NORMALIZE_FILES",
+            "LIST_UNREADABLE_PDFS",
+            "DELETE_UNREADABLE_PDFS",
+            "DOWNLOAD_INVOICES_FROM_SIHOS",
+            "DOWNLOAD_MEDICATION_SHEETS",
+            "CHECK_INVOICES",
+            "VERIFY_INVOICE_CODE",
+            "CHECK_INVOICE_NUMBER_ON_FILES",
+            "CHECK_FOLDERS_WITH_EXTRA_TEXT",
+            "NORMALIZE_DIR_NAMES",
+            "CHECK_DIRS",
+            "MARK_UNKNOWN_DIRS",
+            "CHECK_REQUIRED_DOCS",
+            "REVISAR_SOBRANTES",
+            "VERIFY_CUFE",
+            "ORGANIZE",
+            "DOWNLOAD_DRIVE",
+            "DOWNLOAD_MISSING_DOCS",
         }
         assert expected == set(_STAGE_HANDLERS.keys())
 
@@ -59,6 +76,7 @@ class TestStageRegistry:
 # ---------------------------------------------------------------------------
 # execute — dispatch and error handling
 # ---------------------------------------------------------------------------
+
 
 class TestExecute:
     async def test_unknown_stage_yields_error(self, minimal_institution, minimal_period):
@@ -106,22 +124,26 @@ class TestExecute:
 # Individual stage tests — STAGE dir absent guard
 # ---------------------------------------------------------------------------
 
+
 class TestStageGuards:
     """Each stage that requires STAGE dir should yield a WARN/ERROR when absent."""
 
-    @pytest.mark.parametrize("stage_name", [
-        "REMOVE_NON_PDF",
-        "NORMALIZE_FILES",
-        "LIST_UNREADABLE_PDFS",
-        "DELETE_UNREADABLE_PDFS",
-        "CHECK_INVOICE_NUMBER_ON_FILES",
-        "CHECK_FOLDERS_WITH_EXTRA_TEXT",
-        "NORMALIZE_DIR_NAMES",
-        "CHECK_DIRS",
-        "CHECK_REQUIRED_DOCS",
-        "VERIFY_CUFE",
-        "ORGANIZE",
-    ])
+    @pytest.mark.parametrize(
+        "stage_name",
+        [
+            "REMOVE_NON_PDF",
+            "NORMALIZE_FILES",
+            "LIST_UNREADABLE_PDFS",
+            "DELETE_UNREADABLE_PDFS",
+            "CHECK_INVOICE_NUMBER_ON_FILES",
+            "CHECK_FOLDERS_WITH_EXTRA_TEXT",
+            "NORMALIZE_DIR_NAMES",
+            "CHECK_DIRS",
+            "CHECK_REQUIRED_DOCS",
+            "VERIFY_CUFE",
+            "ORGANIZE",
+        ],
+    )
     async def test_nonexistent_stage_dir_yields_warn_or_error(
         self, stage_name: str, minimal_institution, minimal_period, tmp_path
     ):
@@ -131,6 +153,7 @@ class TestStageGuards:
 
         handler = _STAGE_HANDLERS[stage_name]
         from app.services.pipeline_runner import _build_context
+
         # audit_data_root points to tmp_path; STAGE subdir is never created → path absent
         ctx = _build_context(inst, period, db, {}, str(tmp_path))
 
@@ -143,6 +166,7 @@ class TestStageGuards:
 # ---------------------------------------------------------------------------
 # REMOVE_NON_PDF — happy path with real tmp_path
 # ---------------------------------------------------------------------------
+
 
 class TestRemoveNonPdfStage:
     async def test_scans_non_pdf_files(self, tmp_path: Path, minimal_institution, minimal_period):
@@ -166,7 +190,5 @@ class TestRemoveNonPdfStage:
 
         # Stage is scan-only: files are NOT deleted, [DATA] is emitted for UI review
         assert any("1" in line and "no-pdf" in line.lower() for line in lines)
-        assert (stage_dir / "notes.txt").exists()   # scan only — no deletion
+        assert (stage_dir / "notes.txt").exists()  # scan only — no deletion
         assert (stage_dir / "valid.pdf").exists()
-
-

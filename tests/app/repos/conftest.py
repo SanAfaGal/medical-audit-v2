@@ -6,6 +6,7 @@ Run them with: pytest -m db tests/app/repos/
 Set the env var TEST_DATABASE_URL to override the default connection:
   export TEST_DATABASE_URL=postgresql+asyncpg://user:pass@host/dbname
 """
+
 from __future__ import annotations
 
 import os

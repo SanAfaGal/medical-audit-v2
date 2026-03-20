@@ -28,9 +28,7 @@ class DocumentScanner:
         """
         return list(self.base_dir.rglob(f"*.{ext}"))
 
-    def find_in_folders(
-        self, folder_names: list[str], ext: str = "pdf"
-    ) -> list[Path]:
+    def find_in_folders(self, folder_names: list[str], ext: str = "pdf") -> list[Path]:
         """Return files with the given extension found inside specified folders.
 
         Args:
@@ -46,9 +44,7 @@ class DocumentScanner:
             if folder.is_dir():
                 found.extend(folder.rglob(f"*.{ext}"))
             else:
-                logger.warning(
-                    "Folder not found or is not a directory: %s", folder
-                )
+                logger.warning("Folder not found or is not a directory: %s", folder)
         return found
 
     def find_non_pdf(self, allowed_ext: str = "pdf") -> list[Path]:
@@ -60,11 +56,7 @@ class DocumentScanner:
         Returns:
             All non-PDF file paths found recursively.
         """
-        return [
-            f
-            for f in self.base_dir.rglob("*")
-            if f.is_file() and f.suffix.lower() != f".{allowed_ext}"
-        ]
+        return [f for f in self.base_dir.rglob("*") if f.is_file() and f.suffix.lower() != f".{allowed_ext}"]
 
     def find_by_prefix(self, prefixes: str | list[str]) -> list[Path]:
         """Return files whose names start with one or more given prefixes.
@@ -75,23 +67,15 @@ class DocumentScanner:
         Returns:
             Matching file paths.
         """
-        criteria = (
-            tuple(prefixes) if isinstance(prefixes, list) else prefixes
-        )
-        return [
-            f
-            for f in self.base_dir.rglob("*")
-            if f.is_file() and f.name.upper().startswith(criteria)
-        ]
+        criteria = tuple(prefixes) if isinstance(prefixes, list) else prefixes
+        return [f for f in self.base_dir.rglob("*") if f.is_file() and f.name.upper().startswith(criteria)]
 
     def list_dirs(self) -> list[Path]:
         """Return all directories under base_dir recursively."""
         return [d for d in self.base_dir.rglob("*") if d.is_dir()]
 
     @staticmethod
-    def _build_name_pattern(
-        valid_prefixes: list[str], suffix: str, nit: str
-    ) -> re.Pattern[str]:
+    def _build_name_pattern(valid_prefixes: list[str], suffix: str, nit: str) -> re.Pattern[str]:
         """Compile the expected filename regex from hospital-specific parameters.
 
         Args:
@@ -108,9 +92,7 @@ class DocumentScanner:
             re.IGNORECASE,
         )
 
-    def find_invalid_names(
-        self, valid_prefixes: list[str], suffix: str, nit: str
-    ) -> list[Path]:
+    def find_invalid_names(self, valid_prefixes: list[str], suffix: str, nit: str) -> list[Path]:
         """Return PDF files that do not match the expected naming pattern.
 
         Expected pattern: ``{PREFIX}_{NIT}_{SUFFIX}{digits}.pdf``
@@ -124,8 +106,4 @@ class DocumentScanner:
             Files that fail the naming validation.
         """
         pattern = self._build_name_pattern(valid_prefixes, suffix, nit)
-        return [
-            f
-            for f in self.find_by_extension("pdf")
-            if not pattern.match(f.name)
-        ]
+        return [f for f in self.find_by_extension("pdf") if not pattern.match(f.name)]

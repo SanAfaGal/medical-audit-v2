@@ -1,4 +1,5 @@
 """Tests for core/inspector.py — folder auditing logic."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -104,9 +105,7 @@ class TestCheckRequiredDocs:
 
     def test_nonexistent_folder_all_missing(self, tmp_path: Path, id_prefix: str):
         inspector = FolderInspector(tmp_path, id_prefix)
-        missing = inspector.check_required_docs(
-            tmp_path / "NOPE", {"FIRMA": ["CRC"], "HCU": ["EPI"]}
-        )
+        missing = inspector.check_required_docs(tmp_path / "NOPE", {"FIRMA": ["CRC"], "HCU": ["EPI"]})
         assert set(missing) == {"FIRMA", "HCU"}
 
     def test_case_insensitive_prefix_match(self, tmp_path: Path, id_prefix: str):

@@ -1,4 +1,5 @@
 """Pydantic schemas for hospitals, admins, and contracts."""
+
 from pydantic import BaseModel
 
 
@@ -10,8 +11,8 @@ class HospitalCreate(BaseModel):
     sihos_url: str | None = None
     sihos_code: str | None = None
     sihos_user: str | None = None
-    sihos_password: str | None = None           # plaintext — encrypted before DB insert
-    drive_credentials_json: str | None = None   # JSON string — encrypted before DB insert
+    sihos_password: str | None = None  # plaintext — encrypted before DB insert
+    drive_credentials_json: str | None = None  # JSON string — encrypted before DB insert
     base_path: str | None = None
 
 

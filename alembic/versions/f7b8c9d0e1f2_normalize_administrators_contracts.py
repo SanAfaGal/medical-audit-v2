@@ -4,10 +4,11 @@ Revision ID: f7b8c9d0e1f2
 Revises: e1f2a3b4c5d6
 Create Date: 2026-03-16
 """
+
 from alembic import op
 
-revision = 'f7b8c9d0e1f2'
-down_revision = 'e1f2a3b4c5d6'
+revision = "f7b8c9d0e1f2"
+down_revision = "e1f2a3b4c5d6"
 branch_labels = None
 depends_on = None
 

@@ -34,11 +34,15 @@ class DocumentProcessor:
 
         cmd = [
             "ocrmypdf",
-            "--jobs", _OCR_JOBS,
-            "-l", _OCR_LANGUAGE,
+            "--jobs",
+            _OCR_JOBS,
+            "-l",
+            _OCR_LANGUAGE,
             "--redo-ocr",
-            "--fast-web-view", _OCR_FAST_WEB_VIEW,
-            "--tesseract-pagesegmode", _OCR_PAGE_SEG_MODE,
+            "--fast-web-view",
+            _OCR_FAST_WEB_VIEW,
+            "--tesseract-pagesegmode",
+            _OCR_PAGE_SEG_MODE,
             "-q",
             str(file_path),
             str(temp),
@@ -51,9 +55,7 @@ class DocumentProcessor:
                 return True
             return False
         except FileNotFoundError:
-            logger.error(
-                "ocrmypdf not found in PATH — install it or add it to your system PATH"
-            )
+            logger.error("ocrmypdf not found in PATH — install it or add it to your system PATH")
             return False
         except subprocess.CalledProcessError as exc:
             logger.error("OCR subprocess failed for %s: %s", file_path.name, exc)
@@ -67,9 +69,7 @@ class DocumentProcessor:
             return False
 
     @staticmethod
-    def compress_with_ghostscript(
-        file_path: Path, quality: str = _GS_DEFAULT_QUALITY
-    ) -> bool:
+    def compress_with_ghostscript(file_path: Path, quality: str = _GS_DEFAULT_QUALITY) -> bool:
         """Compress a PDF using Ghostscript."""
         temp = file_path.with_suffix(".opt.tmp")
         gs = _GHOSTSCRIPT_WIN if os.name == "nt" else _GHOSTSCRIPT_UNIX
@@ -95,26 +95,25 @@ class DocumentProcessor:
             )
             return False
         except subprocess.CalledProcessError as exc:
-            logger.error(
-                "Ghostscript compression failed for %s: %s", file_path.name, exc
-            )
+            logger.error("Ghostscript compression failed for %s: %s", file_path.name, exc)
             if temp.exists():
                 temp.unlink()
             return False
 
     @classmethod
-    def batch_ocr(
-        cls, files: list[Path], max_workers: int = 4
-    ) -> dict[str, int]:
+    def batch_ocr(cls, files: list[Path], max_workers: int = 4) -> dict[str, int]:
         """Run OCR on a list of files in parallel with a progress bar."""
         results: dict[str, int] = {"success": 0, "failed": 0}
 
-        with tqdm(
-            total=len(files),
-            desc="OCR batch processing",
-            unit="doc",
-            colour="cyan",
-        ) as pbar, ThreadPoolExecutor(max_workers=max_workers) as executor:
+        with (
+            tqdm(
+                total=len(files),
+                desc="OCR batch processing",
+                unit="doc",
+                colour="cyan",
+            ) as pbar,
+            ThreadPoolExecutor(max_workers=max_workers) as executor,
+        ):
             futures = {executor.submit(cls.apply_ocr, f): f for f in files}
 
             for future in as_completed(futures):

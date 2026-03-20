@@ -1,9 +1,9 @@
 """Tests for core/helpers.py — pure functions, no fixtures required."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from core.helpers import (
     flatten_prefixes,
@@ -16,6 +16,7 @@ from core.helpers import (
 # ---------------------------------------------------------------------------
 # remove_accents
 # ---------------------------------------------------------------------------
+
 
 class TestRemoveAccents:
     def test_accented_spanish(self):
@@ -35,6 +36,7 @@ class TestRemoveAccents:
 
     def test_float_nan_returns_empty(self):
         import math
+
         assert remove_accents(math.nan) == ""
 
     def test_empty_string(self):
@@ -47,6 +49,7 @@ class TestRemoveAccents:
 # ---------------------------------------------------------------------------
 # flatten_prefixes
 # ---------------------------------------------------------------------------
+
 
 class TestFlattenPrefixes:
     def test_string_values(self):
@@ -72,6 +75,7 @@ class TestFlattenPrefixes:
 # ---------------------------------------------------------------------------
 # read_lines_from_file
 # ---------------------------------------------------------------------------
+
 
 class TestReadLinesFromFile:
     def test_reads_lines(self, tmp_path: Path):
@@ -101,6 +105,7 @@ class TestReadLinesFromFile:
 # ---------------------------------------------------------------------------
 # safe_move
 # ---------------------------------------------------------------------------
+
 
 class TestSafeMove:
     def test_moves_file(self, tmp_path: Path):

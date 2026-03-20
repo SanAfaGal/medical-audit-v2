@@ -1,4 +1,5 @@
 """API router for institutions CRUD (mounted at /api/institutions)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -9,11 +10,11 @@ from sqlalchemy.orm import selectinload
 
 _ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp", "image/avif", "image/gif"}
 
-from app import crypto
-from app.database import get_db
-from app.models.institution import Administrator, Agreement, Contract, ContractType, Institution, Service
-from app.repositories.institution_repo import InstitutionRepo
-from app.schemas.institution import (
+from app import crypto  # noqa: E402
+from app.database import get_db  # noqa: E402
+from app.models.institution import Administrator, Agreement, Contract, Institution, Service  # noqa: E402
+from app.repositories.institution_repo import InstitutionRepo  # noqa: E402
+from app.schemas.institution import (  # noqa: E402
     AdministratorCreate,
     AdministratorOut,
     AdministratorUpdate,
@@ -33,7 +34,7 @@ from app.schemas.institution import (
     ServiceOut,
     ServiceUpdate,
 )
-from app.schemas.rules import ServiceTypeDocumentOut, ServiceTypeDocumentCreate
+from app.schemas.rules import ServiceTypeDocumentOut, ServiceTypeDocumentCreate  # noqa: E402
 
 router = APIRouter(prefix="/institutions", tags=["institutions"])
 
@@ -56,6 +57,7 @@ def _encrypt_sensitive(data: dict) -> dict:
 # Institutions
 # ------------------------------------------------------------------
 
+
 @router.get("", response_model=list[InstitutionOut])
 async def list_institutions(db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
@@ -73,8 +75,7 @@ async def list_institutions(db: AsyncSession = Depends(get_db)):
 @router.get("/{institution_id}/logo")
 async def serve_logo(institution_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Institution.logo_bytes, Institution.logo_content_type)
-        .where(Institution.id == institution_id)
+        select(Institution.logo_bytes, Institution.logo_content_type).where(Institution.id == institution_id)
     )
     row = result.first()
     if not row or not row.logo_bytes:
@@ -144,6 +145,7 @@ async def create_institution(data: InstitutionCreate, db: AsyncSession = Depends
 # ContractTypes (global)
 # ------------------------------------------------------------------
 
+
 @router.get("/contract-types", response_model=list[ContractTypeOut])
 async def list_contract_types(db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
@@ -159,9 +161,7 @@ async def create_contract_type(data: ContractTypeCreate, db: AsyncSession = Depe
 
 
 @router.patch("/contract-types/{ct_id}", response_model=ContractTypeOut)
-async def update_contract_type(
-    ct_id: int, data: ContractTypeUpdate, db: AsyncSession = Depends(get_db)
-):
+async def update_contract_type(ct_id: int, data: ContractTypeUpdate, db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
     ct = await repo.update_contract_type(ct_id, data.name, data.description)
     if not ct:
@@ -183,10 +183,9 @@ async def delete_contract_type(ct_id: int, db: AsyncSession = Depends(get_db)):
 # Administrators (global)
 # ------------------------------------------------------------------
 
+
 @router.get("/administrators", response_model=list[AdministratorOut])
-async def list_administrators(
-    pending_only: bool = False, db: AsyncSession = Depends(get_db)
-):
+async def list_administrators(pending_only: bool = False, db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
     if pending_only:
         return await repo.get_pending_administrators()
@@ -202,9 +201,7 @@ async def create_administrator(data: AdministratorCreate, db: AsyncSession = Dep
 
 
 @router.patch("/administrators/{administrator_id}", response_model=AdministratorOut)
-async def update_administrator(
-    administrator_id: int, data: AdministratorUpdate, db: AsyncSession = Depends(get_db)
-):
+async def update_administrator(administrator_id: int, data: AdministratorUpdate, db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
     await repo.set_administrator_canonical(administrator_id, data.canonical_name)
     await db.commit()
@@ -227,10 +224,9 @@ async def delete_administrator(administrator_id: int, db: AsyncSession = Depends
 # Contracts (global)
 # ------------------------------------------------------------------
 
+
 @router.get("/contracts", response_model=list[ContractOut])
-async def list_contracts(
-    pending_only: bool = False, db: AsyncSession = Depends(get_db)
-):
+async def list_contracts(pending_only: bool = False, db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
     if pending_only:
         return await repo.get_pending_contracts()
@@ -246,9 +242,7 @@ async def create_contract(data: ContractCreate, db: AsyncSession = Depends(get_d
 
 
 @router.patch("/contracts/{contract_id}", response_model=ContractOut)
-async def update_contract(
-    contract_id: int, data: ContractUpdate, db: AsyncSession = Depends(get_db)
-):
+async def update_contract(contract_id: int, data: ContractUpdate, db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
     await repo.set_contract_canonical(contract_id, data.canonical_name)
     await db.commit()
@@ -271,10 +265,9 @@ async def delete_contract(contract_id: int, db: AsyncSession = Depends(get_db)):
 # Agreements (global)
 # ------------------------------------------------------------------
 
+
 @router.get("/agreements", response_model=list[AgreementOut])
-async def list_agreements(
-    pending_only: bool = False, db: AsyncSession = Depends(get_db)
-):
+async def list_agreements(pending_only: bool = False, db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
     if pending_only:
         return await repo.get_pending_agreements()
@@ -291,9 +284,7 @@ async def create_agreement(data: AgreementCreate, db: AsyncSession = Depends(get
 
 
 @router.patch("/agreements/{agreement_id}", response_model=AgreementOut)
-async def update_agreement(
-    agreement_id: int, data: AgreementUpdate, db: AsyncSession = Depends(get_db)
-):
+async def update_agreement(agreement_id: int, data: AgreementUpdate, db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
     await repo.set_agreement_contract_type(agreement_id, data.contract_type_id)
     await db.commit()
@@ -325,6 +316,7 @@ async def delete_agreement(agreement_id: int, db: AsyncSession = Depends(get_db)
 # Services sub-resource
 # ------------------------------------------------------------------
 
+
 @router.get("/{institution_id}/services", response_model=list[ServiceOut])
 async def list_services(institution_id: int, db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
@@ -335,9 +327,7 @@ async def list_services(institution_id: int, db: AsyncSession = Depends(get_db))
 
 
 @router.patch("/services/{service_id}", response_model=ServiceOut)
-async def update_service(
-    service_id: int, data: ServiceUpdate, db: AsyncSession = Depends(get_db)
-):
+async def update_service(service_id: int, data: ServiceUpdate, db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
     await repo.set_service_type(service_id, data.service_type_id)
     await db.commit()
@@ -350,6 +340,7 @@ async def update_service(
 # ------------------------------------------------------------------
 # ServiceTypeDocuments sub-resource
 # ------------------------------------------------------------------
+
 
 @router.get("/{institution_id}/service-type-documents", response_model=list[ServiceTypeDocumentOut])
 async def list_service_type_documents(institution_id: int, db: AsyncSession = Depends(get_db)):
@@ -374,9 +365,7 @@ async def create_service_type_document(
     institution = await repo.get_by_id(institution_id)
     if not institution:
         raise HTTPException(404, "Institución no encontrada")
-    obj = await repo.upsert_service_type_document(
-        institution_id, data.service_type_id, data.doc_type_id
-    )
+    obj = await repo.upsert_service_type_document(institution_id, data.service_type_id, data.doc_type_id)
     await db.commit()
     return obj
 
@@ -400,10 +389,9 @@ async def delete_service_type_document(
 # Service create / delete
 # ------------------------------------------------------------------
 
+
 @router.post("/{institution_id}/services", response_model=ServiceOut, status_code=201)
-async def create_service(
-    institution_id: int, data: ServiceCreate, db: AsyncSession = Depends(get_db)
-):
+async def create_service(institution_id: int, data: ServiceCreate, db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
     inst = await repo.get_by_id(institution_id)
     if not inst:
@@ -426,6 +414,7 @@ async def delete_service(service_id: int, db: AsyncSession = Depends(get_db)):
 # Institution get / update / delete  (must come AFTER all fixed-path routes)
 # ------------------------------------------------------------------
 
+
 @router.get("/{institution_id}", response_model=InstitutionOut)
 async def get_institution(institution_id: int, db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
@@ -436,9 +425,7 @@ async def get_institution(institution_id: int, db: AsyncSession = Depends(get_db
 
 
 @router.put("/{institution_id}", response_model=InstitutionOut)
-async def update_institution(
-    institution_id: int, data: InstitutionUpdate, db: AsyncSession = Depends(get_db)
-):
+async def update_institution(institution_id: int, data: InstitutionUpdate, db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
     obj = _encrypt_sensitive({k: v for k, v in data.model_dump().items() if v is not None})
     updated = await repo.update(institution_id, obj)

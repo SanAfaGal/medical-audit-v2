@@ -43,8 +43,8 @@ class FilenameStandardizer:
         self.suffix_const = suffix_const
         self.prefix_map = prefix_map or {}
         _esc = re.escape(suffix_const)
-        self._re_id_strict = re.compile(rf"{_esc}_?(\d+)",    re.IGNORECASE)
-        self._re_id_loose  = re.compile(rf"{_esc}[-_ ]?(\d+)", re.IGNORECASE)
+        self._re_id_strict = re.compile(rf"{_esc}_?(\d+)", re.IGNORECASE)
+        self._re_id_loose = re.compile(rf"{_esc}[-_ ]?(\d+)", re.IGNORECASE)
 
     def _extract_id_from_path(self, file_path: Path) -> str:
         """Extract the invoice ID from the file path."""
@@ -100,9 +100,7 @@ class FilenameStandardizer:
 
                 target = f.with_name(new_name)
                 if target.exists():
-                    logger.warning(
-                        "Skipped %s: destination already exists", f.name
-                    )
+                    logger.warning("Skipped %s: destination already exists", f.name)
                     results.append(
                         RenameResult(
                             str(f),
@@ -114,9 +112,7 @@ class FilenameStandardizer:
                 else:
                     f.rename(target)
                     logger.info("Renamed %s -> %s", f.name, new_name)
-                    results.append(
-                        RenameResult(str(f), new_name, "SUCCESS", "Renamed successfully")
-                    )
+                    results.append(RenameResult(str(f), new_name, "SUCCESS", "Renamed successfully"))
 
             except OSError as exc:
                 logger.error("Could not rename %s: %s", f, exc)

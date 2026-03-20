@@ -1,4 +1,5 @@
 """In-process pipeline task registry with SSE-compatible log streaming."""
+
 from __future__ import annotations
 
 import asyncio
@@ -38,9 +39,7 @@ class PipelineTaskManager:
             (
                 r
                 for r in self._runs.values()
-                if r.status == "running"
-                and r.institution_id == institution_id
-                and r.period_id == period_id
+                if r.status == "running" and r.institution_id == institution_id and r.period_id == period_id
             ),
             None,
         )
@@ -48,9 +47,7 @@ class PipelineTaskManager:
     def get_all_active(self) -> list[PipelineRun]:
         return [r for r in self._runs.values() if r.status == "running"]
 
-    async def start(
-        self, stage: str, institution_id: int, period_id: int, extra: dict
-    ) -> PipelineRun:
+    async def start(self, stage: str, institution_id: int, period_id: int, extra: dict) -> PipelineRun:
         run = PipelineRun(
             task_id=uuid.uuid4().hex,
             stage=stage,
@@ -59,9 +56,7 @@ class PipelineTaskManager:
         )
         self._runs[run.task_id] = run
         self._evict_old_runs()
-        run._task = asyncio.create_task(
-            self._run_stage(run, stage, institution_id, period_id, extra)
-        )
+        run._task = asyncio.create_task(self._run_stage(run, stage, institution_id, period_id, extra))
         return run
 
     async def cancel(self, task_id: str) -> bool:
@@ -71,9 +66,7 @@ class PipelineTaskManager:
         run._task.cancel()
         return True
 
-    async def stream_from(
-        self, task_id: str, from_index: int
-    ) -> AsyncGenerator[tuple[int, str], None]:
+    async def stream_from(self, task_id: str, from_index: int) -> AsyncGenerator[tuple[int, str], None]:
         """Yield (index, line) from from_index onwards; blocks until done."""
         run = self._runs.get(task_id)
         if not run:

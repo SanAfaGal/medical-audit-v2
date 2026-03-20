@@ -1,4 +1,5 @@
 """Tests for core/scanner.py — filesystem operations using tmp_path."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -83,9 +84,13 @@ class TestFindInFolders:
 class TestFindInvalidNames:
     def test_valid_files_not_returned(self, scanner: DocumentScanner, nit: str, id_prefix: str):
         result = scanner.find_invalid_names(["FEV", "CRC"], id_prefix, nit)
-        valid_names = {"FEV_900123456_HSL123.pdf", "CRC_900123456_HSL123.pdf",
-                       "FEV_900123456_HSL456.pdf", "FEV_900123456_HSL789.pdf",
-                       "FEV_900123456_HSL000.pdf"}
+        valid_names = {
+            "FEV_900123456_HSL123.pdf",
+            "CRC_900123456_HSL123.pdf",
+            "FEV_900123456_HSL456.pdf",
+            "FEV_900123456_HSL789.pdf",
+            "FEV_900123456_HSL000.pdf",
+        }
         assert not any(f.name in valid_names for f in result)
 
     def test_invalid_prefix_flagged(self, tmp_path: Path, nit: str, id_prefix: str):

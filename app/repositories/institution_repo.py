@@ -1,4 +1,5 @@
 """Async repository for institutions, administrators, contracts, contract_types, agreements, services."""
+
 from __future__ import annotations
 
 from sqlalchemy import delete, select
@@ -63,9 +64,7 @@ class InstitutionRepo:
     async def get_pending_administrators(self) -> list[Administrator]:
         """Return administrators whose canonical_name is NULL (not yet mapped by user)."""
         result = await self.db.execute(
-            select(Administrator)
-            .where(Administrator.canonical_name.is_(None))
-            .order_by(Administrator.raw_name)
+            select(Administrator).where(Administrator.canonical_name.is_(None)).order_by(Administrator.raw_name)
         )
         return list(result.scalars().all())
 
@@ -80,9 +79,7 @@ class InstitutionRepo:
         result = await self.db.execute(stmt)
         row = result.scalar_one_or_none()
         if row is None:
-            result2 = await self.db.execute(
-                select(Administrator).where(Administrator.raw_name == raw_name)
-            )
+            result2 = await self.db.execute(select(Administrator).where(Administrator.raw_name == raw_name))
             row = result2.scalar_one()
         return row
 
@@ -118,9 +115,7 @@ class InstitutionRepo:
     async def get_pending_contracts(self) -> list[Contract]:
         """Return contracts with NULL canonical_name."""
         result = await self.db.execute(
-            select(Contract)
-            .where(Contract.canonical_name.is_(None))
-            .order_by(Contract.raw_name)
+            select(Contract).where(Contract.canonical_name.is_(None)).order_by(Contract.raw_name)
         )
         return list(result.scalars().all())
 
@@ -134,9 +129,7 @@ class InstitutionRepo:
         result = await self.db.execute(stmt)
         row = result.scalar_one_or_none()
         if row is None:
-            result2 = await self.db.execute(
-                select(Contract).where(Contract.raw_name == raw_name)
-            )
+            result2 = await self.db.execute(select(Contract).where(Contract.raw_name == raw_name))
             row = result2.scalar_one()
         return row
 
@@ -204,8 +197,7 @@ class InstitutionRepo:
 
     async def get_agreements(self) -> list[Agreement]:
         result = await self.db.execute(
-            select(Agreement)
-            .options(
+            select(Agreement).options(
                 selectinload(Agreement.administrator),
                 selectinload(Agreement.contract),
                 selectinload(Agreement.contract_type),
@@ -240,9 +232,7 @@ class InstitutionRepo:
                 contract_id=contract_id,
                 contract_type_id=contract_type_id,
             )
-            .on_conflict_do_nothing(
-                index_elements=["administrator_id", "contract_id"]
-            )
+            .on_conflict_do_nothing(index_elements=["administrator_id", "contract_id"])
             .returning(Agreement)
         )
         result = await self.db.execute(stmt)
@@ -293,9 +283,7 @@ class InstitutionRepo:
 
     async def get_services(self, institution_id: int) -> list[Service]:
         result = await self.db.execute(
-            select(Service)
-            .where(Service.institution_id == institution_id)
-            .order_by(Service.raw_service)
+            select(Service).where(Service.institution_id == institution_id).order_by(Service.raw_service)
         )
         return list(result.scalars().all())
 
@@ -354,9 +342,7 @@ class InstitutionRepo:
                 service_type_id=service_type_id,
                 doc_type_id=doc_type_id,
             )
-            .on_conflict_do_nothing(
-                index_elements=["institution_id", "service_type_id", "doc_type_id"]
-            )
+            .on_conflict_do_nothing(index_elements=["institution_id", "service_type_id", "doc_type_id"])
             .returning(ServiceTypeDocument)
         )
         result = await self.db.execute(stmt)
@@ -372,9 +358,7 @@ class InstitutionRepo:
             row = result2.scalar_one()
         return row
 
-    async def delete_service_type_document(
-        self, institution_id: int, service_type_id: int, doc_type_id: int
-    ) -> None:
+    async def delete_service_type_document(self, institution_id: int, service_type_id: int, doc_type_id: int) -> None:
         await self.db.execute(
             delete(ServiceTypeDocument).where(
                 ServiceTypeDocument.institution_id == institution_id,

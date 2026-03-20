@@ -1,9 +1,9 @@
 """Tests for core/validator.py — CUFE regex + injectable reader."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from core.validator import InvoiceValidator, _collapse_inline_whitespace
 
@@ -11,6 +11,7 @@ from core.validator import InvoiceValidator, _collapse_inline_whitespace
 # ---------------------------------------------------------------------------
 # Pure regex helpers (no PDF, no filesystem)
 # ---------------------------------------------------------------------------
+
 
 class TestCollapseInlineWhitespace:
     def test_removes_spaces_and_tabs(self):

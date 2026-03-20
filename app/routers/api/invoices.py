@@ -1,4 +1,5 @@
 """API router for invoices: list, filter, batch-update, ingest, export."""
+
 from __future__ import annotations
 
 import io
@@ -90,22 +91,24 @@ async def list_invoices(
     items = []
     for inv in invoices:
         ic = inv.agreement
-        items.append(InvoiceListItem(
-            id=inv.id,
-            invoice_number=inv.invoice_number,
-            patient_name=inv.patient_name,
-            agreement_id=inv.agreement_id,
-            admin_canonical=ic.administrator.canonical_name if ic and ic.administrator else None,
-            admin_type=ic.contract_type.name if ic and ic.contract_type else None,
-            contract_canonical=ic.contract.canonical_name if ic and ic.contract else None,
-            folder_status=inv.folder_status.status,
-            folder_status_id=inv.folder_status_id,
-            service_type_code=inv.service_type.code if inv.service_type else None,
-            service_type_id=inv.service_type_id,
-            missing_file_count=len([mf for mf in inv.missing_files if mf.resolved_at is None]),
-            date=inv.date,
-            admission=inv.admission,
-        ))
+        items.append(
+            InvoiceListItem(
+                id=inv.id,
+                invoice_number=inv.invoice_number,
+                patient_name=inv.patient_name,
+                agreement_id=inv.agreement_id,
+                admin_canonical=ic.administrator.canonical_name if ic and ic.administrator else None,
+                admin_type=ic.contract_type.name if ic and ic.contract_type else None,
+                contract_canonical=ic.contract.canonical_name if ic and ic.contract else None,
+                folder_status=inv.folder_status.status,
+                folder_status_id=inv.folder_status_id,
+                service_type_code=inv.service_type.code if inv.service_type else None,
+                service_type_id=inv.service_type_id,
+                missing_file_count=len([mf for mf in inv.missing_files if mf.resolved_at is None]),
+                date=inv.date,
+                admission=inv.admission,
+            )
+        )
 
     return {
         "total": total,
@@ -179,7 +182,10 @@ async def ingest_excel(
 
     file_bytes = await file.read()
     result = await ingest(
-        file_bytes, institution, period_id, db,
+        file_bytes,
+        institution,
+        period_id,
+        db,
         scan_only=scan_only or save_mappings_only,
         save_mappings_only=save_mappings_only,
     )
@@ -196,58 +202,60 @@ async def export_invoices(period_id: int, db: AsyncSession = Depends(get_db)):
 
     wb = openpyxl.Workbook(write_only=True)
     ws = wb.create_sheet("Facturas")
-    ws.append([
-        "Período", "Hospital", "Factura", "Fecha",
-        "Tipo Doc.", "Número Doc.", "Paciente", "Admisión",
-        "Administradora", "Tipo Contrato", "Contrato", "Servicio",
-        "Operación", "Estado", "Hallazgos",
-    ])
+    ws.append(
+        [
+            "Período",
+            "Hospital",
+            "Factura",
+            "Fecha",
+            "Tipo Doc.",
+            "Número Doc.",
+            "Paciente",
+            "Admisión",
+            "Administradora",
+            "Tipo Contrato",
+            "Contrato",
+            "Servicio",
+            "Operación",
+            "Estado",
+            "Hallazgos",
+        ]
+    )
 
     for inv in invoices:
         period_label = inv.period.period_label if inv.period else ""
-        hospital = (
-            inv.period.institution.display_name
-            if inv.period and inv.period.institution else ""
-        )
+        hospital = inv.period.institution.display_name if inv.period and inv.period.institution else ""
         ic = inv.agreement
         administrator = ""
         contract_type = ""
         contract = ""
         if ic:
-            administrator = (
-                ic.administrator.canonical_name or ic.administrator.raw_name
-                if ic.administrator else ""
-            )
+            administrator = ic.administrator.canonical_name or ic.administrator.raw_name if ic.administrator else ""
             contract_type = ic.contract_type.name if ic.contract_type else ""
-            contract = (
-                ic.contract.canonical_name or ic.contract.raw_name
-                if ic.contract else ""
-            )
+            contract = ic.contract.canonical_name or ic.contract.raw_name if ic.contract else ""
         service = inv.service_type.display_name if inv.service_type else ""
         status = inv.folder_status.status if inv.folder_status else ""
-        findings = ", ".join(
-            mf.doc_type.code
-            for mf in inv.missing_files
-            if mf.resolved_at is None and mf.doc_type
-        )
+        findings = ", ".join(mf.doc_type.code for mf in inv.missing_files if mf.resolved_at is None and mf.doc_type)
 
-        ws.append([
-            period_label,
-            hospital,
-            inv.invoice_number,
-            inv.date.isoformat() if inv.date else "",
-            inv.id_type,
-            inv.id_number,
-            inv.patient_name,
-            inv.admission or "",
-            administrator,
-            contract_type,
-            contract,
-            service,
-            inv.employee or "",
-            status,
-            findings,
-        ])
+        ws.append(
+            [
+                period_label,
+                hospital,
+                inv.invoice_number,
+                inv.date.isoformat() if inv.date else "",
+                inv.id_type,
+                inv.id_number,
+                inv.patient_name,
+                inv.admission or "",
+                administrator,
+                contract_type,
+                contract,
+                service,
+                inv.employee or "",
+                status,
+                findings,
+            ]
+        )
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -364,6 +372,7 @@ async def delete_surplus_file(
 # Annul folders (CHECK_FOLDERS_WITH_EXTRA_TEXT interactive action)
 # ---------------------------------------------------------------------------
 
+
 class FolderAnnulDecision(BaseModel):
     folder_path: str
     invoice_id: int | None = None
@@ -400,9 +409,7 @@ async def annul_folders(data: BulkAnnulRequest, db: AsyncSession = Depends(get_d
     audit_root = to_container_path(sys_settings.audit_data_root)
 
     # Get-or-create ANULAR folder status
-    anular_status = (
-        await db.execute(select(FolderStatus).where(FolderStatus.status == "ANULAR"))
-    ).scalar_one_or_none()
+    anular_status = (await db.execute(select(FolderStatus).where(FolderStatus.status == "ANULAR"))).scalar_one_or_none()
     if anular_status is None:
         anular_status = FolderStatus(status="ANULAR")
         db.add(anular_status)
@@ -428,9 +435,7 @@ async def annul_folders(data: BulkAnnulRequest, db: AsyncSession = Depends(get_d
         # Update DB status
         if decision.invoice_id is not None:
             await db.execute(
-                update(Invoice)
-                .where(Invoice.id == decision.invoice_id)
-                .values(folder_status_id=anular_status.id)
+                update(Invoice).where(Invoice.id == decision.invoice_id).values(folder_status_id=anular_status.id)
             )
 
         # Delete folder from disk

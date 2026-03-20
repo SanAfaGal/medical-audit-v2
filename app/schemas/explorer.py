@@ -1,4 +1,5 @@
 """Pydantic schemas para el explorador de archivos PDF."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel
@@ -6,9 +7,9 @@ from pydantic import BaseModel
 
 class FileNode(BaseModel):
     name: str
-    path: str          # relativo al sandbox, ej: "DRIVE/sub/doc.pdf"
+    path: str  # relativo al sandbox, ej: "DRIVE/sub/doc.pdf"
     is_dir: bool
-    size: int | None = None   # bytes, None para carpetas
+    size: int | None = None  # bytes, None para carpetas
 
 
 class ListResponse(BaseModel):
@@ -33,8 +34,8 @@ class MoveRequest(BaseModel):
 class MergeRequest(BaseModel):
     institution_id: int
     period_id: int
-    paths: list[str]          # PDFs a unir, en orden
-    output_name: str          # nombre del PDF resultante
+    paths: list[str]  # PDFs a unir, en orden
+    output_name: str  # nombre del PDF resultante
 
 
 class SplitRequest(BaseModel):
@@ -48,7 +49,7 @@ class ReorderRequest(BaseModel):
     institution_id: int
     period_id: int
     path: str
-    page_order: list[int]     # índices 0-based en el nuevo orden
+    page_order: list[int]  # índices 0-based en el nuevo orden
 
 
 class CopyRequest(BaseModel):

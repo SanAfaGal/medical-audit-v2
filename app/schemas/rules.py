@@ -1,4 +1,5 @@
 """Pydantic schemas for business rules (service types, doc types, folder statuses)."""
+
 from pydantic import BaseModel
 
 
@@ -105,5 +106,3 @@ class SystemSettingsOut(BaseModel):
 
 class SystemSettingsUpdate(BaseModel):
     audit_data_root: str | None = None
-
-

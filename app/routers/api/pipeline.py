@@ -1,4 +1,5 @@
 """API router for pipeline stage execution via SSE."""
+
 from __future__ import annotations
 
 import asyncio
@@ -64,7 +65,7 @@ async def run_stage(
         async for line in pipeline_runner.execute(stage, institution, period, db, extra):
             payload = json.dumps({"msg": line})
             yield f"data: {payload}\n\n"
-        yield "data: {\"msg\": \"[DONE]\"}\n\n"
+        yield 'data: {"msg": "[DONE]"}\n\n'
 
     return StreamingResponse(
         event_gen(),
@@ -184,10 +185,7 @@ async def load_drive_zip(
         raise HTTPException(500, "audit_data_root no configurado")
 
     drive_path: Path = (
-        to_container_path(sys_settings.audit_data_root)
-        / institution.name
-        / period.period_label
-        / "DRIVE"
+        to_container_path(sys_settings.audit_data_root) / institution.name / period.period_label / "DRIVE"
     )
     drive_path.mkdir(parents=True, exist_ok=True)
 
@@ -220,6 +218,7 @@ async def load_drive_zip(
 
     elif ext == ".rar":
         import tempfile
+
         try:
             import rarfile
         except ImportError:
@@ -273,12 +272,7 @@ async def process_non_pdf_decisions(
     if not sys_settings or not sys_settings.audit_data_root:
         raise HTTPException(500, "audit_data_root no configurado")
 
-    stage_path = (
-        to_container_path(sys_settings.audit_data_root)
-        / institution.name
-        / period.period_label
-        / "STAGE"
-    )
+    stage_path = to_container_path(sys_settings.audit_data_root) / institution.name / period.period_label / "STAGE"
     if not stage_path.is_dir():
         raise HTTPException(400, "Directorio STAGE no existe")
 
@@ -353,12 +347,7 @@ async def file_preview(
     if not sys_settings or not sys_settings.audit_data_root:
         raise HTTPException(500, "audit_data_root no configurado")
 
-    stage_path = (
-        to_container_path(sys_settings.audit_data_root)
-        / institution.name
-        / period.period_label
-        / "STAGE"
-    )
+    stage_path = to_container_path(sys_settings.audit_data_root) / institution.name / period.period_label / "STAGE"
 
     try:
         abs_path = (stage_path / rel_path).resolve()

@@ -1,4 +1,5 @@
 """ORM model for missing files (audit findings)."""
+
 from __future__ import annotations
 
 import datetime
@@ -25,4 +26,4 @@ class MissingFile(Base):
 
 
 from app.models.invoice import Invoice  # noqa: E402
-from app.models.rules import DocType   # noqa: E402
+from app.models.rules import DocType  # noqa: E402

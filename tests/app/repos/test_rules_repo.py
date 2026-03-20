@@ -1,8 +1,8 @@
 """Tests for app/repositories/rules_repo.py — requires PostgreSQL."""
+
 from __future__ import annotations
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.institution import Institution, ServiceTypeDocument
@@ -50,10 +50,12 @@ class TestGetActiveDocTypesMap:
     async def test_null_prefix_becomes_empty_list(self, seeded: AsyncSession):
         from app.repositories.rules_repo import RulesRepo
         from app.models.rules import DocType
+
         repo = RulesRepo(seeded)
         mapping = await repo.get_active_doc_types_map()
         # Find the SOPORTE entry (prefix=None)
         from sqlalchemy import select
+
         result = await seeded.execute(select(DocType).where(DocType.code == "SOPORTE"))
         soporte = result.scalar_one()
         assert mapping[soporte.id] == []
@@ -83,9 +85,7 @@ class TestGetServiceTypeDocsMap:
         dt_result = await seeded.execute(select(DocType).where(DocType.code == "FACTURA"))
         dt = dt_result.scalar_one()
 
-        seeded.add(ServiceTypeDocument(
-            institution_id=inst_id, service_type_id=st.id, doc_type_id=dt.id
-        ))
+        seeded.add(ServiceTypeDocument(institution_id=inst_id, service_type_id=st.id, doc_type_id=dt.id))
         await seeded.flush()
 
         mapping = await repo.get_service_type_docs_map(inst_id)

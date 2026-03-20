@@ -1,4 +1,5 @@
 """FastAPI application factory with lifespan and router registration."""
+
 from __future__ import annotations
 
 import time
@@ -21,6 +22,7 @@ _SKIP_LOG_PATHS = {"/health", "/health/db", "/metrics", "/static"}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from app.services.task_manager import PipelineTaskManager
+
     app.state.task_manager = PipelineTaskManager()
     logger.info("startup", host=settings.host, port=settings.port, docs=settings.docs_enabled)
     yield
@@ -39,7 +41,8 @@ app = FastAPI(
 )
 
 # Prometheus: debe registrarse a nivel de módulo, antes de que la app arranque
-from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_fastapi_instrumentator import Instrumentator  # noqa: E402
+
 Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 
@@ -84,6 +87,7 @@ async def health_db() -> JSONResponse:
     """Deep health check: verifies the database connection is alive."""
     from sqlalchemy import text
     from app.database import AsyncSessionLocal
+
     try:
         async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
@@ -92,15 +96,16 @@ async def health_db() -> JSONResponse:
         logger.warning("health_db_failed", error=str(exc))
         return JSONResponse({"status": "degraded", "db": "unavailable"}, status_code=503)
 
-# --- Routers ---
-from app.routers.pages import router as pages_router
-from app.routers.api.hospitals import router as hospitals_router
-from app.routers.api.periods import router as periods_router
-from app.routers.api.invoices import router as invoices_router
-from app.routers.api.findings import router as findings_router
-from app.routers.api.pipeline import router as pipeline_router
-from app.routers.api.settings import router as settings_router
-from app.routers.api.explorer import router as explorer_router
+
+# --- Routers (post-app para evitar imports circulares) ---
+from app.routers.pages import router as pages_router  # noqa: E402
+from app.routers.api.hospitals import router as hospitals_router  # noqa: E402
+from app.routers.api.periods import router as periods_router  # noqa: E402
+from app.routers.api.invoices import router as invoices_router  # noqa: E402
+from app.routers.api.findings import router as findings_router  # noqa: E402
+from app.routers.api.pipeline import router as pipeline_router  # noqa: E402
+from app.routers.api.settings import router as settings_router  # noqa: E402
+from app.routers.api.explorer import router as explorer_router  # noqa: E402
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(pages_router)

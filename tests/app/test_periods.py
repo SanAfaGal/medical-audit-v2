@@ -1,9 +1,9 @@
 """Tests for period creation — folder scaffolding."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from app.routers.api.periods import _PERIOD_SUBDIRS, _create_period_dirs
 

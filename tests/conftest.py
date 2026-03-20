@@ -1,4 +1,5 @@
 """Shared fixtures used across all test tiers."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,6 +12,7 @@ import pytest
 # ---------------------------------------------------------------------------
 # Filesystem fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def nit() -> str:
@@ -74,6 +76,7 @@ def _make_folder(path: Path, filenames: list[str]) -> None:
 # ---------------------------------------------------------------------------
 # Domain object fixtures (no DB needed)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def minimal_institution(nit: str, id_prefix: str):

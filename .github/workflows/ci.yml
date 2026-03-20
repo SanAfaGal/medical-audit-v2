@@ -10,8 +10,6 @@ jobs:
   quality:
     name: Lint & Type Check
     runs-on: ubuntu-latest
-    # NOTE: continue-on-error while we stabilize. Remove once consistently green.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +36,8 @@ jobs:
   test-unit:
     name: Unit Tests (no DB)
     runs-on: ubuntu-latest
+    # NOTE: 7 tests pre-existentes fallando (billing mocks, inspector, scanner Windows)
+    # continúa en error hasta resolver — no bloquear por tests ajenos al cambio actual
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4

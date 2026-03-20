@@ -1,4 +1,5 @@
 """Async repository for business rules: service types, doc types, folder statuses."""
+
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -19,9 +20,7 @@ class RulesRepo:
 
     async def get_service_types(self) -> list[ServiceType]:
         """Return all service types ordered by priority descending."""
-        result = await self.db.execute(
-            select(ServiceType).order_by(ServiceType.priority.desc(), ServiceType.code)
-        )
+        result = await self.db.execute(select(ServiceType).order_by(ServiceType.priority.desc(), ServiceType.code))
         return list(result.scalars().all())
 
     async def get_service_type_by_code(self, code: str) -> ServiceType | None:
@@ -83,9 +82,7 @@ class RulesRepo:
         return list(result.scalars().all())
 
     async def get_folder_status_by_status(self, status: str) -> FolderStatus | None:
-        result = await self.db.execute(
-            select(FolderStatus).where(FolderStatus.status == status)
-        )
+        result = await self.db.execute(select(FolderStatus).where(FolderStatus.status == status))
         return result.scalar_one_or_none()
 
     async def delete_service_type(self, service_type_id: int) -> bool:
@@ -139,13 +136,12 @@ class RulesRepo:
     # Pipeline helpers
     # ------------------------------------------------------------------
 
-    async def get_service_type_docs_map(
-        self, institution_id: int
-    ) -> dict[int, list[int]]:
+    async def get_service_type_docs_map(self, institution_id: int) -> dict[int, list[int]]:
         """Return ``{service_type_id: [doc_type_id, ...]}`` for an institution."""
         result = await self.db.execute(
-            select(ServiceTypeDocument.service_type_id, ServiceTypeDocument.doc_type_id)
-            .where(ServiceTypeDocument.institution_id == institution_id)
+            select(ServiceTypeDocument.service_type_id, ServiceTypeDocument.doc_type_id).where(
+                ServiceTypeDocument.institution_id == institution_id
+            )
         )
         mapping: dict[int, list[int]] = {}
         for st_id, dt_id in result.all():
@@ -158,16 +154,11 @@ class RulesRepo:
         Each DocType has a single optional prefix field.
         """
         result = await self.db.execute(select(DocType.id, DocType.prefix))
-        return {
-            dt_id: [prefix] if prefix else []
-            for dt_id, prefix in result.all()
-        }
+        return {dt_id: [prefix] if prefix else [] for dt_id, prefix in result.all()}
 
     async def get_all_active_doc_type_prefixes(self) -> list[str]:
         """Return a flat list of all non-null doc type prefixes."""
-        result = await self.db.execute(
-            select(DocType.prefix).where(DocType.prefix.isnot(None))
-        )
+        result = await self.db.execute(select(DocType.prefix).where(DocType.prefix.isnot(None)))
         return list(result.scalars().all())
 
     # ------------------------------------------------------------------
@@ -175,16 +166,12 @@ class RulesRepo:
     # ------------------------------------------------------------------
 
     async def get_prefix_corrections(self) -> list[PrefixCorrection]:
-        result = await self.db.execute(
-            select(PrefixCorrection).order_by(PrefixCorrection.wrong_prefix)
-        )
+        result = await self.db.execute(select(PrefixCorrection).order_by(PrefixCorrection.wrong_prefix))
         return list(result.scalars().all())
 
     async def get_prefix_corrections_map(self) -> dict[str, str]:
         """Return ``{wrong_prefix: correct_prefix}`` for all corrections."""
-        result = await self.db.execute(
-            select(PrefixCorrection.wrong_prefix, PrefixCorrection.correct_prefix)
-        )
+        result = await self.db.execute(select(PrefixCorrection.wrong_prefix, PrefixCorrection.correct_prefix))
         return {wrong.upper(): correct.upper() for wrong, correct in result.all()}
 
     async def create_prefix_correction(self, data: dict) -> PrefixCorrection:
@@ -234,4 +221,3 @@ class RulesRepo:
         )
         result = await self.db.execute(stmt)
         return result.scalar_one()
-

@@ -1,4 +1,5 @@
 """Pydantic schemas for missing files (audit findings)."""
+
 from __future__ import annotations
 
 import datetime

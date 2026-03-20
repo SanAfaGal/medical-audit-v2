@@ -31,10 +31,7 @@ def _is_service_header_row(row: list) -> bool:
         True if the row contains enough service-table header keywords.
     """
     cells = {(cell or "").strip().lower() for cell in row}
-    matches = sum(
-        any(header in cell for cell in cells)
-        for header in _SERVICE_HEADERS
-    )
+    matches = sum(any(header in cell for cell in cells) for header in _SERVICE_HEADERS)
     return matches >= _MIN_HEADER_MATCHES
 
 
@@ -99,10 +96,7 @@ class DocumentReader:
                         if not table:
                             continue
                         if any(_is_service_header_row(row) for row in table):
-                            rows = [
-                                " | ".join(cell if cell else "" for cell in row)
-                                for row in table
-                            ]
+                            rows = [" | ".join(cell if cell else "" for cell in row) for row in table]
                             return "\n".join(rows)
             return None
         except Exception as exc:  # pdfplumber raises various errors on corrupt PDFs
@@ -127,9 +121,7 @@ class DocumentReader:
         def _needs_ocr(f: Path) -> bool:
             try:
                 with fitz.open(f) as doc:
-                    return doc.page_count > 0 and not any(
-                        page.get_text().strip() for page in doc
-                    )
+                    return doc.page_count > 0 and not any(page.get_text().strip() for page in doc)
             except (fitz.FileDataError, OSError, RuntimeError):
                 return False
 

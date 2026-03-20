@@ -1,4 +1,5 @@
 """Tests for app/repositories/invoice_repo.py — requires PostgreSQL."""
+
 from __future__ import annotations
 
 import datetime
@@ -19,6 +20,7 @@ pytestmark = pytest.mark.db
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _seed_institution(db: AsyncSession) -> Institution:
     inst = Institution(
@@ -66,6 +68,7 @@ async def _seed_invoice(db, period_id, invoice_number, status_code="PRESENTE", s
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestUpsertInvoice:
     async def test_inserts_new_invoice(self, seeded: AsyncSession):
         inst = await _seed_institution(seeded)
@@ -74,11 +77,18 @@ class TestUpsertInvoice:
         fs = (await seeded.execute(select(FolderStatus).where(FolderStatus.status == "PRESENTE"))).scalar_one()
         st = (await seeded.execute(select(ServiceType).where(ServiceType.code == "GENERAL"))).scalar_one()
 
-        inv = await repo.upsert_invoice(period.id, "RT001", {
-            "date": datetime.date(2024, 1, 1),
-            "id_type": "CC", "id_number": "1", "patient_name": "P",
-            "service_type_id": st.id, "folder_status_id": fs.id,
-        })
+        inv = await repo.upsert_invoice(
+            period.id,
+            "RT001",
+            {
+                "date": datetime.date(2024, 1, 1),
+                "id_type": "CC",
+                "id_number": "1",
+                "patient_name": "P",
+                "service_type_id": st.id,
+                "folder_status_id": fs.id,
+            },
+        )
         assert inv.id is not None
         assert inv.invoice_number == "RT001"
 
@@ -88,8 +98,14 @@ class TestUpsertInvoice:
         repo = InvoiceRepo(seeded)
         fs = (await seeded.execute(select(FolderStatus).where(FolderStatus.status == "PRESENTE"))).scalar_one()
         st = (await seeded.execute(select(ServiceType).where(ServiceType.code == "GENERAL"))).scalar_one()
-        data = {"date": datetime.date(2024, 1, 1), "id_type": "CC", "id_number": "1",
-                "patient_name": "P", "service_type_id": st.id, "folder_status_id": fs.id}
+        data = {
+            "date": datetime.date(2024, 1, 1),
+            "id_type": "CC",
+            "id_number": "1",
+            "patient_name": "P",
+            "service_type_id": st.id,
+            "folder_status_id": fs.id,
+        }
 
         inv1 = await repo.upsert_invoice(period.id, "RT002", data)
         inv2 = await repo.upsert_invoice(period.id, "RT002", data)
@@ -146,14 +162,15 @@ class TestBatchUpdateFolderStatus:
 class TestGetOrganizableInvoices:
     async def test_returns_presente_without_findings(self, seeded: AsyncSession):
         from app.models.finding import MissingFile
+
         inst = await _seed_institution(seeded)
         period = await _seed_period(seeded, inst.id)
-        inv_clean = await _seed_invoice(seeded, period.id, "RT030", "PRESENTE")
+        await _seed_invoice(seeded, period.id, "RT030", "PRESENTE")
         inv_dirty = await _seed_invoice(seeded, period.id, "RT031", "PRESENTE")
 
         # Add an unresolved finding to inv_dirty
-        dt_result = await seeded.execute(select(FolderStatus))  # we need doc_type_id
         from app.models.rules import DocType
+
         dt = (await seeded.execute(select(DocType).where(DocType.code == "FACTURA"))).scalar_one()
         seeded.add(MissingFile(invoice_id=inv_dirty.id, doc_type_id=dt.id, expected_path=""))
         await seeded.flush()

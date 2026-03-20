@@ -8,8 +8,8 @@ from pathlib import Path
 
 _PDF_WORKERS = min(16, (os.cpu_count() or 4) * 2)
 
-from core.helpers import remove_accents
-from core.reader import DocumentReader
+from core.helpers import remove_accents  # noqa: E402
+from core.reader import DocumentReader  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -109,9 +109,7 @@ class InvoiceValidator:
                     missing.append(f)
         return missing
 
-    def validate_invoice_files(
-        self, file_paths: list[Path]
-    ) -> tuple[list[Path], list[Path]]:
+    def validate_invoice_files(self, file_paths: list[Path]) -> tuple[list[Path], list[Path]]:
         """Check invoice code and CUFE presence in a single read pass per file (parallel)."""
         if not file_paths:
             return [], []
