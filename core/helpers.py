@@ -3,10 +3,7 @@
 import logging
 import shutil
 import unicodedata
-from collections.abc import Iterable
 from pathlib import Path
-
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -71,24 +68,6 @@ def read_lines_from_file(file_path: str | Path) -> list[str]:
         return []
 
 
-def write_lines_to_file(
-    values: Iterable[object] | None,
-    dest: Path,
-) -> None:
-    """Write an iterable of values to a text file, one value per line.
-
-    Args:
-        values: Items to write. Defaults to an empty iterable if None.
-        dest: Destination file path.
-    """
-    if values is None:
-        values = []
-    dest = Path(dest)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with dest.open("w", encoding="utf-8") as fh:
-        fh.writelines(f"{v}\n" for v in values)
-
-
 def flatten_prefixes(prefixes_dict: dict[str, str | list[str]]) -> list[str]:
     """Flatten a prefix dictionary into a single deduplicated list.
 
@@ -105,36 +84,3 @@ def flatten_prefixes(prefixes_dict: dict[str, str | list[str]]) -> list[str]:
         else:
             flat.append(str(value))
     return list(set(flat))
-
-
-def save_dataframe(
-    df: pd.DataFrame,
-    dest: Path,
-    default_name: str = "report",
-) -> None:
-    """Save a DataFrame to Excel or CSV.
-
-    The output format is determined by the ``dest`` suffix. If the suffix is
-    not ``.csv``, the file is saved as ``.xlsx``.
-
-    Args:
-        df: DataFrame to export.
-        dest: Full destination path including file name.
-        default_name: Fallback base name (used only in log messages).
-    """
-    if df.empty:
-        logger.warning("DataFrame '%s' is empty — nothing saved.", default_name)
-        return
-
-    dest = Path(dest)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-
-    try:
-        if dest.suffix.lower() == ".csv":
-            df.to_csv(dest, index=False, sep=";", encoding="utf-8-sig")
-        else:
-            dest = dest.with_suffix(".xlsx")
-            df.to_excel(dest, index=True, engine="openpyxl")
-        logger.info("Report saved: %s (%d rows)", dest.name, len(df))
-    except (PermissionError, OSError, ValueError) as exc:
-        logger.error("Failed to save report %s: %s", dest, exc)

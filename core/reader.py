@@ -48,15 +48,6 @@ class DocumentReader:
             return False
 
     @staticmethod
-    def _has_text_layer(file_path: Path) -> bool:
-        """Return True if the PDF contains any readable text (no OCR needed)."""
-        try:
-            with fitz.open(file_path) as doc:
-                return any(page.get_text().strip() for page in doc)
-        except (fitz.FileDataError, OSError, RuntimeError):
-            return False
-
-    @staticmethod
     def read_text(file_path: Path) -> str:
         """Extract all text from a PDF file."""
         try:
@@ -65,26 +56,6 @@ class DocumentReader:
         except (fitz.FileDataError, OSError, RuntimeError) as exc:
             logger.error("Error reading PDF %s: %s", file_path.name, exc)
             return ""
-
-    @staticmethod
-    def read_text_if_has_table(file_path: Path) -> str | None:
-        """Extract the service-table section of a PDF using PyMuPDF."""
-        _WINDOW = 8
-
-        try:
-            with fitz.open(file_path) as doc:
-                text = "".join(page.get_text() for page in doc)
-            lines = text.splitlines()
-            for i in range(len(lines)):
-                window = " ".join(lines[i : i + _WINDOW]).lower()
-                words = set(window.split())
-                matches = sum(any(h in w for w in words) for h in _SERVICE_HEADERS)
-                if matches >= _MIN_HEADER_MATCHES:
-                    return "\n".join(lines[i:])
-            return None
-        except (fitz.FileDataError, OSError, RuntimeError) as exc:
-            logger.error("Error reading PDF %s: %s", file_path.name, exc)
-            return None
 
     @staticmethod
     def read_table_text(file_path: Path) -> str | None:

@@ -71,10 +71,6 @@ class DocumentScanner:
         criteria = tuple(upper) if isinstance(upper, list) else upper
         return [f for f in self.base_dir.rglob("*") if f.is_file() and f.name.upper().startswith(criteria)]
 
-    def list_dirs(self) -> list[Path]:
-        """Return all directories under base_dir recursively."""
-        return [d for d in self.base_dir.rglob("*") if d.is_dir()]
-
     @staticmethod
     def _build_name_pattern(valid_prefixes: list[str], suffix: str, nit: str) -> re.Pattern[str]:
         """Compile the expected filename regex from hospital-specific parameters.
