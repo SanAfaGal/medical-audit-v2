@@ -1,19 +1,21 @@
 """FastAPI application factory with lifespan and router registration."""
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
 
 import structlog
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
 from app.config import settings
 from app.database import engine
 
 logger = structlog.get_logger()
+
+_SKIP_LOG_PATHS = {"/health", "/health/db", "/metrics", "/static"}
 
 
 @asynccontextmanager
@@ -35,6 +37,40 @@ app = FastAPI(
     redoc_url="/redoc" if settings.docs_enabled else None,
     openapi_url="/openapi.json" if settings.docs_enabled else None,
 )
+
+# Prometheus: debe registrarse a nivel de módulo, antes de que la app arranque
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator().instrument(app).expose(app, include_in_schema=False)
+
+
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    """Log every request with method, path, status code and latency."""
+    if any(request.url.path.startswith(p) for p in _SKIP_LOG_PATHS):
+        return await call_next(request)
+
+    t0 = time.perf_counter()
+    try:
+        response = await call_next(request)
+        latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+        logger.info(
+            "request",
+            method=request.method,
+            path=request.url.path,
+            status=response.status_code,
+            latency_ms=latency_ms,
+        )
+        return response
+    except Exception as exc:
+        latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+        logger.error(
+            "request_error",
+            method=request.method,
+            path=request.url.path,
+            latency_ms=latency_ms,
+            error=str(exc),
+        )
+        raise
 
 
 @app.get("/health", include_in_schema=False)
