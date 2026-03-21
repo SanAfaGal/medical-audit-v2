@@ -69,7 +69,7 @@ class DocumentScanner:
         """
         upper = [p.upper() for p in prefixes] if isinstance(prefixes, list) else prefixes.upper()
         criteria = tuple(upper) if isinstance(upper, list) else upper
-        return [f for f in self.base_dir.rglob("*") if f.is_file() and f.name.upper().startswith(criteria)]
+        return [f for f in self.base_dir.rglob("*.pdf") if f.name.upper().startswith(criteria)]
 
     @staticmethod
     def _build_name_pattern(valid_prefixes: list[str], suffix: str, nit: str) -> re.Pattern[str]:

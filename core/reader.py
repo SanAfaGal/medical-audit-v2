@@ -92,7 +92,11 @@ class DocumentReader:
         def _needs_ocr(f: Path) -> bool:
             try:
                 with fitz.open(f) as doc:
-                    return doc.page_count > 0 and not any(page.get_text().strip() for page in doc)
+                    if doc.page_count == 0:
+                        return False
+                    # First page is sufficient: invoice PDFs are uniformly
+                    # digital or scanned across all pages.
+                    return not doc[0].get_text().strip()
             except (fitz.FileDataError, OSError, RuntimeError):
                 return False
 

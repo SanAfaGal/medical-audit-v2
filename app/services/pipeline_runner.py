@@ -784,18 +784,37 @@ async def _check_invoices(ctx: dict) -> AsyncGenerator[str, None]:
     yield plog("INFO", f"Facturas que requieren OCR: {len(needing_ocr)}")
 
     if needing_ocr:
-        _OCR_CHUNK = 20
+        import os as _os
+
+        workers = max(_os.cpu_count() or 4, 4)
+        total_ocr = len(needing_ocr)
+        yield plog("INFO", f"Workers OCR: {workers}")
+
+        loop = asyncio.get_event_loop()
+        progress_q: asyncio.Queue[str] = asyncio.Queue()
         totals = {"success": 0, "failed": 0}
-        chunks = [needing_ocr[i : i + _OCR_CHUNK] for i in range(0, len(needing_ocr), _OCR_CHUNK)]
-        for i, chunk in enumerate(chunks, 1):
-            result = await executor(DocumentProcessor.batch_ocr, chunk, 8)
-            totals["success"] += result["success"]
-            totals["failed"] += result["failed"]
-            processed = min(i * _OCR_CHUNK, len(needing_ocr))
-            yield plog(
-                "INFO",
-                f"OCR: {processed}/{len(needing_ocr)} — exitosos: {totals['success']}, fallidos: {totals['failed']}",
+
+        def _on_ocr_progress(i: int, total: int, fname: str) -> None:
+            loop.call_soon_threadsafe(
+                progress_q.put_nowait, plog("INFO", f"OCR [{i}/{total}] {fname}")
             )
+
+        ocr_task = asyncio.ensure_future(
+            loop.run_in_executor(
+                None, lambda: DocumentProcessor.batch_ocr(needing_ocr, workers, _on_ocr_progress)
+            )
+        )
+        while not ocr_task.done():
+            try:
+                yield progress_q.get_nowait()
+            except asyncio.QueueEmpty:
+                await asyncio.sleep(0.3)
+        while not progress_q.empty():
+            yield progress_q.get_nowait()
+        result = await ocr_task
+        totals["success"] = result["success"]
+        totals["failed"] = result["failed"]
+        yield plog("INFO", f"OCR completado — exitosos: {totals['success']}, fallidos: {totals['failed']}")
     else:
         yield plog("INFO", "Ninguna factura requiere OCR.")
 

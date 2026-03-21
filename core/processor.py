@@ -6,7 +6,6 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -159,29 +158,26 @@ class DocumentProcessor:
         return results
 
     @classmethod
-    def batch_ocr(cls, files: list[Path], max_workers: int = 4) -> dict[str, int]:
-        """Run OCR on a list of files in parallel with a progress bar."""
+    def batch_ocr(cls, files: list[Path], max_workers: int | None = None, progress_fn=None) -> dict[str, int]:
+        """Run OCR on a list of files in parallel.
+
+        Args:
+            files: PDFs to process.
+            max_workers: Thread pool size; defaults to cpu_count.
+            progress_fn: Optional callable ``(i, total, filename)`` called after each file completes.
+        """
+        workers = max_workers or max(os.cpu_count() or 4, 4)
         results: dict[str, int] = {"success": 0, "failed": 0}
+        total = len(files)
+        counter = {"n": 0}
 
-        with (
-            tqdm(
-                total=len(files),
-                desc="OCR batch processing",
-                unit="doc",
-                colour="cyan",
-            ) as pbar,
-            ThreadPoolExecutor(max_workers=max_workers) as executor,
-        ):
-            futures = {executor.submit(cls.apply_ocr, f): f for f in files}
-
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(cls.apply_ocr, f): f for f in files}
             for future in as_completed(futures):
                 f = futures[future]
-                if future.result():
-                    results["success"] += 1
-                else:
-                    results["failed"] += 1
-
-                pbar.set_postfix_str(f.name[:15])
-                pbar.update(1)
+                results["success" if future.result() else "failed"] += 1
+                counter["n"] += 1
+                if progress_fn:
+                    progress_fn(counter["n"], total, f.name)
 
         return results
