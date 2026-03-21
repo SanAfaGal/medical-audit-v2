@@ -47,14 +47,14 @@ class InstitutionRepo:
     _UPDATABLE_FIELDS = frozenset(
         {
             "name",
+            "display_name",
             "nit",
-            "invoice_prefix",
-            "sihos_url",
-            "sihos_code",
+            "invoice_id_prefix",
+            "sihos_base_url",
+            "sihos_doc_code",
             "sihos_user",
             "sihos_password",
             "drive_credentials_enc",
-            "base_path",
         }
     )
 

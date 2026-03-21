@@ -1787,14 +1787,29 @@ function settingsApp() {
     },
 
     async saveInstitution() {
-      const method = this.editingId ? 'PUT' : 'POST';
-      const url = this.editingId ? `/api/institutions/${this.editingId}` : '/api/institutions';
+      const wasEditing = this.editingId;
+      const method = wasEditing ? 'PUT' : 'POST';
+      const url = wasEditing ? `/api/institutions/${wasEditing}` : '/api/institutions';
       const body = Object.fromEntries(Object.entries(this.form).filter(([, v]) => v !== ''));
       const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
       if (res.ok) {
         this.institutions = await fetch('/api/institutions').then(r => r.json());
-        this.showToast(this.editingId ? 'Institución actualizada.' : 'Institución creada.');
-        this.resetInstForm();
+        if (wasEditing) {
+          // Mantener formulario abierto con datos frescos del servidor
+          const updated = this.institutions.find(i => i.id === wasEditing);
+          if (updated) {
+            this.editInstitution(updated);
+            // Sincronizar sidebar si es la institución activa
+            if (Alpine.store('ctx').institutionId === updated.id) {
+              Alpine.store('ctx').institution = updated;
+              Alpine.store('ctx')._save();
+            }
+          }
+          this.showToast('Institución actualizada.');
+        } else {
+          this.showToast('Institución creada.');
+          this.resetInstForm();
+        }
       } else {
         const err = await res.json().catch(() => ({}));
         this.showToast(err.detail || 'Error al guardar.', 'error');
