@@ -182,24 +182,18 @@
 
         init() {
           // Recargar automáticamente cuando cambia hospital o período estando abierto
-          this.$watch(() => Alpine.store('ctx').institutionId, () => {
+          const _resetToStage = () => {
             if (!this.explorerOpen) return;
-            this.currentPath = this.rootFolder;
+            this.rootFolder = 'STAGE';
+            this.currentPath = 'STAGE';
             this.selectedEntry = null;
             this.previewUrl = null;
             this.selectedEntries = [];
             this.pdfMode = 'none';
             this.load();
-          });
-          this.$watch(() => Alpine.store('ctx').periodId, () => {
-            if (!this.explorerOpen) return;
-            this.currentPath = this.rootFolder;
-            this.selectedEntry = null;
-            this.previewUrl = null;
-            this.selectedEntries = [];
-            this.pdfMode = 'none';
-            this.load();
-          });
+          };
+          this.$watch(() => Alpine.store('ctx').institutionId, _resetToStage);
+          this.$watch(() => Alpine.store('ctx').periodId, _resetToStage);
         },
 
         // Wrapper fetch que normaliza errores FastAPI {"detail":"..."} → {ok, message}
@@ -800,10 +794,11 @@
           if (data.ok) this.load();
         },
 
-        // Abrir explorador (carga inicial si corresponde)
+        // Abrir explorador — siempre arranca en STAGE
         open() {
           this.explorerOpen = true;
-          if (!this.currentPath) this.currentPath = this.rootFolder;
+          this.rootFolder = 'STAGE';
+          this.currentPath = 'STAGE';
           this.load();
         },
       }));
