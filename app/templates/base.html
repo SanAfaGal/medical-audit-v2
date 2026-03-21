@@ -745,6 +745,9 @@
           <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Hospital</div>
           <div class="text-sm font-semibold text-white leading-tight truncate"
                x-text="$store.ctx.institution ? $store.ctx.institution.display_name : '—'"></div>
+          <div x-show="$store.ctx.institution"
+               class="text-[10px] font-bold text-sky-400/70 uppercase tracking-wide truncate mt-0.5"
+               x-text="$store.ctx.institution ? $store.ctx.institution.name.replace(/_/g, ' ') : ''"></div>
         </div>
       </div>
 
