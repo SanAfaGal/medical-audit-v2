@@ -65,6 +65,30 @@ class DeleteRequest(BaseModel):
     path: str
 
 
+class DeleteBatchRequest(BaseModel):
+    institution_id: int
+    period_id: int
+    paths: list[str]
+
+
+class BatchDeleteResult(BaseModel):
+    deleted: list[str]
+    errors: list[str]
+
+
+class MkdirRequest(BaseModel):
+    institution_id: int
+    period_id: int
+    path: str = ""   # carpeta padre relativa al sandbox (vacío = raíz)
+    name: str        # nombre de la nueva carpeta
+
+
+class UploadResult(BaseModel):
+    uploaded: list[str]
+    skipped: list[str]
+    non_pdf_count: int = 0  # archivos omitidos por no ser PDF
+
+
 class OperationResult(BaseModel):
     ok: bool
     message: str

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
+import shutil
 from pathlib import Path
 
 import aiofiles
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,16 +19,20 @@ from app.models.institution import Institution
 from app.models.period import AuditPeriod
 from app.models.rules import SystemSettings
 from app.schemas.explorer import (
+    BatchDeleteResult,
     CopyRequest,
+    DeleteBatchRequest,
     DeleteRequest,
     FileNode,
     ListResponse,
     MergeRequest,
+    MkdirRequest,
     MoveRequest,
     OperationResult,
     ReorderRequest,
     RenameRequest,
     SplitRequest,
+    UploadResult,
 )
 
 router = APIRouter(prefix="/explorer", tags=["explorer"])
@@ -74,6 +80,31 @@ def _safe_resolve(sandbox: Path, rel: str) -> Path:
         return resolved
     except ValueError:
         raise HTTPException(400, "Ruta fuera del directorio permitido")
+
+
+def _validate_entry_name(name: str) -> None:
+    """Valida que un nombre de archivo/carpeta no contenga separadores de ruta ni esté vacío."""
+    if not name or not name.strip():
+        raise HTTPException(400, "El nombre no puede estar vacío")
+    if "/" in name or "\\" in name:
+        raise HTTPException(400, "El nombre no puede contener separadores de ruta")
+
+
+def _delete_path(target: Path, sandbox: Path) -> str:
+    """Elimina un archivo o carpeta del sandbox. Devuelve mensaje descriptivo."""
+    if target == sandbox:
+        raise HTTPException(400, "No se puede eliminar la raíz del período")
+    if not target.exists():
+        raise HTTPException(404, "Archivo o carpeta no encontrado")
+    try:
+        if target.is_file():
+            target.unlink()
+            return f'"{target.name}" eliminado'
+        else:
+            shutil.rmtree(target)
+            return f'Carpeta "{target.name}" eliminada'
+    except OSError as e:
+        raise HTTPException(500, f"Error al eliminar: {e}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -453,8 +484,6 @@ async def search_entries(
 @router.post("/copy", response_model=OperationResult)
 async def copy_entry(body: CopyRequest, db: AsyncSession = Depends(get_db)):
     """Copia un archivo o carpeta a otra carpeta destino."""
-    import shutil
-
     sandbox = await _resolve_sandbox(body.institution_id, body.period_id, db)
     src = _safe_resolve(sandbox, body.src)
     dst_folder = _safe_resolve(sandbox, body.dst_folder)
@@ -489,27 +518,156 @@ async def copy_entry(body: CopyRequest, db: AsyncSession = Depends(get_db)):
 @router.post("/delete", response_model=OperationResult)
 async def delete_entry(body: DeleteRequest, db: AsyncSession = Depends(get_db)):
     """Elimina un archivo o carpeta (con todo su contenido si es carpeta)."""
-    import shutil
-
     sandbox = await _resolve_sandbox(body.institution_id, body.period_id, db)
     target = _safe_resolve(sandbox, body.path)
+    message = _delete_path(target, sandbox)
+    return OperationResult(ok=True, message=message)
 
-    if not target.exists():
-        raise HTTPException(404, "Archivo o carpeta no encontrado")
 
-    # Impedir borrar la raíz del sandbox
-    if target == sandbox:
-        raise HTTPException(400, "No se puede eliminar la raíz del período")
+# ──────────────────────────────────────────────────────────────────────────────
+# Eliminar en lote
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/delete-batch", response_model=BatchDeleteResult)
+async def delete_batch(body: DeleteBatchRequest, db: AsyncSession = Depends(get_db)):
+    """Elimina múltiples archivos o carpetas en una sola operación."""
+    sandbox = await _resolve_sandbox(body.institution_id, body.period_id, db)
+
+    deleted: list[str] = []
+    errors: list[str] = []
+
+    for rel_path in body.paths:
+        try:
+            target = _safe_resolve(sandbox, rel_path)
+            _delete_path(target, sandbox)
+            deleted.append(rel_path)
+        except HTTPException as exc:
+            errors.append(f"{rel_path}: {exc.detail}")
+
+    return BatchDeleteResult(deleted=deleted, errors=errors)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Crear carpeta
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/mkdir", response_model=OperationResult)
+async def make_directory(body: MkdirRequest, db: AsyncSession = Depends(get_db)):
+    """Crea una nueva carpeta dentro del sandbox."""
+    sandbox = await _resolve_sandbox(body.institution_id, body.period_id, db)
+    _validate_entry_name(body.name)
+
+    parent = _safe_resolve(sandbox, body.path) if body.path else sandbox
+    if not parent.is_dir():
+        raise HTTPException(400, "La carpeta padre no existe")
+
+    new_dir = parent / body.name
+    _safe_resolve(sandbox, str(new_dir.relative_to(sandbox)))  # confirmar sandbox
+
+    if new_dir.exists():
+        raise HTTPException(400, f'Ya existe una carpeta con el nombre "{body.name}"')
 
     try:
-        if target.is_file():
-            target.unlink()
-            return OperationResult(ok=True, message=f'"{target.name}" eliminado')
-        else:
-            shutil.rmtree(target)
-            return OperationResult(ok=True, message=f'Carpeta "{target.name}" eliminada')
+        new_dir.mkdir(parents=False)
     except OSError as e:
-        raise HTTPException(500, f"Error al eliminar: {e}")
+        raise HTTPException(500, f"Error al crear la carpeta: {e}")
+
+    rel = str(new_dir.relative_to(sandbox)).replace("\\", "/")
+    return OperationResult(ok=True, message=f'Carpeta "{body.name}" creada en {rel}')
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Subir archivos (PDFs)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/upload", response_model=UploadResult)
+async def upload_files(
+    institution_id: int = Form(...),
+    period_id: int = Form(...),
+    path: str = Form(""),
+    relative_paths_json: str = Form("[]"),
+    files: list[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Sube uno o más PDFs al directorio indicado.
+
+    `relative_paths_json` es un array JSON de rutas relativas (para preservar
+    la estructura de subcarpetas cuando se sube una carpeta completa).
+    Si está vacío o no coincide en longitud con `files`, se usa solo el nombre
+    de cada archivo.
+    """
+    sandbox = await _resolve_sandbox(institution_id, period_id, db)
+
+    # Carpeta destino base
+    dest_base = _safe_resolve(sandbox, path) if path else sandbox
+    if not dest_base.is_dir():
+        raise HTTPException(400, "La carpeta destino no existe")
+
+    # Parsear rutas relativas (presentes solo en upload de carpeta completa)
+    try:
+        relative_paths: list[str] = json.loads(relative_paths_json)
+        if not isinstance(relative_paths, list):
+            relative_paths = []
+    except (json.JSONDecodeError, ValueError):
+        relative_paths = []
+
+    is_folder_upload = len(relative_paths) == len(files) and any(relative_paths)
+
+    # Para upload de carpeta: verificar conflicto de nombre antes de escribir nada
+    if is_folder_upload:
+        root_name = Path(relative_paths[0]).parts[0]
+        root_dest = dest_base / root_name
+        _safe_resolve(sandbox, str(root_dest.relative_to(sandbox)))  # validar sandbox
+        if root_dest.exists():
+            raise HTTPException(
+                409,
+                f'Ya existe una carpeta llamada "{root_name}" en este directorio. '
+                "Renómbrala o elimínala antes de subir.",
+            )
+
+    uploaded: list[str] = []
+    skipped: list[str] = []
+    non_pdf_count: int = 0
+
+    for i, upload in enumerate(files):
+        filename = upload.filename or f"archivo_{i}"
+
+        # Determinar ruta destino
+        if is_folder_upload and relative_paths[i]:
+            # Preservar estructura completa incluyendo la carpeta raíz
+            dest_file = dest_base / Path(relative_paths[i])
+        else:
+            dest_file = dest_base / filename
+
+        # Solo aceptar PDFs — contar no-PDFs por separado para advertencia
+        if dest_file.suffix.lower() != ".pdf":
+            non_pdf_count += 1
+            skipped.append(filename)
+            continue
+
+        # Validar sandbox
+        try:
+            _safe_resolve(sandbox, str(dest_file.relative_to(sandbox)))
+        except HTTPException:
+            skipped.append(filename)
+            continue
+
+        # Crear directorios intermedios (subcarpetas anidadas)
+        dest_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Escribir
+        try:
+            content = await upload.read()
+            async with aiofiles.open(dest_file, "wb") as f:
+                await f.write(content)
+            uploaded.append(str(dest_file.relative_to(sandbox)).replace("\\", "/"))
+        except OSError as e:
+            skipped.append(f"{filename}: {e}")
+
+    return UploadResult(uploaded=uploaded, skipped=skipped, non_pdf_count=non_pdf_count)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
