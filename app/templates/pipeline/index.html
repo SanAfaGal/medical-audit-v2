@@ -921,12 +921,12 @@ function pipeline() {
       { type:'phase', label:'Carga de datos', color:'#0284c7', icon:'fa-solid fa-database' },
       { type:'stage', id:'LOAD_AND_PROCESS',    label:'Ingestar reporte SIHOS',    icon:'fa-solid fa-file-excel',    phaseColor:'#0284c7' },
       { type:'stage', id:'RECATEGORIZE_SERVICES', label:'Re-categorizar servicios', icon:'fa-solid fa-arrows-rotate', phaseColor:'#0284c7' },
-      { type:'stage', id:'LOAD_DRIVE_ZIP',      label:'Descomprimir archivos',     icon:'fa-solid fa-file-zipper',   phaseColor:'#0284c7' },
+      { type:'stage', id:'LOAD_DRIVE_ZIP',      label:'Descomprimir archivos',     icon:'fa-solid fa-file-zipper',   phaseColor:'#0284c7', heavy:true },
       { type:'stage', id:'RUN_STAGING',         label:'Mover archivos a STAGE',    icon:'fa-solid fa-truck-moving',  phaseColor:'#0284c7' },
 
       // ── 2. LIMPIEZA ──────────────────────────────────────────────────────
       { type:'phase', label:'Limpieza', color:'#7c3aed', icon:'fa-solid fa-broom' },
-      { type:'stage', id:'REMOVE_NON_PDF',                label:'Eliminar archivos inválidos',        icon:'fa-solid fa-file-circle-xmark',      phaseColor:'#7c3aed' },
+      { type:'stage', id:'REMOVE_NON_PDF',                label:'Eliminar archivos inválidos',        icon:'fa-solid fa-file-circle-xmark',      phaseColor:'#7c3aed', heavy:true },
       { type:'stage', id:'CHECK_NESTED_FOLDERS',          label:'Detectar subcarpetas',               icon:'fa-solid fa-folder-tree',            phaseColor:'#7c3aed' },
       { type:'stage', id:'CHECK_FOLDERS_WITH_EXTRA_TEXT', label:'Detectar carpetas con texto extra',  icon:'fa-solid fa-folder-open',            phaseColor:'#7c3aed' },
       { type:'stage', id:'NORMALIZE_DIR_NAMES',           label:'Corregir nombres de carpetas',       icon:'fa-solid fa-folder',                 phaseColor:'#7c3aed' },
@@ -954,7 +954,7 @@ function pipeline() {
       // ── 5. CIERRE ────────────────────────────────────────────────────────
       { type:'phase', label:'Cierre', color:'#059669', icon:'fa-solid fa-box-archive' },
       { type:'stage', id:'ORGANIZE',       label:'Organizar en AUDIT',   icon:'fa-solid fa-boxes-stacked', phaseColor:'#059669' },
-      { type:'stage', id:'COMPRESS_AUDIT', label:'Comprimir documentos', icon:'fa-solid fa-file-zipper',  phaseColor:'#059669' },
+      { type:'stage', id:'COMPRESS_AUDIT', label:'Comprimir documentos', icon:'fa-solid fa-file-zipper',  phaseColor:'#059669', heavy:true },
 
       // ── 6. DESCARGAS — SIHOS ────────────────────────────────────────────
       { type:'phase', label:'Descargas · SIHOS', color:'#0369a1', icon:'fa-solid fa-hospital' },
@@ -981,7 +981,7 @@ function pipeline() {
       { id:'NORMALIZE_FILES',         label:'Corregir nombres de archivos',      description:'Corrige nombres en dos pasos: (1) aplica sustituciones de prefijo configuradas (ej. FVE→FEV); (2) renombra archivos con nombre inválido al formato {PREFIJO}_{NIT}_{FACTURA}.pdf. Reporta los que no se pueden renombrar.' },
       { id:'LIST_UNREADABLE_PDFS',    label:'Detectar PDFs ilegibles',           description:'Detecta PDFs de factura sin capa de texto (escaneados sin OCR). Solo lista los archivos afectados; no los modifica. Úsala para decidir entre la Opción A (eliminar + re-descargar) o la Opción B (aplicar OCR).' },
       { id:'DELETE_UNREADABLE_PDFS',  label:'Eliminar PDFs ilegibles',           description:'[Opción A] Elimina permanentemente los PDFs detectados sin capa de texto. Combínala con "Descargar PDFs desde SIHOS" para reemplazarlos con versiones digitales correctas.' },
-      { id:'CHECK_INVOICES',          label:'Aplicar OCR a los PDFs',            description:'[Opción B] ⏱ Proceso intensivo — puede tardar varios minutos. Aplica OCR con ocrmypdf (8 hilos en paralelo) a los PDFs sin capa de texto y los convierte a PDF/A con texto extraíble.' },
+      { id:'CHECK_INVOICES',          label:'Aplicar OCR a los PDFs',            description:'[Opción B] Aplica OCR con ocrmypdf (8 hilos en paralelo) a los PDFs sin capa de texto y los convierte a PDF/A con texto extraíble.' },
       { id:'VERIFY_INVOICE_CODE',     label:'Verificar número en PDF',           description:'Lee el texto de cada PDF de factura y verifica que el número de la carpeta aparezca dentro del documento. Reporta con [WARN] las facturas cuyo PDF no contiene su propio número.' },
       { id:'CHECK_INVOICE_NUMBER_ON_FILES', label:'Verificar nombres de archivos', description:'Recorre cada carpeta de STAGE y verifica que todos los archivos contengan el número de factura de la carpeta en su nombre. Reporta los archivos desajustados.' },
       { id:'CHECK_DIRS',              label:'Detectar carpetas faltantes',        description:'Comprueba que cada factura en estado PRESENTE tenga su carpeta en STAGE. Las que no la tienen se marcan como FALTANTE para recuperarlas desde Drive.' },
@@ -991,10 +991,10 @@ function pipeline() {
       { id:'VERIFY_CUFE',             label:'Verificar CUFE',                     description:'Valida que cada PDF de factura contenga un código CUFE válido. Las carpetas sin CUFE se renombran añadiendo el sufijo _SINCUFE para identificación visual.' },
       { id:'ORGANIZE',                label:'Organizar en AUDIT',                 description:'Mueve de STAGE a AUDIT las carpetas de facturas PRESENTE sin hallazgos pendientes, organizándolas en subcarpetas por administradora y contrato. Actualiza su estado a AUDITADA en la base de datos.' },
       { id:'COMPRESS_AUDIT',          label:'Comprimir documentos',               description:'Comprime con Ghostscript (calidad ebook, 150 dpi) todos los PDFs en AUDIT. Reduce el tamaño de archivo sin pérdida visual significativa. Reporta ahorro total en MB. Los archivos que no puedan comprimirse se registran como advertencia y se omiten.' },
-      { id:'DOWNLOAD_INVOICES_FROM_SIHOS', label:'Descargar facturas desde SIHOS', description:'⏱ Proceso intensivo — requiere sesión en SIHOS. Descarga el PDF de factura de cada factura PENDIENTE con hallazgo sin resolver del tipo de documento seleccionado. Solo descarga la factura en sí; no otros documentos del expediente.' },
-      { id:'DOWNLOAD_MEDICATION_SHEETS',   label:'Descargar hojas de medicamentos', description:'⏱ Proceso intensivo — requiere sesión en SIHOS. Descarga las hojas de medicamentos de facturas PENDIENTE con hallazgo sin resolver del tipo seleccionado y número de admisión registrado.' },
-      { id:'DOWNLOAD_DRIVE',          label:'Descargar carpetas (Drive)',          description:'⏱ Puede tardar varios minutos. Busca en Google Drive las carpetas de facturas marcadas como FALTANTE y las descarga a STAGE. Su estado se actualiza automáticamente a PRESENTE.' },
-      { id:'DOWNLOAD_MISSING_DOCS',   label:'Descargar documentos faltantes',     description:'⏱ Puede tardar varios minutos. Para cada hallazgo pendiente, busca en Google Drive el archivo esperado ({prefijo}_{NIT}_{factura}.pdf) y lo descarga a la carpeta correspondiente en STAGE.' },
+      { id:'DOWNLOAD_INVOICES_FROM_SIHOS', label:'Descargar facturas desde SIHOS', description:'Requiere sesión en SIHOS. Descarga el PDF de factura de cada factura PENDIENTE con hallazgo sin resolver del tipo de documento seleccionado. Solo descarga la factura en sí; no otros documentos del expediente.' },
+      { id:'DOWNLOAD_MEDICATION_SHEETS',   label:'Descargar hojas de medicamentos', description:'Requiere sesión en SIHOS. Descarga las hojas de medicamentos de facturas PENDIENTE con hallazgo sin resolver del tipo seleccionado y número de admisión registrado.' },
+      { id:'DOWNLOAD_DRIVE',          label:'Descargar carpetas (Drive)',          description:'Busca en Google Drive las carpetas de facturas marcadas como FALTANTE y las descarga a STAGE. Su estado se actualiza automáticamente a PRESENTE.' },
+      { id:'DOWNLOAD_MISSING_DOCS',   label:'Descargar documentos faltantes',     description:'Para cada hallazgo pendiente, busca en Google Drive el archivo esperado ({prefijo}_{NIT}_{factura}.pdf) y lo descarga a la carpeta correspondiente en STAGE.' },
     ],
 
     get completedCount() {
