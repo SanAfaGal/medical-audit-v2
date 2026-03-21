@@ -271,6 +271,14 @@
         <i class="fa-solid fa-spinner fa-spin text-[10px]" x-show="running"></i>
         <span x-text="running ? 'Ejecutando…' : 'Ejecutar' + (selectedStages.length>0 ? ' ('+selectedStages.length+')' : '')"></span>
       </button>
+      <button @click="cancelPipeline()" x-show="running"
+              class="px-3 rounded-lg font-bold text-[11.5px] transition-all"
+              style="border:1px solid var(--red-border);color:var(--red);background:var(--red-soft)"
+              onmouseover="this.style.background='var(--red)';this.style.color='#fff'"
+              onmouseout="this.style.background='var(--red-soft)';this.style.color='var(--red)'"
+              title="Detener pipeline">
+        <i class="fa-solid fa-stop text-[10px]"></i>
+      </button>
       <button @click="clearLog()" x-show="logLines.length>0" :disabled="running"
               class="px-3 rounded-lg transition-all disabled:opacity-30"
               style="border:1px solid var(--border);color:var(--text-3)"
@@ -1122,16 +1130,42 @@ function pipeline() {
 
       evtSource.onerror = () => {
         evtSource.close(); this._evtSource = null;
-        this.logLines.push('[WARN] Conexión interrumpida. La tarea continúa en segundo plano.');
+        this.logLines.push('[WARN] Conexión interrumpida. Verificando estado de la tarea…');
         this.$nextTick(() => this.scrollLog());
-        setTimeout(() => {
-          if (this.$store.pipeline.isRunning && this.$store.pipeline.taskId === taskId) {
-            this._subscribeToTask(taskId, stageId, this.$store.pipeline.cursor, onDone);
-          } else if (onDone) {
-            onDone();
+        setTimeout(async () => {
+          if (!this.$store.pipeline.isRunning || this.$store.pipeline.taskId !== taskId) {
+            if (onDone) onDone();
+            return;
           }
+          // Verify the task still exists on the server before reconnecting
+          try {
+            const res = await fetch(`/api/pipeline/stream/${taskId}?from=0`, { method: 'HEAD' });
+            if (res.status === 404) {
+              this.logLines.push('[WARN] La tarea ya no existe en el servidor (reinicio detectado). Estado limpiado.');
+              this.$nextTick(() => this.scrollLog());
+              this.$store.pipeline.clear();
+              this.running = false;
+              this.currentStageLabel = '';
+              if (onDone) onDone();
+              return;
+            }
+          } catch { /* network error — try to reconnect anyway */ }
+          this._subscribeToTask(taskId, stageId, this.$store.pipeline.cursor, onDone);
         }, 2000);
       };
+    },
+
+    async cancelPipeline() {
+      const taskId = this.taskId || this.$store.pipeline.taskId;
+      if (this._evtSource) { this._evtSource.close(); this._evtSource = null; }
+      if (taskId) {
+        try { await fetch(`/api/pipeline/${taskId}`, { method: 'DELETE' }); } catch {}
+      }
+      this.running = false;
+      this.currentStageLabel = '';
+      this.$store.pipeline.clear();
+      this.logLines.push('[WARN] Pipeline detenido por el usuario.');
+      this.$nextTick(() => this.scrollLog());
     },
 
     init() {
