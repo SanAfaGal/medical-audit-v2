@@ -1086,6 +1086,8 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
 
     std_map = await rules_repo.get_service_type_docs_map(institution.id)
     prefix_map = await rules_repo.get_active_doc_types_map()
+    doc_types = await rules_repo.get_doc_types()
+    dt_name: dict[int, str] = {dt.id: dt.description for dt in doc_types}
 
     presente_invoices = await inv_repo.get_invoices_by_status_code(period.id, "PRESENTE")
     yield plog("INFO", f"Facturas PRESENTE a verificar: {len(presente_invoices)}")
@@ -1125,7 +1127,7 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
     invoices_with_findings = [inv_number for _, (inv_number, _) in findings_map.items()]
     for inv_id, (inv_number, dt_ids) in findings_map.items():
         ct = _ct_for_folder(inv_number, ct_map)
-        doc_str = str(dt_ids[0]) if len(dt_ids) == 1 else f"{len(dt_ids)} docs"
+        doc_str = dt_name.get(dt_ids[0], str(dt_ids[0])) if len(dt_ids) == 1 else ", ".join(dt_name.get(d, str(d)) for d in dt_ids)
         yield plog("WARN", f"Faltantes ({doc_str})", folder=inv_number, contract_type=ct)
 
     if invoices_with_findings:
