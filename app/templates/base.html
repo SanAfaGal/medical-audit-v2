@@ -166,9 +166,41 @@
         _resizeStartX: 0,
         _resizeStartWidth: 0,
         _listResizing: false,
+        // ── Selección en lote ──
+        selectedEntries: [],
+        batchDeleteConfirm: false,
+        // ── Upload ──
+        uploadProgress: null,   // null | {done, total, errors}
+        isDragOver: false,
+        uploadMenuOpen: false,
+        // ── Crear carpeta ──
+        creatingFolder: false,
+        newFolderName: '',
 
         get institutionId() { return Alpine.store('ctx').institutionId; },
         get periodId()      { return Alpine.store('ctx').periodId; },
+
+        init() {
+          // Recargar automáticamente cuando cambia hospital o período estando abierto
+          this.$watch(() => Alpine.store('ctx').institutionId, () => {
+            if (!this.explorerOpen) return;
+            this.currentPath = this.rootFolder;
+            this.selectedEntry = null;
+            this.previewUrl = null;
+            this.selectedEntries = [];
+            this.pdfMode = 'none';
+            this.load();
+          });
+          this.$watch(() => Alpine.store('ctx').periodId, () => {
+            if (!this.explorerOpen) return;
+            this.currentPath = this.rootFolder;
+            this.selectedEntry = null;
+            this.previewUrl = null;
+            this.selectedEntries = [];
+            this.pdfMode = 'none';
+            this.load();
+          });
+        },
 
         // Wrapper fetch que normaliza errores FastAPI {"detail":"..."} → {ok, message}
         async _apiFetch(url, opts = {}) {
@@ -202,6 +234,11 @@
             this.entries = data.entries || [];
           } catch {
             this.entries = [];
+          }
+          // Limpiar selecciones que ya no existen en el listado actual
+          if (this.selectedEntries.length) {
+            const currentPaths = new Set(this.entries.map(e => e.path));
+            this.selectedEntries = this.selectedEntries.filter(p => currentPaths.has(p));
           }
         },
 
@@ -279,6 +316,12 @@
         },
 
         async onDrop(event, targetFolder) {
+          // Archivos externos del SO tienen prioridad sobre drag interno
+          if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+            event.stopPropagation();
+            await this.uploadFiles(event.dataTransfer.files, [], targetFolder.path);
+            return;
+          }
           const srcPath = event.dataTransfer.getData('text/plain');
           if (!srcPath || srcPath === targetFolder.path) return;
           // Prevent dropping a folder into one of its own descendants
@@ -607,6 +650,154 @@
         showToast(ok, message) {
           this.toast = { type: ok ? 'ok' : 'err', message };
           setTimeout(() => { this.toast = null; }, 4000);
+        },
+
+        // ── Selección en lote ──────────────────────────────────────────────
+
+        startSelectMode() {
+          this.pdfMode = 'select';
+          this.selectedEntries = [];
+          this.batchDeleteConfirm = false;
+        },
+
+        toggleSelectEntry(path) {
+          const idx = this.selectedEntries.indexOf(path);
+          if (idx >= 0) this.selectedEntries.splice(idx, 1);
+          else this.selectedEntries.push(path);
+        },
+
+        selectAllEntries() {
+          if (this.selectedEntries.length === this.entries.length) {
+            this.selectedEntries = [];
+          } else {
+            this.selectedEntries = this.entries.map(e => e.path);
+          }
+        },
+
+        async executeBatchDelete() {
+          if (!this.selectedEntries.length) return;
+          const data = await this._apiFetch('/api/explorer/delete-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              institution_id: this.institutionId,
+              period_id: this.periodId,
+              paths: Array.from(this.selectedEntries),
+            }),
+          });
+          this.batchDeleteConfirm = false;
+          if (data.deleted) {
+            const n = data.deleted.length;
+            const errMsg = data.errors?.length ? ` (${data.errors.length} error(es))` : '';
+            this.showToast(n > 0, `${n} elemento(s) eliminado(s)${errMsg}`);
+            this.pdfMode = 'none';
+            this.selectedEntries = [];
+            if (this.selectedEntry && data.deleted.includes(this.selectedEntry.path)) {
+              this.selectedEntry = null;
+              this.previewUrl = null;
+            }
+            this.load();
+          } else {
+            this.showToast(false, data.message || 'Error al eliminar');
+          }
+        },
+
+        // ── Upload ────────────────────────────────────────────────────────
+
+        async uploadFiles(fileList, relativePaths = [], destPath = null) {
+          const files = Array.from(fileList);
+          if (!files.length) return;
+
+          // Para upload de carpeta enviamos todos los archivos (el backend filtra no-PDFs
+          // y los cuenta en non_pdf_count). Para upload de PDFs sueltos pre-filtramos.
+          const isFolderUpload = relativePaths.length === files.length && relativePaths.some(Boolean);
+          const filesToSend = isFolderUpload
+            ? files
+            : files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+
+          if (!filesToSend.length) {
+            this.showToast(false, 'No se encontraron archivos PDF para subir');
+            return;
+          }
+
+          const targetPath = destPath ?? this.currentPath;
+          this.uploadProgress = { done: 0, total: filesToSend.length, errors: 0 };
+
+          const relPaths = isFolderUpload
+            ? filesToSend.map(f => relativePaths[files.indexOf(f)])
+            : [];
+
+          const formData = new FormData();
+          formData.append('institution_id', this.institutionId);
+          formData.append('period_id', this.periodId);
+          formData.append('path', targetPath);
+          formData.append('relative_paths_json', JSON.stringify(relPaths));
+          filesToSend.forEach(f => formData.append('files', f));
+
+          const data = await this._apiFetch('/api/explorer/upload', { method: 'POST', body: formData });
+
+          this.uploadProgress = null;
+
+          if (data.uploaded !== undefined) {
+            const n = data.uploaded.length;
+            const nonPdf = data.non_pdf_count ?? 0;
+            const errSkipped = (data.skipped?.length ?? 0) - nonPdf;
+
+            let msg = n > 0 ? `${n} PDF(s) subido(s) correctamente` : 'No se subió ningún archivo';
+            if (nonPdf > 0) msg += ` · ${nonPdf} archivo(s) no son PDF y fueron omitidos`;
+            if (errSkipped > 0) msg += ` · ${errSkipped} error(es) al escribir`;
+
+            this.showToast(n > 0, msg);
+            if (n > 0) this.load();
+          } else {
+            this.showToast(false, data.message || 'Error al subir archivos');
+          }
+        },
+
+        onExplorerDragOver(event) {
+          // Solo activar overlay si son archivos externos (no drag interno de entradas)
+          if (event.dataTransfer.types.includes('Files')) {
+            event.preventDefault();
+            this.isDragOver = true;
+          }
+        },
+
+        onExplorerDragLeave(event) {
+          // Solo desactivar si el puntero sale del contenedor completo
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+            this.isDragOver = false;
+          }
+        },
+
+        async onExplorerFileDrop(event) {
+          event.preventDefault();
+          this.isDragOver = false;
+          const files = event.dataTransfer.files;
+          if (!files || !files.length) return;
+          // Obtener rutas relativas (solo disponibles para folder drop en Chrome/Edge)
+          const relativePaths = Array.from(files).map(f => f.webkitRelativePath || '');
+          await this.uploadFiles(files, relativePaths);
+        },
+
+        // ── Crear carpeta ─────────────────────────────────────────────────
+
+        async createFolder() {
+          const name = this.newFolderName.trim();
+          if (!name) return;
+          const data = await this._apiFetch('/api/explorer/mkdir', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              institution_id: this.institutionId,
+              period_id: this.periodId,
+              path: this.currentPath,
+              name,
+            }),
+          });
+          this.showToast(data.ok, data.message);
+          this.creatingFolder = false;
+          this.newFolderName = '';
+          if (data.ok) this.load();
         },
 
         // Abrir explorador (carga inicial si corresponde)
