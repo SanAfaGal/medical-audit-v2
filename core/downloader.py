@@ -59,10 +59,10 @@ class SihosDownloader:
         self._invoice_doc_code: str = invoice_doc_code
         self._output_dir: Path = output_dir
 
-    def run_from_list(self, invoice_numbers: list[str]) -> None:
+    def run_from_list(self, invoice_numbers: list[str], progress_fn=None) -> None:
         """Download invoices from a list of invoice numbers."""
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        self._download_invoices(invoice_numbers)
+        self._download_invoices(invoice_numbers, progress_fn)
 
     def run(self, list_path: str | Path) -> None:
         """Download invoices listed in a text file."""
@@ -70,25 +70,26 @@ class SihosDownloader:
         invoice_list = read_lines_from_file(list_path)
         self._download_invoices(invoice_list)
 
-    def run_medication_sheets(self, targets: list[tuple[str, str, str, str]], file_prefix: str) -> None:
+    def run_medication_sheets(self, targets: list[tuple[str, str, str, str]], file_prefix: str, progress_fn=None) -> None:
         """Download medication sheet PDFs for the given targets.
 
         Args:
             targets: List of ``(invoice_number, admission, id_type, id_number)`` tuples.
             file_prefix: Prefix used in the output filename (e.g. the doc type prefix).
+            progress_fn: Optional callable ``(i, total, invoice_number)`` called after each download.
         """
         self._output_dir.mkdir(parents=True, exist_ok=True)
         loop = asyncio.ProactorEventLoop() if sys.platform == "win32" else asyncio.new_event_loop()
         try:
-            loop.run_until_complete(self._async_download_medication_sheets(targets, file_prefix))
+            loop.run_until_complete(self._async_download_medication_sheets(targets, file_prefix, progress_fn))
         finally:
             loop.close()
 
-    def _download_invoices(self, invoice_list: list[str]) -> None:
+    def _download_invoices(self, invoice_list: list[str], progress_fn=None) -> None:
         """Open a browser session and download each invoice."""
         loop = asyncio.ProactorEventLoop() if sys.platform == "win32" else asyncio.new_event_loop()
         try:
-            loop.run_until_complete(self._async_download_invoices(invoice_list))
+            loop.run_until_complete(self._async_download_invoices(invoice_list, progress_fn))
         finally:
             loop.close()
 
@@ -120,12 +121,13 @@ class SihosDownloader:
             finally:
                 await browser.close()
 
-    async def _async_download_invoices(self, invoice_list: list[str]) -> None:
+    async def _async_download_invoices(self, invoice_list: list[str], progress_fn=None) -> None:
         """Async implementation of the browser-based invoice download."""
+        total = len(invoice_list)
         async with self._browser_session() as page:
             if page is None:
                 return
-            for invoice_number in invoice_list:
+            for i, invoice_number in enumerate(invoice_list, 1):
                 url = "{}/modulos/facturacion/imprifact.php?CodiDocu={}&NumeDocu={}&MostSubCeCo=1".format(
                     self._base_url.rstrip("/"),
                     self._invoice_doc_code,
@@ -142,15 +144,18 @@ class SihosDownloader:
                     logger.info("Downloaded invoice %s to %s", invoice_number, out_path)
                 except (PlaywrightTimeoutError, PlaywrightError) as exc:
                     logger.error("Failed to download invoice %s: %s", invoice_number, exc)
+                if progress_fn:
+                    progress_fn(i, total, invoice_number)
 
     async def _async_download_medication_sheets(
-        self, targets: list[tuple[str, str, str, str]], file_prefix: str
+        self, targets: list[tuple[str, str, str, str]], file_prefix: str, progress_fn=None
     ) -> None:
         """Async implementation of medication sheet download."""
+        total = len(targets)
         async with self._browser_session() as page:
             if page is None:
                 return
-            for invoice_number, admission, id_type, id_number in targets:
+            for i, (invoice_number, admission, id_type, id_number) in enumerate(targets, 1):
                 url = (
                     "{}/modulos/comun/medicamentos/impriconso.php?ConsAdmi={}&TipoDocu={}&NumeUsua={}&SinModu=1".format(
                         self._base_url.rstrip("/"), admission, id_type, id_number
@@ -167,3 +172,5 @@ class SihosDownloader:
                     logger.info("Downloaded %s → %s", invoice_number, out_path)
                 except (PlaywrightTimeoutError, PlaywrightError) as exc:
                     logger.error("Failed %s: %s", invoice_number, exc)
+                if progress_fn:
+                    progress_fn(i, total, invoice_number)

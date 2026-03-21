@@ -366,11 +366,17 @@ async def _remove_non_pdf(ctx: dict) -> AsyncGenerator[str, None]:
 
     non_pdf_list, pdf_candidates = await executor(_scan, stage_path)
 
-    # Check each PDF for corruption concurrently via the asyncio executor —
-    # avoids the nested ThreadPoolExecutor that find_unreadable() would create.
-    can_open_results: list[bool] = (
-        await asyncio.gather(*[executor(DocumentReader._can_open, f) for f in pdf_candidates]) if pdf_candidates else []
-    )
+    # Check each PDF for corruption in chunks to report intermediate progress.
+    _PDF_CHECK_CHUNK = 50
+    can_open_results: list[bool] = []
+    if pdf_candidates:
+        total_pdfs = len(pdf_candidates)
+        for chunk_start in range(0, total_pdfs, _PDF_CHECK_CHUNK):
+            chunk = pdf_candidates[chunk_start : chunk_start + _PDF_CHECK_CHUNK]
+            chunk_results = await asyncio.gather(*[executor(DocumentReader._can_open, f) for f in chunk])
+            can_open_results.extend(chunk_results)
+            processed = min(chunk_start + _PDF_CHECK_CHUNK, total_pdfs)
+            yield plog("INFO", f"Verificando PDFs: {processed}/{total_pdfs}")
 
     corrupt_list: list[dict] = []
     for f, ok in zip(pdf_candidates, can_open_results):
@@ -638,7 +644,23 @@ async def _download_invoices_from_sihos(ctx: dict) -> AsyncGenerator[str, None]:
         output_dir=stage_path,
     )
 
-    await executor(downloader.run_from_list, invoice_numbers)
+    loop = asyncio.get_event_loop()
+    progress_q: asyncio.Queue[str] = asyncio.Queue()
+
+    def _on_progress(i: int, total: int, inv: str) -> None:
+        loop.call_soon_threadsafe(progress_q.put_nowait, plog("INFO", f"[{i}/{total}] Factura {inv}"))
+
+    task = asyncio.ensure_future(
+        loop.run_in_executor(None, lambda: downloader.run_from_list(invoice_numbers, _on_progress))
+    )
+    while not task.done():
+        try:
+            yield progress_q.get_nowait()
+        except asyncio.QueueEmpty:
+            await asyncio.sleep(0.3)
+    while not progress_q.empty():
+        yield progress_q.get_nowait()
+    await task  # propaga excepciones
     yield plog("INFO", "Descarga SIHOS completada.")
 
 
@@ -714,7 +736,23 @@ async def _download_medication_sheets(ctx: dict) -> AsyncGenerator[str, None]:
     )
 
     file_prefix = doc_type.prefix or doc_type.code
-    await executor(downloader.run_medication_sheets, targets, file_prefix)
+    loop = asyncio.get_event_loop()
+    progress_q: asyncio.Queue[str] = asyncio.Queue()
+
+    def _on_progress(i: int, total: int, inv: str) -> None:
+        loop.call_soon_threadsafe(progress_q.put_nowait, plog("INFO", f"[{i}/{total}] Factura {inv}"))
+
+    task = asyncio.ensure_future(
+        loop.run_in_executor(None, lambda: downloader.run_medication_sheets(targets, file_prefix, _on_progress))
+    )
+    while not task.done():
+        try:
+            yield progress_q.get_nowait()
+        except asyncio.QueueEmpty:
+            await asyncio.sleep(0.3)
+    while not progress_q.empty():
+        yield progress_q.get_nowait()
+    await task  # propaga excepciones
     yield plog("INFO", "Descarga completada.")
 
 
@@ -746,8 +784,18 @@ async def _check_invoices(ctx: dict) -> AsyncGenerator[str, None]:
     yield plog("INFO", f"Facturas que requieren OCR: {len(needing_ocr)}")
 
     if needing_ocr:
-        result = await executor(DocumentProcessor.batch_ocr, needing_ocr, 8)
-        yield plog("INFO", f"OCR completado — exitosos: {result['success']}, fallidos: {result['failed']}")
+        _OCR_CHUNK = 20
+        totals = {"success": 0, "failed": 0}
+        chunks = [needing_ocr[i : i + _OCR_CHUNK] for i in range(0, len(needing_ocr), _OCR_CHUNK)]
+        for i, chunk in enumerate(chunks, 1):
+            result = await executor(DocumentProcessor.batch_ocr, chunk, 8)
+            totals["success"] += result["success"]
+            totals["failed"] += result["failed"]
+            processed = min(i * _OCR_CHUNK, len(needing_ocr))
+            yield plog(
+                "INFO",
+                f"OCR: {processed}/{len(needing_ocr)} — exitosos: {totals['success']}, fallidos: {totals['failed']}",
+            )
     else:
         yield plog("INFO", "Ninguna factura requiere OCR.")
 
@@ -1480,7 +1528,12 @@ async def _download_drive(ctx: dict) -> AsyncGenerator[str, None]:
 
     stage_path.mkdir(parents=True, exist_ok=True)
     yield plog("INFO", f"Buscando {len(search_names)} carpeta(s) en Drive...")
-    downloaded_prefixed = await executor(drive.download_missing_dirs, search_names, stage_path)
+    downloaded_prefixed: list[str] = []
+    for i, name in enumerate(search_names, 1):
+        result = await executor(drive.download_missing_dirs, [name], stage_path)
+        downloaded_prefixed.extend(result)
+        status = "✓" if result else "✗ no encontrada"
+        yield plog("INFO", f"[{i}/{len(search_names)}] {name} — {status}")
     yield plog("INFO", f"Carpetas descargadas de Drive: {len(downloaded_prefixed)}/{len(missing)}")
 
     if downloaded_prefixed:
@@ -1542,7 +1595,14 @@ async def _download_missing_docs(ctx: dict) -> AsyncGenerator[str, None]:
     ]
 
     yield plog("INFO", f"Buscando {len(download_requests)} documento(s) en Drive...")
-    found, not_found = await executor(drive.download_specific_files, download_requests)
+    found = not_found = 0
+    total_docs = len(download_requests)
+    for i, request in enumerate(download_requests, 1):
+        f, nf = await executor(drive.download_specific_files, [request])
+        found += f
+        not_found += nf
+        status = "✓" if f else "✗ no encontrado"
+        yield plog("INFO", f"[{i}/{total_docs}] {request[0]} — {status}")
     yield plog("INFO", f"Encontrados: {found}, no encontrados: {not_found}")
 
 
