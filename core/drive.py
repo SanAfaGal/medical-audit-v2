@@ -2,6 +2,7 @@
 
 import io
 import logging
+import re
 import time
 from pathlib import Path
 
@@ -139,30 +140,32 @@ class DriveSync:
         if not has_items and depth == 0:
             logger.warning("Folder appears to be empty in Drive: %s", local_path.name)
 
-    def _batch_search_folders(self, targets: list[str]) -> tuple[set[str], list[dict]]:
-        """Search Drive for multiple folder names using batched OR-queries.
+    def _batch_search_folders(self, invoice_numbers: list[str]) -> tuple[set[str], list[dict]]:
+        """Search Drive for folders containing any of the given invoice numbers.
 
-        Each chunk of up to ``_DRIVE_FILE_BATCH_SIZE`` targets is resolved in a
-        single ``files.list`` call.  Results are matched back to targets via a
-        case-insensitive substring check (replicating Drive's ``contains``
-        semantics) and deduplicated by folder ID so each folder is downloaded
-        at most once even when it matches several targets.
+        Uses the invoice number (not a prefixed name) as the search term so
+        that folders with separators or extra text (e.g. "FE-12345",
+        "FE12345 YA") are still matched.  A regex boundary check ensures
+        that a shorter number does not match a longer one (e.g. "123" does
+        not match "FE12345").
+
+        Results are deduplicated by folder ID so each folder is downloaded
+        at most once even when it matches several numbers.
 
         Args:
-            targets: Folder names to search for.
+            invoice_numbers: Plain invoice numbers to search for (no prefix).
 
         Returns:
-            ``(found_targets, unique_folders)`` where ``found_targets`` is the
-            subset of *targets* that matched at least one Drive folder, and
-            ``unique_folders`` is the de-duplicated list of folder dicts ready
-            to download.
+            ``(found_numbers, unique_folders)`` where ``found_numbers`` is the
+            subset of *invoice_numbers* that matched at least one Drive folder,
+            and ``unique_folders`` is the de-duplicated list of folder dicts.
         """
-        found_targets: set[str] = set()
+        found_numbers: set[str] = set()
         folders_by_id: dict[str, dict] = {}
 
-        for offset in range(0, len(targets), _DRIVE_FILE_BATCH_SIZE):
-            chunk = targets[offset : offset + _DRIVE_FILE_BATCH_SIZE]
-            names_clause = " or ".join(f"name contains '{t}'" for t in chunk)
+        for offset in range(0, len(invoice_numbers), _DRIVE_FILE_BATCH_SIZE):
+            chunk = invoice_numbers[offset : offset + _DRIVE_FILE_BATCH_SIZE]
+            names_clause = " or ".join(f"name contains '{n}'" for n in chunk)
             query = f"({names_clause}) and mimeType = '{_DRIVE_FOLDER_MIME}' and trashed = false"
             request = self.service.files().list(
                 q=query,
@@ -175,38 +178,49 @@ class DriveSync:
 
             for folder in results.get("files", []):
                 folders_by_id[folder["id"]] = folder
-                folder_name_lower = folder["name"].lower()
-                for target in chunk:
-                    if target.lower() in folder_name_lower:
-                        found_targets.add(target)
+                for number in chunk:
+                    # Boundary match: the number must not be surrounded by
+                    # other digits, so "123" does not match "FE12345".
+                    if re.search(r"(?<!\d)" + re.escape(number) + r"(?!\d)", folder["name"], re.IGNORECASE):
+                        found_numbers.add(number)
 
-        return found_targets, list(folders_by_id.values())
+        return found_numbers, list(folders_by_id.values())
 
-    def download_missing_dirs(self, dir_names: list[str], local_root: Path) -> list[str]:
-        """Search Drive for a list of folder names and download each one found.
+    def download_missing_dirs(self, invoice_numbers: list[str], local_root: Path) -> list[str]:
+        """Search Drive for folders containing the given invoice numbers and
+        download each one found.
+
+        The search is based on the bare invoice number (e.g. ``"12345"``), not
+        a prefixed name, so folders like ``"FE-12345"`` or ``"FE12345 YA"``
+        are found and downloaded under their original Drive name.  Downstream
+        stages (NORMALIZE_DIR_NAMES) are responsible for renaming them.
+
+        Args:
+            invoice_numbers: Plain invoice numbers to look up (no prefix).
+            local_root: Directory where found folders are downloaded.
 
         Returns:
-            Subset of *dir_names* that were found in Drive and downloaded.
+            Subset of *invoice_numbers* whose folder was found and downloaded.
         """
-        if not dir_names:
+        if not invoice_numbers:
             return []
 
-        logger.info("Searching Drive for %d folder(s)", len(dir_names))
-        found_targets, unique_folders = self._batch_search_folders(dir_names)
+        logger.info("Searching Drive for %d invoice folder(s)", len(invoice_numbers))
+        found_numbers, unique_folders = self._batch_search_folders(invoice_numbers)
 
         for folder in unique_folders:
             self._sync_folder_tree(folder["id"], local_root / folder["name"])
 
-        not_found = set(dir_names) - found_targets
-        for target in sorted(not_found):
-            logger.warning("Folder not found in Drive: %s", target)
+        not_found = set(invoice_numbers) - found_numbers
+        for num in sorted(not_found):
+            logger.warning("No folder found in Drive for invoice: %s", num)
 
         logger.info(
-            "Drive download complete: %d/%d folders found",
-            len(found_targets),
-            len(dir_names),
+            "Drive download complete: %d/%d invoices found",
+            len(found_numbers),
+            len(invoice_numbers),
         )
-        return list(found_targets)
+        return list(found_numbers)
 
     def download_specific_files(self, requests: list[tuple[str, Path]]) -> tuple[int, int]:
         """Search for specific files by name in Drive and download them.

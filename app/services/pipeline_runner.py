@@ -1542,23 +1542,21 @@ async def _download_drive(ctx: dict) -> AsyncGenerator[str, None]:
     drive = DriveSync(credentials_dict=creds)
 
     id_prefix = institution.invoice_id_prefix or ""
-    # Folders on disk (and in Drive) are named PREFIX+invoice_number
-    search_names = [id_prefix + num for num in missing]
 
     stage_path.mkdir(parents=True, exist_ok=True)
-    yield plog("INFO", f"Buscando {len(search_names)} carpeta(s) en Drive...")
-    downloaded_prefixed: list[str] = []
-    for i, name in enumerate(search_names, 1):
-        result = await executor(drive.download_missing_dirs, [name], stage_path)
-        downloaded_prefixed.extend(result)
+    yield plog("INFO", f"Buscando {len(missing)} carpeta(s) en Drive...")
+    # Search by bare invoice number so folders with separators or extra text
+    # (e.g. "FE-12345", "FE12345 YA") are matched.  download_missing_dirs
+    # returns the found invoice numbers directly — no prefix stripping needed.
+    downloaded: list[str] = []
+    for i, num in enumerate(missing, 1):
+        result = await executor(drive.download_missing_dirs, [num], stage_path)
+        downloaded.extend(result)
         status = "✓" if result else "✗ no encontrada"
-        yield plog("INFO", f"[{i}/{len(search_names)}] {name} — {status}")
-    yield plog("INFO", f"Carpetas descargadas de Drive: {len(downloaded_prefixed)}/{len(missing)}")
+        yield plog("INFO", f"[{i}/{len(missing)}] {id_prefix}{num} — {status}")
+    yield plog("INFO", f"Carpetas descargadas de Drive: {len(downloaded)}/{len(missing)}")
 
-    if downloaded_prefixed:
-        # search_names were built as id_prefix + invoice_number, so stripping
-        # the prefix always yields the plain invoice number.
-        downloaded = [name[len(id_prefix) :] for name in downloaded_prefixed]
+    if downloaded:
         updated = await inv_repo.batch_update_folder_status(period.id, downloaded, "PRESENTE")
         await db.commit()
         yield plog("INFO", f"Facturas actualizadas a PRESENTE: {updated}")
