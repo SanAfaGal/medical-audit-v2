@@ -135,13 +135,47 @@
             </div>
           </template>
 
-          <!-- ── Lista unificada ── -->
-          <div class="flex-1 overflow-y-auto py-1">
-            <template x-if="!isSearchActive() && entries.length === 0">
+          <!-- ── Lista unificada (con soporte drag & drop externo) ── -->
+          <div class="flex-1 overflow-y-auto py-1 relative"
+               @dragover="onExplorerDragOver($event)"
+               @dragleave="onExplorerDragLeave($event)"
+               @drop="onExplorerFileDrop($event)">
+
+            <!-- Overlay drag & drop externo -->
+            <div x-show="isDragOver"
+                 class="absolute inset-0 z-20 rounded-md m-1 border-2 border-dashed border-sky-400 bg-sky-50/80 flex flex-col items-center justify-center gap-2 pointer-events-none">
+              <i class="fa-solid fa-cloud-arrow-up text-sky-400 text-2xl"></i>
+              <span class="text-xs text-sky-600 font-medium">Soltar PDFs aquí</span>
+            </div>
+
+            <template x-if="!isSearchActive() && entries.length === 0 && !creatingFolder">
               <div class="px-3 py-4 text-xs text-slate-400 italic text-center">Carpeta vacía</div>
             </template>
             <template x-if="isSearchActive() && !searchLoading && searchQuery && searchResults.length === 0">
               <div class="px-3 py-4 text-xs text-slate-400 italic text-center">Sin resultados</div>
+            </template>
+
+            <!-- ── Fila nueva carpeta (modo creatingFolder) ── -->
+            <template x-if="!isSearchActive() && creatingFolder">
+              <div class="flex items-center gap-1 px-2 py-1.5 border-b border-slate-100">
+                <i class="fa-solid fa-folder text-amber-400 w-3.5 text-center shrink-0 text-xs"></i>
+                <input x-ref="newFolderInput"
+                       x-model="newFolderName"
+                       @keydown.enter="createFolder()"
+                       @keydown.escape="creatingFolder = false; newFolderName = ''"
+                       placeholder="Nombre de la carpeta"
+                       class="flex-1 text-xs border border-sky-400 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-sky-400 min-w-0">
+                <button @mousedown.prevent="createFolder()"
+                        class="shrink-0 p-0.5 rounded text-sky-600 hover:bg-sky-50 hover:text-sky-800"
+                        title="Crear">
+                  <i class="fa-solid fa-check text-[10px]"></i>
+                </button>
+                <button @mousedown.prevent="creatingFolder = false; newFolderName = ''"
+                        class="shrink-0 p-0.5 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                        title="Cancelar">
+                  <i class="fa-solid fa-xmark text-[10px]"></i>
+                </button>
+              </div>
             </template>
 
             <template x-for="entry in isSearchActive() ? searchResults : entries" :key="entry.path">
@@ -175,30 +209,44 @@
                 <template x-if="isSearchActive() || renamingPath !== entry.path">
                   <div @click="isSearchActive()
                                ? navigateToSearchResult(entry)
-                               : pdfMode === 'move'
-                                 ? toggleMoveEntry(entry)
-                                 : pdfMode === 'copy'
-                                   ? toggleCopyEntry(entry)
-                                   : pdfMode === 'merge'
-                                     ? (!entry.is_dir && toggleMergePdf(entry.path))
-                                     : entry.is_dir ? navigateTo(entry.path) : (selectEntry(entry), confirmingDelete = null)"
+                               : pdfMode === 'select'
+                                 ? toggleSelectEntry(entry.path)
+                                 : pdfMode === 'move'
+                                   ? toggleMoveEntry(entry)
+                                   : pdfMode === 'copy'
+                                     ? toggleCopyEntry(entry)
+                                     : pdfMode === 'merge'
+                                       ? (!entry.is_dir && toggleMergePdf(entry.path))
+                                       : entry.is_dir ? navigateTo(entry.path) : (selectEntry(entry), confirmingDelete = null)"
                        @dblclick="!isSearchActive() && entry.is_dir && pdfMode === 'none' && navigateTo(entry.path)"
-                       draggable="true"
-                       @dragstart="onDragStart($event, entry)"
+                       :draggable="pdfMode === 'none'"
+                       @dragstart="pdfMode === 'none' && onDragStart($event, entry)"
                        @dragover.prevent
                        @drop="!isSearchActive() && entry.is_dir && onDrop($event, entry)"
                        :class="isSearchActive()
                          ? 'hover:bg-sky-50 text-slate-700'
-                         : pdfMode === 'move' && movingEntries.find(e => e.path === entry.path)
-                           ? 'bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-300'
-                           : pdfMode === 'copy' && copyingEntries.find(e => e.path === entry.path)
-                             ? 'bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-300'
-                             : pdfMode === 'merge' && selectedPdfs.includes(entry.path)
-                               ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-300'
-                               : selectedEntry && selectedEntry.path === entry.path
-                                 ? 'bg-sky-50 text-sky-700'
-                                 : 'hover:bg-slate-50 text-slate-700'"
+                         : pdfMode === 'select' && selectedEntries.includes(entry.path)
+                           ? 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-200'
+                           : pdfMode === 'select'
+                             ? 'hover:bg-red-50/50 text-slate-700'
+                             : pdfMode === 'move' && movingEntries.find(e => e.path === entry.path)
+                               ? 'bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-300'
+                               : pdfMode === 'copy' && copyingEntries.find(e => e.path === entry.path)
+                                 ? 'bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-300'
+                                 : pdfMode === 'merge' && selectedPdfs.includes(entry.path)
+                                   ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-300'
+                                   : selectedEntry && selectedEntry.path === entry.path
+                                     ? 'bg-sky-50 text-sky-700'
+                                     : 'hover:bg-slate-50 text-slate-700'"
                        class="relative flex items-center gap-2 px-2.5 py-1.5 cursor-pointer select-none text-xs transition-colors">
+
+                    <!-- Checkbox (solo en modo select) -->
+                    <template x-if="!isSearchActive() && pdfMode === 'select'">
+                      <input type="checkbox"
+                             :checked="selectedEntries.includes(entry.path)"
+                             @click.stop="toggleSelectEntry(entry.path)"
+                             class="w-3.5 h-3.5 rounded shrink-0 accent-red-500 cursor-pointer">
+                    </template>
 
                     <i :class="entry.is_dir ? 'fa-solid fa-folder text-amber-400' : 'fa-solid fa-file-pdf text-red-400'"
                        class="w-3.5 text-center shrink-0"></i>
@@ -230,8 +278,8 @@
                           x-text="entry.name"
                           :title="entry.name"></span>
 
-                    <!-- Botones de acción flotantes (solo en modo normal) -->
-                    <div x-show="!isSearchActive() && confirmingDelete !== entry.path"
+                    <!-- Botones de acción flotantes (solo en modo normal, sin selección) -->
+                    <div x-show="!isSearchActive() && pdfMode === 'none' && confirmingDelete !== entry.path"
                          class="absolute right-1 top-1/2 -translate-y-1/2
                                 hidden group-hover:flex items-center gap-0.5
                                 bg-white/95 border border-slate-100 rounded-md shadow-sm px-0.5">
@@ -278,8 +326,9 @@
 
           <!-- ── Toolbar de operaciones ─────────────────────────────── -->
           <div class="flex items-center gap-1.5 px-3 py-2 border-b border-slate-100 shrink-0 bg-slate-50 flex-wrap">
-            <!-- Vista normal -->
-            <template x-if="pdfMode !== 'none'">
+
+            <!-- Volver (todos los modos excepto select y none) -->
+            <template x-if="pdfMode !== 'none' && pdfMode !== 'select'">
               <button @click="pdfMode = 'none'"
                       class="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-slate-500 hover:bg-white hover:text-slate-700 border border-transparent hover:border-slate-200 transition-all">
                 <i class="fa-solid fa-arrow-left text-[10px]"></i>
@@ -287,29 +336,177 @@
               </button>
             </template>
 
-            <template x-if="selectedEntry && !selectedEntry.is_dir && pdfMode === 'none'">
-              <div class="flex items-center gap-1.5">
-                <button @click="pdfMode = 'split'"
-                        class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-600 transition-all">
-                  <i class="fa-solid fa-scissors text-[10px]"></i>
-                  Dividir
+            <!-- ── Toolbar modo selección ── -->
+            <template x-if="pdfMode === 'select'">
+              <div class="flex items-center gap-1.5 flex-1 flex-wrap">
+                <!-- Checkbox seleccionar todo -->
+                <label class="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-slate-600 hover:bg-white border border-transparent hover:border-slate-200 cursor-pointer transition-all select-none">
+                  <input type="checkbox"
+                         class="w-3.5 h-3.5 rounded accent-sky-500 cursor-pointer"
+                         :checked="selectedEntries.length === entries.length && entries.length > 0"
+                         x-effect="$el.indeterminate = selectedEntries.length > 0 && selectedEntries.length < entries.length"
+                         @change="selectAllEntries()">
+                  Todos
+                </label>
+
+                <!-- Eliminar lote -->
+                <button @click="batchDeleteConfirm = true"
+                        :disabled="!selectedEntries.length"
+                        class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+                  <i class="fa-solid fa-trash text-[10px]"></i>
+                  <span>Eliminar</span>
+                  <span x-show="selectedEntries.length" class="font-semibold"
+                        x-text="`(${selectedEntries.length})`"></span>
                 </button>
-                <button @click="startReorder()"
-                        class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:border-violet-300 hover:text-violet-600 transition-all">
-                  <i class="fa-solid fa-sort text-[10px]"></i>
-                  Reordenar
+
+                <!-- Cancelar -->
+                <button @click="pdfMode = 'none'; selectedEntries = []"
+                        class="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-slate-500 hover:bg-white hover:text-slate-700 border border-transparent hover:border-slate-200 transition-all ml-auto">
+                  <i class="fa-solid fa-xmark text-[10px]"></i>
+                  Cancelar
                 </button>
               </div>
             </template>
 
-            <template x-if="pdfMode === 'none' && entries.some(e => !e.is_dir)">
-              <button @click="startMerge()"
-                      class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:border-amber-300 hover:text-amber-600 transition-all">
-                <i class="fa-solid fa-object-group text-[10px]"></i>
-                Unir PDFs
-              </button>
+            <!-- ── Toolbar modo normal ── -->
+            <template x-if="pdfMode === 'none'">
+              <div class="flex items-center gap-1.5 flex-1 flex-wrap">
+
+                <!-- Dividir + Reordenar (solo si hay PDF seleccionado) -->
+                <template x-if="selectedEntry && !selectedEntry.is_dir">
+                  <div class="flex items-center gap-1.5">
+                    <button @click="pdfMode = 'split'"
+                            class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-600 transition-all">
+                      <i class="fa-solid fa-scissors text-[10px]"></i>
+                      Dividir
+                    </button>
+                    <button @click="startReorder()"
+                            class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:border-violet-300 hover:text-violet-600 transition-all">
+                      <i class="fa-solid fa-sort text-[10px]"></i>
+                      Reordenar
+                    </button>
+                  </div>
+                </template>
+
+                <!-- Unir PDFs -->
+                <template x-if="entries.some(e => !e.is_dir)">
+                  <button @click="startMerge()"
+                          class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:border-amber-300 hover:text-amber-600 transition-all">
+                    <i class="fa-solid fa-object-group text-[10px]"></i>
+                    Unir PDFs
+                  </button>
+                </template>
+
+                <!-- Separador flexible -->
+                <div class="flex-1"></div>
+
+                <!-- ── Action strip: Carpeta · Subir · Seleccionar ── -->
+                <div class="flex items-stretch divide-x divide-slate-200 border border-slate-200 rounded-lg bg-white shadow-sm">
+
+                  <!-- Nueva carpeta -->
+                  <button @click="creatingFolder = true; $nextTick(() => $refs.newFolderInput && $refs.newFolderInput.focus())"
+                          class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-amber-700 bg-white hover:bg-amber-50 transition-colors group rounded-l-lg"
+                          title="Crear carpeta">
+                    <i class="fa-solid fa-folder-plus text-amber-500 group-hover:text-amber-600 text-[11px]"></i>
+                    <span class="hidden sm:inline">Nueva carpeta</span>
+                  </button>
+
+                  <!-- Subir (dropdown) -->
+                  <div class="relative flex">
+                    <button @click="uploadMenuOpen = !uploadMenuOpen"
+                            class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-sky-700 bg-white hover:bg-sky-50 transition-colors group"
+                            :class="uploadMenuOpen && 'bg-sky-50'"
+                            title="Subir archivos">
+                      <i class="fa-solid fa-arrow-up-from-bracket text-sky-500 group-hover:text-sky-600 text-[11px]"></i>
+                      <span class="hidden sm:inline">Subir</span>
+                      <i class="fa-solid fa-chevron-down text-sky-400 text-[8px] transition-transform duration-150"
+                         :class="uploadMenuOpen && 'rotate-180'"></i>
+                    </button>
+
+                    <!-- Dropdown menu -->
+                    <div x-show="uploadMenuOpen"
+                         @click.outside="uploadMenuOpen = false"
+                         x-transition:enter="transition ease-out duration-100"
+                         x-transition:enter-start="opacity-0 scale-95 -translate-y-1"
+                         x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                         x-transition:leave="transition ease-in duration-75"
+                         x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                         x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
+                         class="absolute right-0 top-full mt-1 z-30 w-44 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden origin-top-right">
+                      <button @click="$refs.uploadInput.click(); uploadMenuOpen = false"
+                              class="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-slate-700 hover:bg-sky-50 hover:text-sky-700 transition-colors">
+                        <i class="fa-solid fa-file-pdf text-red-400 w-3.5 text-center"></i>
+                        <div class="text-left">
+                          <div class="font-medium">Archivos PDF</div>
+                          <div class="text-[10px] text-slate-400">Uno o varios PDFs</div>
+                        </div>
+                      </button>
+                      <div class="h-px bg-slate-100 mx-2"></div>
+                      <button @click="$refs.uploadFolderInput.click(); uploadMenuOpen = false"
+                              class="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-slate-700 hover:bg-sky-50 hover:text-sky-700 transition-colors">
+                        <i class="fa-solid fa-upload text-amber-400 w-3.5 text-center"></i>
+                        <div class="text-left">
+                          <div class="font-medium">Carpeta completa</div>
+                          <div class="text-[10px] text-slate-400">Sube todos los PDFs</div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Seleccionar -->
+                  <button @click="startSelectMode()"
+                          class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-100 transition-colors group rounded-r-lg"
+                          title="Seleccionar elementos">
+                    <i class="fa-solid fa-check-double text-slate-400 group-hover:text-slate-600 text-[11px]"></i>
+                    <span class="hidden sm:inline">Seleccionar</span>
+                  </button>
+
+                </div>
+
+              </div>
             </template>
+
           </div>
+
+          <!-- Inputs de archivo ocultos -->
+          <input type="file" multiple accept=".pdf" x-ref="uploadInput" class="hidden"
+                 @change="uploadFiles($event.target.files, []); $event.target.value = ''">
+          <input type="file" x-ref="uploadFolderInput" class="hidden"
+                 webkitdirectory
+                 @change="uploadFiles($event.target.files, [...$event.target.files].map(f => f.webkitRelativePath)); $event.target.value = ''">
+
+          <!-- Barra de progreso de upload -->
+          <template x-if="uploadProgress !== null">
+            <div class="shrink-0 px-3 py-2 bg-sky-50 border-b border-sky-100 flex items-center gap-2">
+              <i class="fa-solid fa-arrow-up-from-bracket text-sky-500 text-[10px] shrink-0"></i>
+              <div class="flex-1 min-w-0">
+                <div class="flex justify-between items-center mb-1">
+                  <span class="text-[10px] text-sky-700">
+                    Subiendo archivos…
+                  </span>
+                </div>
+                <div class="h-1.5 bg-sky-200 rounded-full overflow-hidden">
+                  <div class="h-full bg-sky-500 rounded-full transition-all duration-300"
+                       style="width:0%"></div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- ── Modo Select: panel informativo ───────────────────────── -->
+          <template x-if="pdfMode === 'select'">
+            <div class="flex-1 flex flex-col items-center justify-center gap-3 text-slate-300 p-6">
+              <i class="fa-solid fa-check-double text-4xl text-slate-200"></i>
+              <div class="text-center">
+                <div class="text-sm font-medium text-slate-400 mb-1">Modo selección</div>
+                <div class="text-xs text-slate-400"
+                     x-text="selectedEntries.length
+                       ? `${selectedEntries.length} elemento(s) seleccionado(s)`
+                       : 'Haz clic en elementos de la lista para seleccionarlos'">
+                </div>
+              </div>
+            </div>
+          </template>
 
           <!-- ── Preview (modo none) ────────────────────────────────── -->
           <template x-if="pdfMode === 'none'">
@@ -549,6 +746,50 @@
     </div>
   </template>
 </div>
+
+<!-- ── Modal confirmación eliminación en lote ───────────────────────────── -->
+<template x-teleport="body">
+  <div x-show="batchDeleteConfirm"
+       x-transition:enter="transition ease-out duration-150"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-100"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+       @click.self="batchDeleteConfirm = false">
+    <div x-show="batchDeleteConfirm"
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100"
+         class="bg-white rounded-2xl shadow-2xl w-80 p-6 flex flex-col gap-4">
+      <div class="flex items-start gap-3">
+        <div class="shrink-0 w-9 h-9 rounded-full bg-red-100 flex items-center justify-center">
+          <i class="fa-solid fa-trash text-red-500 text-sm"></i>
+        </div>
+        <div>
+          <div class="text-sm font-semibold text-slate-800">
+            ¿Eliminar <span x-text="selectedEntries.length"></span> elemento(s)?
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            Esto incluye carpetas y todo su contenido. Esta acción no se puede deshacer.
+          </p>
+        </div>
+      </div>
+      <div class="flex gap-2 justify-end">
+        <button @click="batchDeleteConfirm = false"
+                class="px-3 py-1.5 rounded-lg text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">
+          Cancelar
+        </button>
+        <button @click="executeBatchDelete()"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors">
+          <i class="fa-solid fa-trash mr-1"></i>
+          Eliminar
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
 
 <!-- ── Toast global (visible aunque el panel esté cerrado) ──────────────── -->
 <template x-teleport="body">
