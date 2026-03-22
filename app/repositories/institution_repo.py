@@ -408,6 +408,45 @@ class InstitutionRepo:
         await self.db.flush()
         return True
 
+    async def consolidate_agreements(self) -> dict[str, int]:
+        """
+        Por cada par canónico (admin_canonical, contract_canonical) con más de un
+        Agreement, mantiene el primario (el que tiene contract_type_id o el de id menor)
+        y redirige todos los Invoice.agreement_id de los duplicados al primario,
+        luego elimina los duplicados.
+        """
+        from sqlalchemy import update as sa_update
+
+        from app.models.invoice import Invoice
+
+        agreements = await self.get_agreements()
+
+        groups: dict[tuple, list] = {}
+        for ag in agreements:
+            ak = (ag.administrator.canonical_name or ag.administrator.raw_name or "").strip().upper()
+            ck = (ag.contract.canonical_name or ag.contract.raw_name or "").strip().upper()
+            groups.setdefault((ak, ck), []).append(ag)
+
+        agreements_deleted = 0
+        invoices_redirected = 0
+
+        for group in groups.values():
+            if len(group) <= 1:
+                continue
+            with_type = sorted([a for a in group if a.contract_type_id], key=lambda a: a.id)
+            without_type = sorted([a for a in group if not a.contract_type_id], key=lambda a: a.id)
+            primary = (with_type + without_type)[0]
+
+            for dup in (a for a in group if a.id != primary.id):
+                result = await self.db.execute(
+                    sa_update(Invoice).where(Invoice.agreement_id == dup.id).values(agreement_id=primary.id)
+                )
+                invoices_redirected += result.rowcount
+                await self.db.delete(dup)
+                agreements_deleted += 1
+
+        return {"agreements_deleted": agreements_deleted, "invoices_redirected": invoices_redirected}
+
     async def delete_institution(self, institution_id: int) -> bool:
         inst = await self.db.get(Institution, institution_id)
         if not inst:

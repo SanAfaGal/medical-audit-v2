@@ -271,6 +271,15 @@ async def delete_contract(contract_id: int, db: AsyncSession = Depends(get_db)):
 # ------------------------------------------------------------------
 
 
+@router.post("/agreements/consolidate")
+async def consolidate_agreements(db: AsyncSession = Depends(get_db)):
+    """Fusiona agreements con el mismo par canónico (admin, contrato)."""
+    repo = InstitutionRepo(db)
+    result = await repo.consolidate_agreements()
+    await db.commit()
+    return result
+
+
 @router.get("/agreements", response_model=list[AgreementOut])
 async def list_agreements(pending_only: bool = False, db: AsyncSession = Depends(get_db)):
     repo = InstitutionRepo(db)
