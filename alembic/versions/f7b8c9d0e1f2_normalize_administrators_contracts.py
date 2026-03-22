@@ -107,19 +107,19 @@ def upgrade():
 
     # 9. Update invoices.institution_contract_id
     op.execute("""
-        UPDATE invoices inv
+        UPDATE invoices
         SET institution_contract_id = ic.id
         FROM institution_contracts ic
-        JOIN audit_periods p ON p.id = inv.audit_period_id
-        JOIN admins old_adm ON old_adm.id = inv.admin_id
+        JOIN audit_periods p ON p.id = invoices.audit_period_id
+        JOIN admins old_adm ON old_adm.id = invoices.admin_id
         JOIN administrators adm ON adm.raw_name = old_adm.raw_admin
-        JOIN contracts old_c ON old_c.id = inv.contract_id
+        JOIN contracts old_c ON old_c.id = invoices.contract_id
         JOIN contracts_global cg ON cg.raw_name = old_c.raw_contract
         WHERE ic.institution_id = p.institution_id
           AND ic.administrator_id = adm.id
           AND ic.contract_id = cg.id
-          AND inv.admin_id IS NOT NULL
-          AND inv.contract_id IS NOT NULL
+          AND invoices.admin_id IS NOT NULL
+          AND invoices.contract_id IS NOT NULL
     """)
 
     # 10. Drop old columns and tables
@@ -186,17 +186,17 @@ def downgrade():
 
     # 7. Restore invoice admin_id and contract_id from institution_contracts
     op.execute("""
-        UPDATE invoices inv
+        UPDATE invoices
         SET
             admin_id = a.id,
             contract_id = c.id
         FROM institution_contracts ic
-        JOIN audit_periods p ON p.id = inv.audit_period_id
+        JOIN audit_periods p ON p.id = invoices.audit_period_id
         JOIN administrators adm ON adm.id = ic.administrator_id
         JOIN admins a ON a.institution_id = p.institution_id AND a.raw_admin = adm.raw_name
         JOIN contracts_global cg ON cg.id = ic.contract_id
         JOIN contracts c ON c.institution_id = p.institution_id AND c.raw_contract = cg.raw_name
-        WHERE inv.institution_contract_id = ic.id
+        WHERE invoices.institution_contract_id = ic.id
     """)
 
     # 8. Drop institution_contract_id from invoices
