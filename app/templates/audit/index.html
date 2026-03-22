@@ -16,8 +16,9 @@
   /* Status left-border on table rows */
   .row-PENDIENTE { border-left: 3px solid #F59E0B; }
   .row-PRESENTE  { border-left: 3px solid #10B981; }
-  .row-FALTANTE  { border-left: 3px solid #EF4444; }
+  .row-FALTANTE  { border-left: 3px solid #F97316; }
   .row-AUDITADA  { border-left: 3px solid #6366F1; }
+  .row-ANULADA   { border-left: 3px solid #EF4444; }
   .row-default   { border-left: 3px solid transparent; }
 
   /* Batch bar slide-up */
@@ -884,8 +885,9 @@ function auditApp() {
       const cfg = {
         PENDIENTE: { activeBg:'bg-amber-50',   activeBorder:'border-amber-300',  activeRing:'ring-amber-300',  activeLabel:'text-amber-600', activeCount:'text-amber-700', activeSub:'text-amber-500',  rawColor:'#b45309', rawBg:'#fffbeb' },
         PRESENTE:  { activeBg:'bg-emerald-50', activeBorder:'border-emerald-300',activeRing:'ring-emerald-300',activeLabel:'text-emerald-600',activeCount:'text-emerald-700',activeSub:'text-emerald-500',rawColor:'#059669', rawBg:'#ecfdf5' },
-        FALTANTE:  { activeBg:'bg-red-50',     activeBorder:'border-red-300',    activeRing:'ring-red-300',    activeLabel:'text-red-600',   activeCount:'text-red-700',   activeSub:'text-red-500',    rawColor:'#dc2626', rawBg:'#fef2f2' },
+        FALTANTE:  { activeBg:'bg-orange-50',  activeBorder:'border-orange-300', activeRing:'ring-orange-300', activeLabel:'text-orange-600',activeCount:'text-orange-700',activeSub:'text-orange-500', rawColor:'#ea580c', rawBg:'#fff7ed' },
         AUDITADA:  { activeBg:'bg-indigo-50',  activeBorder:'border-indigo-300', activeRing:'ring-indigo-300', activeLabel:'text-indigo-600',activeCount:'text-indigo-700',activeSub:'text-indigo-500', rawColor:'#4338ca', rawBg:'#eef2ff' },
+        ANULADA:   { activeBg:'bg-red-50',     activeBorder:'border-red-300',    activeRing:'ring-red-300',    activeLabel:'text-red-600',   activeCount:'text-red-700',   activeSub:'text-red-500',    rawColor:'#dc2626', rawBg:'#fef2f2' },
       };
       return this.folderStatuses.map(fs => ({
         ...fs,
@@ -1169,8 +1171,9 @@ function auditApp() {
       return {
         PRESENTE:  'bg-emerald-100 text-emerald-700',
         PENDIENTE: 'bg-amber-100   text-amber-700',
-        FALTANTE:  'bg-red-100     text-red-700',
+        FALTANTE:  'bg-orange-100  text-orange-700',
         AUDITADA:  'bg-indigo-100  text-indigo-700',
+        ANULADA:   'bg-red-100     text-red-700',
       }[status] || 'bg-gray-100 text-gray-600';
     },
   };
