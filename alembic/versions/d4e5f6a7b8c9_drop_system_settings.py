@@ -14,7 +14,7 @@ depends_on = None
 
 
 def upgrade():
-    op.drop_table("system_settings")
+    op.execute("DROP TABLE IF EXISTS system_settings")
 
 
 def downgrade():
