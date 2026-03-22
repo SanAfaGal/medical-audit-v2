@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 
@@ -16,6 +17,17 @@ from app.paths import to_container_path
 from app.repositories.rules_repo import RulesRepo
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _sihos_excel_name(institution: Institution, period: AuditPeriod) -> str:
+    """Return the canonical filename for a saved SIHOS Excel: SIHOS_{name}_{period}.xlsx"""
+    name = re.sub(r"[^\w\-]", "_", institution.name).strip("_")
+    return f"SIHOS_{name}_{period.period_label}.xlsx"
+
 
 # ---------------------------------------------------------------------------
 # Stage registry
@@ -205,8 +217,9 @@ async def _load_and_process(ctx: dict) -> AsyncGenerator[str, None]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
 
-    await executor(_save_excel, base_path / "sihos.xlsx", file_bytes)
-    yield plog("INFO", "Excel guardado para futuras re-categorizaciones.")
+    excel_name = _sihos_excel_name(ctx["institution"], ctx["period"])
+    await executor(_save_excel, base_path / excel_name, file_bytes)
+    yield plog("INFO", f"Excel guardado como {excel_name} para futuras re-categorizaciones.")
 
 
 @_stage("RECATEGORIZE_SERVICES")
@@ -221,7 +234,7 @@ async def _recategorize_services(ctx: dict) -> AsyncGenerator[str, None]:
     period = ctx["period"]
     db: AsyncSession = ctx["db"]
 
-    excel_path = base_path / "sihos.xlsx"
+    excel_path = base_path / _sihos_excel_name(institution, period)
     if not excel_path.exists():
         yield plog("ERROR", "No se encontró el Excel guardado. Ejecuta primero 'Cargar reporte SIHOS'.")
         return
