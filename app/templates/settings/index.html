@@ -809,6 +809,12 @@
               <input type="checkbox" x-model="normPendingOnly" class="w-3.5 h-3.5 rounded cursor-pointer" style="accent-color:var(--amber)" />
               <span class="text-xs" style="color:var(--text-2)">Solo pendientes</span>
             </label>
+            <button @click="consolidateAgreements()"
+                    class="cfg-btn-sm flex items-center gap-1"
+                    title="Fusiona convenios con el mismo nombre canónico">
+              <i class="fa-solid fa-compress-arrows-alt text-xs"></i>
+              Consolidar duplicados
+            </button>
           </div>
           <!-- Empty state -->
           <div x-show="agreements.length === 0" class="py-10 text-center text-sm" style="color:var(--text-3)">
@@ -845,50 +851,50 @@
                     <i class="fa-solid fa-user-shield text-[10px]" style="color:var(--sky)"></i>
                     <span class="text-xs font-bold" style="color:var(--text-1)" x-text="group.label"></span>
                     <span class="text-[10px] px-1.5 py-0.5 rounded-full ml-auto font-semibold"
-                          :style="group.items.filter(a => a.contract_type_id).length === group.items.length
+                          :style="group.items.filter(i => i.primaryAg.contract_type_id).length === group.items.length
                             ? 'background:var(--emerald-soft);color:var(--emerald);border:1px solid var(--emerald-border)'
                             : 'background:var(--bg-surface);border:1px solid var(--border);color:var(--text-3)'"
-                          x-text="group.items.filter(a => a.contract_type_id).length + '/' + group.items.length + ' asignados'"></span>
+                          x-text="group.items.filter(i => i.primaryAg.contract_type_id).length + '/' + group.items.length + ' asignados'"></span>
                   </div>
                   <!-- Progress bar -->
                   <div class="h-1 rounded-full overflow-hidden" style="background:var(--border)">
                     <div class="h-full rounded-full transition-all duration-300"
-                         :style="'width:' + (group.items.filter(a => a.contract_type_id).length / group.items.length * 100) + '%;background:' + (group.items.filter(a => a.contract_type_id).length === group.items.length ? 'var(--emerald)' : 'var(--sky)')"></div>
+                         :style="'width:' + (group.items.filter(i => i.primaryAg.contract_type_id).length / group.items.length * 100) + '%;background:' + (group.items.filter(i => i.primaryAg.contract_type_id).length === group.items.length ? 'var(--emerald)' : 'var(--sky)')"></div>
                   </div>
                 </div>
                 <!-- Agreement rows -->
                 <div>
-                  <template x-for="ag in group.items" :key="ag.id">
+                  <template x-for="item in group.items" :key="item.label">
                     <div class="flex items-center gap-3 px-4 py-2.5"
                          style="border-bottom:1px solid var(--border-soft)">
                       <!-- Status dot -->
                       <div class="w-1.5 h-1.5 rounded-full shrink-0 mt-0.5"
-                           :style="ag.contract_type_id ? 'background:var(--emerald)' : 'background:var(--amber)'"></div>
+                           :style="item.primaryAg.contract_type_id ? 'background:var(--emerald)' : 'background:var(--amber)'"></div>
                       <!-- Contract name -->
                       <div class="flex-1 min-w-0">
                         <div class="text-xs font-medium truncate" style="color:var(--text-1)"
-                             x-text="ag.contract?.canonical_name || ag.contract?.raw_name || '—'"></div>
-                        <div x-show="ag.contract?.canonical_name && ag.contract?.raw_name !== ag.contract?.canonical_name"
+                             x-text="item.label"></div>
+                        <div x-show="item.primaryAg.contract?.canonical_name && item.primaryAg.contract?.raw_name !== item.primaryAg.contract?.canonical_name"
                              class="font-mono text-[10px] mt-0.5 truncate"
-                             style="color:var(--text-3)" x-text="ag.contract?.raw_name"></div>
+                             style="color:var(--text-3)" x-text="item.primaryAg.contract?.raw_name"></div>
                       </div>
                       <!-- Type selector -->
                       <div class="flex items-center gap-1.5 shrink-0">
                         <select
-                          @change="setAgreementType(ag.id, $event.target.value || null)"
-                          :disabled="savingAgreementId === ag.id"
+                          @change="setAgreementType(item.allIds, $event.target.value || null)"
+                          :disabled="savingAgreementId === item.allIds[0]"
                           class="cfg-input-sm"
                           style="min-width:140px"
-                          :class="savingAgreementId === ag.id ? 'opacity-50' : ''"
-                          :style="!ag.contract_type_id ? 'border-color:var(--amber-border)' : 'border-color:var(--emerald-border)'">
-                          <option value="" :selected="!ag.contract_type_id" style="color:var(--text-3)">— Sin tipo —</option>
+                          :class="savingAgreementId === item.allIds[0] ? 'opacity-50' : ''"
+                          :style="!item.primaryAg.contract_type_id ? 'border-color:var(--amber-border)' : 'border-color:var(--emerald-border)'">
+                          <option value="" :selected="!item.primaryAg.contract_type_id" style="color:var(--text-3)">— Sin tipo —</option>
                           <template x-for="ct in contractTypes" :key="ct.id">
-                            <option :value="ct.id" :selected="ct.id === ag.contract_type_id" x-text="ct.name"></option>
+                            <option :value="ct.id" :selected="ct.id === item.primaryAg.contract_type_id" x-text="ct.name"></option>
                           </template>
                         </select>
-                        <i x-show="savingAgreementId === ag.id" class="fa-solid fa-spinner fa-spin text-[10px]" style="color:var(--text-3);width:12px"></i>
-                        <i x-show="ag.contract_type_id && savingAgreementId !== ag.id" class="fa-solid fa-circle-check text-[10px]" style="color:var(--emerald);width:12px"></i>
-                        <span x-show="!ag.contract_type_id && savingAgreementId !== ag.id" style="width:12px"></span>
+                        <i x-show="savingAgreementId === item.allIds[0]" class="fa-solid fa-spinner fa-spin text-[10px]" style="color:var(--text-3);width:12px"></i>
+                        <i x-show="item.primaryAg.contract_type_id && savingAgreementId !== item.allIds[0]" class="fa-solid fa-circle-check text-[10px]" style="color:var(--emerald);width:12px"></i>
+                        <span x-show="!item.primaryAg.contract_type_id && savingAgreementId !== item.allIds[0]" style="width:12px"></span>
                       </div>
                     </div>
                   </template>
@@ -1895,29 +1901,68 @@ function settingsApp() {
 
     get groupedAgreements() {
       const list = this.filteredAgreements;
-      const groups = {};
+
+      // Nivel 1: agrupar por canonical_admin normalizado
+      const adminGroups = {};
       for (const ag of list) {
-        const key = ag.administrator?.canonical_name || ag.administrator?.raw_name || '—';
-        if (!groups[key]) groups[key] = { label: key, items: [] };
-        groups[key].items.push(ag);
+        const rawAdmin = (ag.administrator?.canonical_name || ag.administrator?.raw_name || '—').trim();
+        const adminKey = rawAdmin.toUpperCase();
+        if (!adminGroups[adminKey]) adminGroups[adminKey] = { label: rawAdmin, agreements: [] };
+        adminGroups[adminKey].agreements.push(ag);
       }
-      return Object.values(groups).sort((a, b) => a.label.localeCompare(b.label));
+
+      // Nivel 2: dentro de cada admin, deduplicar por canonical_contract
+      const result = [];
+      for (const adminGroup of Object.values(adminGroups)) {
+        const contractGroups = {};
+        for (const ag of adminGroup.agreements) {
+          const rawContract = (ag.contract?.canonical_name || ag.contract?.raw_name || '—').trim();
+          const contractKey = rawContract.toUpperCase();
+          if (!contractGroups[contractKey]) {
+            contractGroups[contractKey] = { label: rawContract, primaryAg: ag, allIds: [] };
+          }
+          contractGroups[contractKey].allIds.push(ag.id);
+          // Preferir como primario el que ya tenga contract_type asignado
+          if (ag.contract_type_id && !contractGroups[contractKey].primaryAg.contract_type_id) {
+            contractGroups[contractKey].primaryAg = ag;
+          }
+        }
+        const items = Object.values(contractGroups).sort((a, b) => a.label.localeCompare(b.label));
+        result.push({ label: adminGroup.label, items });
+      }
+      return result.sort((a, b) => a.label.localeCompare(b.label));
     },
 
-    async setAgreementType(agreementId, contractTypeId) {
-      this.savingAgreementId = agreementId;
-      const res = await fetch(`/api/institutions/agreements/${agreementId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contract_type_id: contractTypeId ? parseInt(contractTypeId) : null }),
-      });
+    async setAgreementType(allIds, contractTypeId) {
+      const typeVal = contractTypeId ? parseInt(contractTypeId) : null;
+      this.savingAgreementId = allIds[0];
+      let ok = true;
+      for (const id of allIds) {
+        const res = await fetch(`/api/institutions/agreements/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contract_type_id: typeVal }),
+        });
+        if (res.ok) {
+          const idx = this.agreements.findIndex(a => a.id === id);
+          if (idx >= 0) this.agreements[idx].contract_type_id = typeVal;
+        } else { ok = false; }
+      }
       this.savingAgreementId = null;
+      this.showToast(ok ? 'Tipo de convenio actualizado.' : 'Error al actualizar.', ok ? 'success' : 'error');
+    },
+
+    async consolidateAgreements() {
+      const res = await fetch('/api/institutions/agreements/consolidate', { method: 'POST' });
+      const data = await res.json();
       if (res.ok) {
-        const idx = this.agreements.findIndex(a => a.id === agreementId);
-        if (idx >= 0) this.agreements[idx].contract_type_id = contractTypeId ? parseInt(contractTypeId) : null;
-        this.showToast('Tipo de convenio actualizado.');
+        const msg = data.agreements_deleted > 0
+          ? `Consolidado: ${data.agreements_deleted} convenio(s) eliminado(s), ${data.invoices_redirected} factura(s) redirigida(s).`
+          : 'Sin duplicados que consolidar.';
+        this.showToast(msg);
+        await this.loadNormalization();
       } else {
-        this.showToast('Error al actualizar.', 'error');
+        this.showToast('Error al consolidar.', 'error');
       }
     },
 
