@@ -152,13 +152,26 @@ async def ingest(
             "unknown_services": unknown_services,
         }
 
-    # ── Phase 3b: load/create agreements for new pairs ────────────────────
+    # ── Phase 3b: load/create agreements — canonical-aware ────────────────
     ic_list = await inst_repo.get_agreements()
+
+    # Cache por raw pair para lookup rápido
     ic_cache: dict[tuple[str, str], Agreement] = {
         (ic.administrator.raw_name, ic.contract.raw_name): ic for ic in ic_list
     }
 
-    # Collect unique (raw_admin, raw_contract) pairs from Excel
+    # Cache canónico para deduplicación: prefiere el que ya tiene contract_type_id
+    ic_cache_canonical: dict[tuple[str, str], Agreement] = {}
+    for ic in ic_list:
+        ak = (ic.administrator.canonical_name or ic.administrator.raw_name).strip().upper()
+        ck = (ic.contract.canonical_name or ic.contract.raw_name).strip().upper()
+        key = (ak, ck)
+        if key not in ic_cache_canonical or (
+            ic.contract_type_id and not ic_cache_canonical[key].contract_type_id
+        ):
+            ic_cache_canonical[key] = ic
+
+    # Recolectar pares únicos del Excel
     raw_pairs: set[tuple[str, str]] = set()
     for _, row in df.iterrows():
         raw_admin = str(row.get("ADMINISTRADORA", "") or "").strip()
@@ -166,15 +179,31 @@ async def ingest(
         if raw_admin:
             raw_pairs.add((raw_admin, raw_contract))
 
-    new_pairs = raw_pairs - ic_cache.keys()
-    if new_pairs:
+    # Por cada par raw, verificar si ya existe un agreement canónico equivalente
+    new_pairs_to_create: list[tuple[str, str]] = []
+    for raw_admin, raw_contract in raw_pairs:
+        if (raw_admin, raw_contract) in ic_cache:
+            continue  # raw pair exacto ya existe
+
+        admin_obj = adm_cache.get(raw_admin)
+        contract_obj = ctr_cache.get(raw_contract)
+        if admin_obj and contract_obj:
+            ak = (admin_obj.canonical_name or raw_admin).strip().upper()
+            ck = (contract_obj.canonical_name or raw_contract).strip().upper()
+            if (ak, ck) in ic_cache_canonical:
+                # Reutilizar el agreement canónico existente para este raw pair
+                ic_cache[(raw_admin, raw_contract)] = ic_cache_canonical[(ak, ck)]
+                continue
+        new_pairs_to_create.append((raw_admin, raw_contract))
+
+    if new_pairs_to_create:
         new_ic_values = [
             {
                 "administrator_id": adm_cache[a].id,
                 "contract_id": ctr_cache[c].id,
                 "contract_type_id": None,
             }
-            for a, c in new_pairs
+            for a, c in new_pairs_to_create
             if a in adm_cache and c in ctr_cache
         ]
         if new_ic_values:
