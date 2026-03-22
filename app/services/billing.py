@@ -162,14 +162,12 @@ async def ingest(
 
     # Cache canónico para deduplicación: prefiere el que ya tiene contract_type_id
     ic_cache_canonical: dict[tuple[str, str], Agreement] = {}
-    for ic in ic_list:
-        ak = (ic.administrator.canonical_name or ic.administrator.raw_name).strip().upper()
-        ck = (ic.contract.canonical_name or ic.contract.raw_name).strip().upper()
+    for ag in ic_list:
+        ak = (ag.administrator.canonical_name or ag.administrator.raw_name).strip().upper()
+        ck = (ag.contract.canonical_name or ag.contract.raw_name).strip().upper()
         key = (ak, ck)
-        if key not in ic_cache_canonical or (
-            ic.contract_type_id and not ic_cache_canonical[key].contract_type_id
-        ):
-            ic_cache_canonical[key] = ic
+        if key not in ic_cache_canonical or (ag.contract_type_id and not ic_cache_canonical[key].contract_type_id):
+            ic_cache_canonical[key] = ag
 
     # Recolectar pares únicos del Excel
     raw_pairs: set[tuple[str, str]] = set()
@@ -232,7 +230,7 @@ async def ingest(
         raw_contract = str(row.get("CONTRATO", "") or "").strip()
         raw_service = str(row.get("SERVICIO", "") or "").strip()
 
-        ic = ic_cache.get((raw_admin, raw_contract)) if raw_admin else None
+        ic: Agreement | None = ic_cache.get((raw_admin, raw_contract)) if raw_admin else None
         service = svc_cache.get(raw_service) if raw_service else None
         service_type_id = service.service_type_id if service else None
 

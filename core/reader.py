@@ -43,7 +43,7 @@ class DocumentReader:
         """Return True if the PDF opens successfully and has at least one page."""
         try:
             with fitz.open(file_path) as doc:
-                return doc.page_count > 0
+                return bool(doc.page_count > 0)
         except (fitz.FileDataError, OSError, RuntimeError):
             return False
 

@@ -27,7 +27,7 @@ router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
 
 def get_task_manager(request: Request) -> PipelineTaskManager:
-    return request.app.state.task_manager
+    return request.app.state.task_manager  # type: ignore[no-any-return]
 
 
 @router.get("/run/{stage}")

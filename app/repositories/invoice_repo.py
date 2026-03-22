@@ -198,7 +198,7 @@ class InvoiceRepo:
                 .where(Invoice.audit_period_id == period_id, Invoice.invoice_number == invoice_number)
                 .values(service_type_id=service_type_id)
             )
-            count += result.rowcount
+            count += result.rowcount  # type: ignore[attr-defined]
         await self.db.flush()
         return count
 
@@ -213,7 +213,7 @@ class InvoiceRepo:
     async def batch_delete_invoices(self, invoice_ids: list[int]) -> int:
         result = await self.db.execute(delete(Invoice).where(Invoice.id.in_(invoice_ids)))
         await self.db.flush()
-        return result.rowcount
+        return result.rowcount  # type: ignore[attr-defined, no-any-return]
 
     # ------------------------------------------------------------------
     # Pipeline helpers
@@ -272,7 +272,7 @@ class InvoiceRepo:
             .values(folder_status_id=fs.id)
         )
         await self.db.flush()
-        return result.rowcount
+        return result.rowcount  # type: ignore[attr-defined, no-any-return]
 
     async def get_organizable_invoices(self, period_id: int) -> list[Invoice]:
         """Return PRESENTE invoices with no unresolved missing files, with agreement loaded."""

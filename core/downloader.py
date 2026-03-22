@@ -70,7 +70,9 @@ class SihosDownloader:
         invoice_list = read_lines_from_file(list_path)
         self._download_invoices(invoice_list)
 
-    def run_medication_sheets(self, targets: list[tuple[str, str, str, str]], file_prefix: str, progress_fn=None) -> None:
+    def run_medication_sheets(
+        self, targets: list[tuple[str, str, str, str]], file_prefix: str, progress_fn=None
+    ) -> None:
         """Download medication sheet PDFs for the given targets.
 
         Args:

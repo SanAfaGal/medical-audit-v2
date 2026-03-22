@@ -205,8 +205,9 @@ def _mock_repos(*, admins=None, contracts=None, services=None, agreements=None, 
         else [
             SimpleNamespace(
                 id=5,
-                administrator=SimpleNamespace(raw_name="NUEVA EPS"),
-                contract=SimpleNamespace(raw_name="C001"),
+                contract_type_id=None,
+                administrator=SimpleNamespace(raw_name="NUEVA EPS", canonical_name=None),
+                contract=SimpleNamespace(raw_name="C001", canonical_name=None),
             ),
         ]
     )

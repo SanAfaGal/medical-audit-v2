@@ -91,6 +91,14 @@ module = [
     "prometheus_fastapi_instrumentator.*",
     "py7zr.*",
     "rarfile.*",
+    "pandas",
+    "pandas.*",
+    "openpyxl",
+    "openpyxl.*",
+    "asyncpg",
+    "asyncpg.*",
+    "aiofiles",
+    "aiofiles.*",
 ]
 ignore_missing_imports = true
 

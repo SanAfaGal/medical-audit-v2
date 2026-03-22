@@ -140,4 +140,4 @@ class MissingFileRepo:
             return 0
         result = await self.db.execute(delete(MissingFile).where(MissingFile.invoice_id.in_(invoice_ids)))
         await self.db.flush()
-        return result.rowcount
+        return result.rowcount  # type: ignore[attr-defined, no-any-return]

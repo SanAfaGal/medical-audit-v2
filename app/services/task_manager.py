@@ -100,6 +100,8 @@ class PipelineTaskManager:
             async with AsyncSessionLocal() as db:
                 institution = await InstitutionRepo(db).get_by_id(institution_id)
                 period = await InvoiceRepo(db).get_period_by_id(period_id)
+                if institution is None or period is None:
+                    raise RuntimeError(f"Institution {institution_id} or period {period_id} not found")
                 async for line in pipeline_runner.execute(stage, institution, period, db, extra):
                     async with run._condition:
                         run.logs.append(line)

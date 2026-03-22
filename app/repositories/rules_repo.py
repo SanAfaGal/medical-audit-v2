@@ -100,11 +100,12 @@ class RulesRepo:
         await self.db.refresh(obj)
         return obj
 
-    async def update_folder_status_obj(self, fs_id: int, status: str) -> FolderStatus | None:
+    async def update_folder_status_obj(self, fs_id: int, status: str | None) -> FolderStatus | None:
         obj = await self.db.get(FolderStatus, fs_id)
         if not obj:
             return None
-        obj.status = status
+        if status is not None:
+            obj.status = status
         await self.db.flush()
         return obj
 
@@ -159,7 +160,7 @@ class RulesRepo:
     async def get_all_active_doc_type_prefixes(self) -> list[str]:
         """Return a flat list of all non-null doc type prefixes."""
         result = await self.db.execute(select(DocType.prefix).where(DocType.prefix.isnot(None)))
-        return list(result.scalars().all())
+        return [p for p in result.scalars().all() if p is not None]
 
     # ------------------------------------------------------------------
     # Prefix corrections

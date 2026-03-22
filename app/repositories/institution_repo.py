@@ -329,7 +329,7 @@ class InstitutionRepo:
             row = result2.scalar_one()
         return row
 
-    async def set_service_type(self, service_id: int, service_type_id: int) -> None:
+    async def set_service_type(self, service_id: int, service_type_id: int | None) -> None:
         service = await self.db.get(Service, service_id)
         if service:
             service.service_type_id = service_type_id
@@ -421,7 +421,7 @@ class InstitutionRepo:
 
         agreements = await self.get_agreements()
 
-        groups: dict[tuple, list] = {}
+        groups: dict[tuple[str, str], list[Agreement]] = {}
         for ag in agreements:
             ak = (ag.administrator.canonical_name or ag.administrator.raw_name or "").strip().upper()
             ck = (ag.contract.canonical_name or ag.contract.raw_name or "").strip().upper()
@@ -441,7 +441,7 @@ class InstitutionRepo:
                 result = await self.db.execute(
                     sa_update(Invoice).where(Invoice.agreement_id == dup.id).values(agreement_id=primary.id)
                 )
-                invoices_redirected += result.rowcount
+                invoices_redirected += result.rowcount  # type: ignore[attr-defined]
                 await self.db.delete(dup)
                 agreements_deleted += 1
 

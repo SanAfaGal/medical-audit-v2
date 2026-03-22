@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Stage registry
 # ---------------------------------------------------------------------------
 
-_STAGE_HANDLERS: dict[str, "_StageHandler"] = {}
+_STAGE_HANDLERS: dict[str, _StageHandler] = {}
 
 
 def _stage(name: str):
@@ -38,7 +38,7 @@ def _stage(name: str):
 # Type alias
 # ---------------------------------------------------------------------------
 
-_StageHandler = "async def f(ctx: dict) -> AsyncGenerator[str, None]"
+_StageHandler = Callable[..., AsyncGenerator[str, None]]
 
 
 # ---------------------------------------------------------------------------
@@ -631,7 +631,6 @@ async def _download_invoices_from_sihos(ctx: dict) -> AsyncGenerator[str, None]:
 
     yield plog("INFO", f"Descargando {len(invoice_numbers)} factura(s) desde SIHOS...")
 
-    executor = _get_executor()
     password = decrypt(institution.sihos_password)
     downloader = SihosDownloader(
         user=institution.sihos_user,
@@ -722,7 +721,6 @@ async def _download_medication_sheets(ctx: dict) -> AsyncGenerator[str, None]:
 
     yield plog("INFO", f"Descargando {len(targets)} factura(s) desde SIHOS...")
 
-    executor = _get_executor()
     password = decrypt(institution.sihos_password)
     downloader = SihosDownloader(
         user=institution.sihos_user,
@@ -787,7 +785,6 @@ async def _check_invoices(ctx: dict) -> AsyncGenerator[str, None]:
         import os as _os
 
         workers = max(_os.cpu_count() or 4, 4)
-        total_ocr = len(needing_ocr)
         yield plog("INFO", f"Workers OCR: {workers}")
 
         loop = asyncio.get_event_loop()
@@ -795,14 +792,10 @@ async def _check_invoices(ctx: dict) -> AsyncGenerator[str, None]:
         totals = {"success": 0, "failed": 0}
 
         def _on_ocr_progress(i: int, total: int, fname: str) -> None:
-            loop.call_soon_threadsafe(
-                progress_q.put_nowait, plog("INFO", f"OCR [{i}/{total}] {fname}")
-            )
+            loop.call_soon_threadsafe(progress_q.put_nowait, plog("INFO", f"OCR [{i}/{total}] {fname}"))
 
         ocr_task = asyncio.ensure_future(
-            loop.run_in_executor(
-                None, lambda: DocumentProcessor.batch_ocr(needing_ocr, workers, _on_ocr_progress)
-            )
+            loop.run_in_executor(None, lambda: DocumentProcessor.batch_ocr(needing_ocr, workers, _on_ocr_progress))
         )
         while not ocr_task.done():
             try:
@@ -1104,7 +1097,7 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
         """Returns {invoice_id: (invoice_number, [missing_doc_type_ids])}"""
         results: dict[int, tuple[str, list[int]]] = {}
         for inv_id, inv_number, svc_type_id in inv_data:
-            required_dt_ids = std_map.get(svc_type_id, [])
+            required_dt_ids = std_map.get(svc_type_id, []) if svc_type_id is not None else []
             if not required_dt_ids:
                 continue
             required_prefixes = {str(dt_id): prefix_map.get(dt_id, []) for dt_id in required_dt_ids}
@@ -1127,7 +1120,11 @@ async def _check_required_docs(ctx: dict) -> AsyncGenerator[str, None]:
     invoices_with_findings = [inv_number for _, (inv_number, _) in findings_map.items()]
     for inv_id, (inv_number, dt_ids) in findings_map.items():
         ct = _ct_for_folder(inv_number, ct_map)
-        doc_str = dt_name.get(dt_ids[0], str(dt_ids[0])) if len(dt_ids) == 1 else ", ".join(dt_name.get(d, str(d)) for d in dt_ids)
+        doc_str = (
+            dt_name.get(dt_ids[0], str(dt_ids[0]))
+            if len(dt_ids) == 1
+            else ", ".join(dt_name.get(d, str(d)) for d in dt_ids)
+        )
         yield plog("WARN", f"Faltantes ({doc_str})", folder=inv_number, contract_type=ct)
 
     if invoices_with_findings:
@@ -1668,7 +1665,10 @@ async def _compress_audit(ctx: dict) -> AsyncGenerator[str, None]:
     chunks = [pdfs[i : i + _COMPRESS_CHUNK] for i in range(0, total, _COMPRESS_CHUNK)]
 
     for i, chunk in enumerate(chunks, 1):
-        result = await loop.run_in_executor(None, lambda c=chunk: DocumentProcessor.batch_compress(c, "ebook", workers))
+        _chunk = chunk
+        result: dict[str, int] = await loop.run_in_executor(
+            None, lambda c=_chunk: DocumentProcessor.batch_compress(c, "ebook", workers)
+        )  # type: ignore[misc]
         for key in totals:
             totals[key] += result[key]
         processed = min(i * _COMPRESS_CHUNK, total)

@@ -15,4 +15,4 @@ class Settings(BaseSettings):
     docs_enabled: bool = True
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]

@@ -79,8 +79,8 @@ class BatchDeleteResult(BaseModel):
 class MkdirRequest(BaseModel):
     institution_id: int
     period_id: int
-    path: str = ""   # carpeta padre relativa al sandbox (vacío = raíz)
-    name: str        # nombre de la nueva carpeta
+    path: str = ""  # carpeta padre relativa al sandbox (vacío = raíz)
+    name: str  # nombre de la nueva carpeta
 
 
 class UploadResult(BaseModel):

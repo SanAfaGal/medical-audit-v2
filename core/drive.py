@@ -46,7 +46,7 @@ class DriveSync:
         delay = _RETRY_BACKOFF_BASE
         for attempt in range(_MAX_RETRIES + 1):
             try:
-                return request.execute()
+                return request.execute()  # type: ignore[no-any-return]
             except HttpError as exc:
                 if exc.status_code not in _RETRYABLE_STATUS or attempt == _MAX_RETRIES:
                     raise
@@ -72,7 +72,7 @@ class DriveSync:
             includeItemsFromAllDrives=True,
         )
         results = self._execute_with_retry(request)
-        return results.get("files", [])
+        return results.get("files", [])  # type: ignore[no-any-return]
 
     def download_file(self, file_id: str, file_name: str, local_dir: Path) -> None:
         """Download a single file from Drive to the local filesystem."""
