@@ -5,9 +5,6 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import fitz
-import pdfplumber
-
 _PDF_CHECK_WORKERS = min(16, (os.cpu_count() or 4) * 2)
 
 logger = logging.getLogger(__name__)
@@ -41,6 +38,8 @@ class DocumentReader:
     @staticmethod
     def _can_open(file_path: Path) -> bool:
         """Return True if the PDF opens successfully and has at least one page."""
+        import fitz
+
         try:
             with fitz.open(file_path) as doc:
                 return bool(doc.page_count > 0)
@@ -50,6 +49,8 @@ class DocumentReader:
     @staticmethod
     def read_text(file_path: Path) -> str:
         """Extract all text from a PDF file."""
+        import fitz
+
         try:
             with fitz.open(file_path) as doc:
                 return "".join(page.get_text() for page in doc)
@@ -60,6 +61,8 @@ class DocumentReader:
     @staticmethod
     def read_table_text(file_path: Path) -> str | None:
         """Extract text from the service table only, ignoring all other PDF content."""
+        import pdfplumber
+
         try:
             with pdfplumber.open(file_path) as pdf:
                 for page in pdf.pages:
@@ -90,6 +93,8 @@ class DocumentReader:
             return []
 
         def _needs_ocr(f: Path) -> bool:
+            import fitz
+
             try:
                 with fitz.open(f) as doc:
                     if doc.page_count == 0:
