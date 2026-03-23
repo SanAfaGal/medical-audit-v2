@@ -2,6 +2,7 @@
 # Docker Compose lo aplica automáticamente encima de docker-compose.yml
 services:
   adminer:
+    container_name: medical-audit-dev-adminer
     image: adminer:latest
     restart: unless-stopped
     ports:
@@ -11,6 +12,7 @@ services:
 
   # ── Prometheus ────────────────────────────────────────────────────────────
   prometheus:
+    container_name: medical-audit-dev-prometheus
     image: prom/prometheus:v2.51.0
     restart: unless-stopped
     volumes:
@@ -22,6 +24,7 @@ services:
 
   # ── Grafana ───────────────────────────────────────────────────────────────
   grafana:
+    container_name: medical-audit-dev-grafana
     image: grafana/grafana:10.4.0
     restart: unless-stopped
     environment:
