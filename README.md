@@ -1,144 +1,163 @@
 # Medical Audit v2
 
-A production-ready web application for automating the document audit process of medical billing in Colombian healthcare institutions. It ingests invoices from SIHOS, validates physical document folders against required documentation rules, and tracks audit status across billing periods.
+Aplicación web de producción para automatizar la auditoría de documentos de facturación médica en instituciones de salud colombianas. Ingesta facturas desde SIHOS, valida carpetas físicas de documentos contra las reglas de documentación requerida por tipo de servicio, y lleva el estado de auditoría por periodo de facturación.
 
 ---
 
-## Table of Contents
+## Tabla de contenidos
 
-- [Overview](#overview)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Local Development](#local-development)
-  - [Production Deployment](#production-deployment)
-- [Environment Variables](#environment-variables)
-- [Database Migrations](#database-migrations)
-- [Database Backups](#database-backups)
+- [Stack tecnológico](#stack-tecnológico)
+- [Arquitectura](#arquitectura)
+- [Estructura del proyecto](#estructura-del-proyecto)
+- [Primeros pasos](#primeros-pasos)
+- [Variables de entorno](#variables-de-entorno)
+- [Comandos de desarrollo](#comandos-de-desarrollo)
+- [Migraciones](#migraciones)
+- [Backups de configuración](#backups-de-configuración)
 - [API Reference](#api-reference)
-- [Audit Pipeline](#audit-pipeline)
-- [Domain Model](#domain-model)
-- [Security](#security)
-- [Development](#development)
+- [Pipeline de auditoría](#pipeline-de-auditoría)
+- [Modelo de dominio](#modelo-de-dominio)
+- [Testing](#testing)
+- [Seguridad](#seguridad)
+- [Monitoreo](#monitoreo)
 
 ---
 
-## Overview
+## Stack tecnológico
 
-Medical Audit v2 automates the reconciliation between:
-
-- **SIHOS billing records** — invoices exported as Excel files from the hospital information system
-- **Physical document folders** — patient folders stored locally or on Google Drive, organized by invoice number
-
-The application runs a 20-stage pipeline that ingests invoices, normalizes folder structures, runs OCR, validates required documents per service type, verifies Colombian e-invoice codes (CUFE), and organizes audited folders — producing a clear audit status for every invoice in a billing period.
-
----
-
-## Tech Stack
-
-| Layer | Technology |
+| Capa | Tecnología |
 |---|---|
-| Language | Python 3.11+ |
-| Web Framework | FastAPI (async) |
-| Database | PostgreSQL 16 |
-| ORM / Migrations | SQLAlchemy 2.0 (asyncio) + Alembic |
-| Frontend | Jinja2 server-side templates |
-| Web Server | Nginx 1.27 (reverse proxy + gzip + rate limiting) |
-| App Server | Uvicorn (2 workers) |
-| Containers | Docker (multi-stage build) + Docker Compose |
+| Lenguaje | Python 3.11+ |
+| Framework web | FastAPI (async) |
+| Base de datos | PostgreSQL 16 |
+| ORM / Migraciones | SQLAlchemy 2.0 (asyncio) + Alembic |
+| Frontend | Jinja2 (templates server-side) |
+| Servidor de app | Uvicorn (2 workers, nativo en host) |
+| Proxy inverso | Nginx 1.27 (rate limiting, gzip, SSE) |
+| Contenedores | Docker + Docker Compose |
 | PDF / OCR | PyMuPDF, pdfplumber, ocrmypdf, Tesseract |
-| Browser Automation | Playwright (SIHOS invoice download) |
-| Cloud | Google Drive API |
-| Data Processing | pandas, openpyxl |
-| Logging | structlog |
-| Security | cryptography (AES encryption for stored credentials) |
-| Package Manager | uv |
+| Automatización de browser | Playwright (descarga de facturas SIHOS) |
+| Almacenamiento en nube | Google Drive API |
+| Procesamiento de datos | pandas, openpyxl |
+| Logs | structlog (estructurado) |
+| Seguridad | cryptography (AES-256-GCM para credenciales almacenadas) |
+| Métricas | prometheus-fastapi-instrumentator |
+| Gestor de paquetes | uv |
 | Testing | pytest + pytest-asyncio |
 
 ---
 
-## Architecture
+## Arquitectura
 
 ```
-  LAN devices ─── :8000 ──► uvicorn / FastAPI (native on host)
-                                    │
-                                    ├──► audit files (native Windows filesystem)
-                                    │
-                                    └──► localhost:5432
-                                              │
-                                         ┌────────────┐
-                                         │   Docker   │
-                                         │ PostgreSQL │
-                                         └────────────┘
+  Dispositivos LAN ──── :8000 ──► Uvicorn / FastAPI  (nativo en Windows)
+                                          │
+                          ┌───────────────┼───────────────┐
+                          │               │               │
+                   sistema de         Google         localhost:5432
+                   archivos           Drive API           │
+                   Windows                         ┌─────────────┐
+                   (DRIVE/STAGE/AUDIT)              │   Docker    │
+                                                    │ PostgreSQL  │
+                                                    └─────────────┘
 ```
 
-- **backend** (FastAPI + Uvicorn) runs natively on the host machine. It accesses audit files directly from the Windows filesystem at native speed, with no virtualisation overhead.
-- **db** (PostgreSQL) runs in Docker with port 5432 exposed to `localhost`. Only the database is containerised.
-- **Institution logos** are stored in the database as `BYTEA` and served via `GET /api/institutions/{id}/logo` — no shared volumes required.
-- **adminer** is available in development only (via `docker-compose.override.yml`).
-- The app listens on `0.0.0.0:8000`, so any device on the same LAN can reach it at `http://<host-ip>:8000`.
+- **Backend** (FastAPI + Uvicorn) corre de forma nativa en el host Windows. Accede a los archivos de auditoría directamente desde el sistema de archivos local sin overhead de virtualización.
+- **Base de datos** (PostgreSQL 16) corre en Docker con el puerto 5432 expuesto a `localhost`. Solo la base de datos está contenedorizada.
+- **Logos de instituciones** se almacenan en la base de datos como `BYTEA` y se sirven vía `GET /api/institutions/{id}/logo` — sin volúmenes compartidos.
+- El backend escucha en `0.0.0.0:8000`, por lo que cualquier dispositivo en la misma red LAN puede acceder a la app.
 
 ---
 
-## Project Structure
+## Estructura del proyecto
 
 ```
 medical-audit-v2/
-├── app/                        # FastAPI application
-│   ├── main.py                 # App factory, lifespan, router registration
-│   ├── config.py               # Settings (pydantic-settings, reads from .env)
-│   ├── database.py             # Async SQLAlchemy session factory
-│   ├── crypto.py               # AES encryption for stored credentials
-│   ├── models/                 # SQLAlchemy ORM models
-│   ├── repositories/           # Data access layer
+├── app/
+│   ├── main.py                    # Fábrica de FastAPI, lifespan, middleware, registro de routers
+│   ├── config.py                  # Settings (pydantic-settings, lee desde .env)
+│   ├── database.py                # Session factory async de SQLAlchemy
+│   ├── crypto.py                  # Cifrado AES-256-GCM para credenciales
+│   ├── paths.py                   # Conversión de rutas Windows ↔ contenedor
+│   ├── models/
+│   │   ├── base.py
+│   │   ├── institution.py         # Institution, Administrator, Contract, Agreement, Service
+│   │   ├── invoice.py             # Invoice
+│   │   ├── period.py              # AuditPeriod
+│   │   ├── finding.py             # MissingFile (hallazgos de auditoría)
+│   │   ├── rules.py               # ServiceType, DocType, FolderStatus, PrefixCorrection, SystemSettings
+│   │   └── __init__.py            # Importa todos los modelos para autogenerate de Alembic
+│   ├── repositories/              # Capa de acceso a datos
+│   │   ├── institution_repo.py
+│   │   ├── invoice_repo.py
+│   │   ├── finding_repo.py
+│   │   └── rules_repo.py
 │   ├── routers/
-│   │   ├── pages.py            # Jinja2 page routes (/, /audit, /settings)
-│   │   └── api/                # REST API routers
-│   ├── schemas/                # Pydantic request/response schemas
+│   │   ├── pages.py               # Rutas Jinja2 (/, /audit, /settings)
+│   │   └── api/
+│   │       ├── hospitals.py       # /api/institutions
+│   │       ├── periods.py         # /api/institutions/{id}/periods
+│   │       ├── invoices.py        # /api/invoices
+│   │       ├── findings.py        # /api/missing-files
+│   │       ├── pipeline.py        # /api/pipeline (SSE streaming + task manager)
+│   │       ├── settings.py        # /api/settings
+│   │       └── explorer.py        # /api/explorer (explorador de archivos)
 │   ├── services/
-│   │   ├── billing.py          # SIHOS Excel ingestion
-│   │   └── pipeline_runner.py  # 18-stage audit pipeline
-│   ├── static/                 # CSS and other static assets (served by FastAPI)
-│   └── templates/              # Jinja2 HTML templates
-├── backups/                    # DB snapshots from ./dev.sh backup (not committed by default)
-├── core/                       # Domain logic & document processing
-│   ├── scanner.py              # File discovery and validation
-│   ├── reader.py               # PDF text extraction
-│   ├── processor.py            # OCR processing (ocrmypdf)
-│   ├── validator.py            # Invoice / CUFE validation
-│   ├── inspector.py            # Folder structure inspection
-│   ├── organizer.py            # Folder and invoice organization
-│   ├── standardizer.py         # Filename normalization
-│   ├── downloader.py           # Playwright-based SIHOS downloader
-│   └── drive.py                # Google Drive sync
-├── alembic/                    # Database migrations
-│   └── versions/
-├── nginx/
-│   └── nginx.conf              # Reverse proxy + rate limiting + compression
-├── seeds/                      # Seed data scripts
+│   │   ├── billing.py             # Ingesta de Excel SIHOS + normalización
+│   │   ├── pipeline_runner.py     # Pipeline de 20+ etapas (async generator)
+│   │   └── task_manager.py        # Gestión de tareas pipeline en background
+│   ├── schemas/                   # Modelos Pydantic de request/response
+│   ├── static/                    # CSS y assets estáticos
+│   └── templates/                 # Templates Jinja2 HTML
+├── core/                          # Lógica de dominio y procesamiento de documentos
+│   ├── scanner.py                 # Descubrimiento de archivos (glob/regex)
+│   ├── reader.py                  # Extracción de texto PDF (PyMuPDF + pdfplumber)
+│   ├── processor.py               # OCR (ocrmypdf + Tesseract)
+│   ├── validator.py               # Validación de facturas (CUFE, código de factura)
+│   ├── inspector.py               # Validación de estructura de carpetas
+│   ├── organizer.py               # Operaciones de mover y renombrar archivos/carpetas
+│   ├── standardizer.py            # Normalización de nombres de archivo
+│   ├── downloader.py              # Descarga de facturas SIHOS vía Playwright
+│   ├── drive.py                   # Sincronización con Google Drive
+│   └── ops.py                     # Utilidades de operaciones de archivo
+├── alembic/
+│   └── versions/                  # Migraciones auto-generadas desde los modelos
+├── seeds/
+│   └── seed_data.py               # Script de datos iniciales
 ├── tests/
-├── Dockerfile                  # Multi-stage: builder + runtime
-├── docker-compose.yml          # Production services
-├── docker-compose.override.yml # Dev overrides (auto-applied locally)
-├── .env.example                # Production environment template
-├── dev.sh                      # Developer convenience script (./dev.sh help)
-└── pyproject.toml              # Dependencies and tooling config
+│   ├── app/
+│   ├── core/
+│   ├── load/
+│   └── conftest.py                # Fixtures y markers de pytest
+├── monitoring/
+│   ├── prometheus.yml
+│   └── grafana/                   # Dashboards de Grafana (solo dev)
+├── nginx/
+│   └── nginx.conf                 # Proxy inverso + rate limiting + SSE
+├── docs/
+│   └── DEPLOY.md                  # Guía de despliegue a producción
+├── backups/                       # Snapshots de tablas de configuración (no en git)
+├── docker-compose.yml             # Servicio PostgreSQL 16
+├── docker-compose.override.yml    # Dev: Adminer, Prometheus, Grafana
+├── Dockerfile                     # Multi-stage: builder + runtime
+├── dev.sh                         # Script de desarrollo (./dev.sh help)
+├── pyproject.toml                 # Dependencias, pytest, ruff, mypy
+├── uv.lock                        # Dependencias congeladas (reproducible)
+└── .env.example                   # Template de configuración
 ```
 
 ---
 
-## Getting Started
+## Primeros pasos
 
-### Prerequisites
+### Prerrequisitos
 
-- [Docker](https://docs.docker.com/get-docker/) and Docker Compose v2
-- [uv](https://github.com/astral-sh/uv) (for local development without Docker)
+- [Docker](https://docs.docker.com/get-docker/) y Docker Compose v2
+- [uv](https://github.com/astral-sh/uv) para el entorno Python local
 
-### Local Development
+### Setup local
 
-**1. Clone and configure environment**
+**1. Clonar y configurar el entorno**
 
 ```bash
 git clone <repo-url>
@@ -146,355 +165,399 @@ cd medical-audit-v2
 cp .env.example .env
 ```
 
-Edit `.env` with local development values (generate your own `SECRET_KEY` — see command below):
+Edita `.env` con tus valores locales. El `SECRET_KEY` se genera así:
 
-```dotenv
-DATABASE_URL=postgresql+asyncpg://audit:audit@db:5432/medical_audit
-SECRET_KEY=<generate with: python -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())">
-POSTGRES_USER=audit
-POSTGRES_PASSWORD=audit
-POSTGRES_DB=medical_audit
-AUDIT_HOST_PATH=./audit_data
-LOG_LEVEL=INFO
-DOCS_ENABLED=true
+```bash
+python -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
 ```
 
-> `.env` is listed in `.gitignore` and must never be committed. All three `POSTGRES_*` variables are **required** — Docker Compose will refuse to start if any are missing.
-
-**2. Start the database**
+**2. Iniciar la base de datos**
 
 ```bash
 ./dev.sh db
 ```
 
-`docker-compose.override.yml` is applied automatically, which starts Adminer (database UI at `http://localhost:8080`).
+El `docker-compose.override.yml` se aplica automáticamente y levanta también Adminer en `http://localhost:8080`.
 
-**3. Run migrations**
+**3. Aplicar migraciones**
 
 ```bash
 ./dev.sh migrate
 ```
 
-**4. Start the backend**
+**4. Iniciar el backend**
 
 ```bash
 ./dev.sh serve
 ```
 
-Uvicorn starts with hot-reload on `0.0.0.0:8000`. Any device on your local network can access the app at `http://<your-ip>:8000`.
+Uvicorn inicia con hot-reload en `0.0.0.0:8000`.
 
-**5. Configure the audit folder**
+**5. Configurar la carpeta de auditoría**
 
-Go to `http://localhost:8000` → **Configuración → Sistema** and set the path to the folder where your audit subfolders live (e.g. `C:\Users\tu_usuario\Desktop\Carpeta compartida`).
+La ruta base de auditoría se configura desde la interfaz: **Configuración → Sistema**.
 
-**6. Access the application**
+**6. URLs de acceso**
 
-| URL | Description |
+| URL | Descripción |
 |---|---|
-| `http://localhost:8000` | Main application |
-| `http://<your-lan-ip>:8000` | Access from other devices on the network |
-| `http://localhost:8000/docs` | Swagger UI (dev only, `DOCS_ENABLED=true`) |
-| `http://localhost:8080` | Adminer database UI (dev only) |
-
-### Production Deployment
-
-See **[docs/DEPLOY.md](docs/DEPLOY.md)** for the full production deploy checklist (pull → sync → migrate → restart → health check).
+| `http://localhost:8000` | Aplicación principal |
+| `http://<ip-lan>:8000` | Acceso desde otros dispositivos en la red |
+| `http://localhost:8000/docs` | Swagger UI (solo si `DOCS_ENABLED=true`) |
+| `http://localhost:8080` | Adminer — UI de base de datos (solo dev) |
+| `http://localhost:9090` | Prometheus (solo dev) |
+| `http://localhost:3000` | Grafana (solo dev, usuario/clave: `admin`/`admin`) |
 
 ---
 
-## Environment Variables
+## Variables de entorno
 
-All variables are read by `app/config.py` via pydantic-settings.
+Todas las variables son leídas por `app/config.py` vía pydantic-settings.
 
-| Variable | Required | Default | Description |
+| Variable | Requerida | Default | Descripción |
 |---|---|---|---|
-| `DATABASE_URL` | Yes | — | Full asyncpg connection string. Use `localhost:5432` since the backend runs natively. |
-| `SECRET_KEY` | Yes | — | 32-byte base64-encoded key for AES encryption of stored credentials. |
-| `POSTGRES_USER` | Yes | — | PostgreSQL username (used by the `db` Docker service). |
-| `POSTGRES_PASSWORD` | Yes | — | PostgreSQL password. |
-| `POSTGRES_DB` | Yes | — | PostgreSQL database name. |
-| `LOG_LEVEL` | No | `INFO` | Structlog level: `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
-| `DOCS_ENABLED` | No | `false` | Set `true` to enable `/docs` and `/redoc`. Never enable in production. |
+| `DATABASE_URL` | Sí | — | Cadena de conexión asyncpg. Usar `localhost:5432` porque el backend corre nativamente. |
+| `SECRET_KEY` | Sí | — | Clave de 32 bytes en base64 para cifrado AES de credenciales almacenadas. |
+| `POSTGRES_USER` | Sí | — | Usuario PostgreSQL (usado por el contenedor Docker). |
+| `POSTGRES_PASSWORD` | Sí | — | Contraseña PostgreSQL. |
+| `POSTGRES_DB` | Sí | — | Nombre de la base de datos PostgreSQL. |
+| `LOG_LEVEL` | No | `INFO` | Nivel de structlog: `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
+| `DOCS_ENABLED` | No | `false` | `true` para habilitar `/docs` y `/redoc`. Nunca activar en producción. |
 
-> The audit folder path is configured from the UI (**Configuración → Sistema**) and stored in the database — not in `.env`.
-
-Copy `.env.example` as your starting point — it contains all variables with production-safe placeholder values.
+> `.env` está en `.gitignore` y nunca debe commitearse. Usar `.env.example` como punto de partida.
 
 ---
 
-## Database Migrations
+## Comandos de desarrollo
 
-This project uses [Alembic](https://alembic.sqlalchemy.org/) for schema migrations.
+El script `dev.sh` envuelve los comandos más comunes:
 
 ```bash
-# Apply all pending migrations
+./dev.sh help                          # Listar todos los comandos
+```
+
+### Base de datos (Docker)
+
+```bash
+./dev.sh db                            # Iniciar PostgreSQL
+./dev.sh db-down                       # Detener PostgreSQL
+./dev.sh psql                          # Conectar vía psql
+./dev.sh backup [nombre]               # Snapshot de tablas de config → backups/<nombre>_TIMESTAMP.sql
+./dev.sh restore <archivo.sql>         # Restaurar desde snapshot
+./dev.sh nuke                          # Destruir todos los volúmenes (pide confirmación)
+```
+
+### Backend (nativo)
+
+```bash
+./dev.sh start                         # Iniciar base de datos + backend juntos
+./dev.sh serve                         # Iniciar uvicorn con hot-reload en 0.0.0.0:8000
+./dev.sh migrate                       # Aplicar migraciones Alembic pendientes
+./dev.sh migration "describe cambio"   # Generar nueva migración (auto-detecta cambios de schema)
+./dev.sh seed                          # Poblar base de datos con datos iniciales
+```
+
+### Testing y calidad
+
+```bash
+./dev.sh test                          # Ejecutar pytest
+./dev.sh test -k test_invoice -v       # Filtrar tests por nombre
+./dev.sh test -m "not db and not slow" # Solo tests unitarios rápidos
+./dev.sh test --cov=core,app           # Con reporte de cobertura
+./dev.sh lint                          # ruff check + format check (seguro para CI)
+./dev.sh format                        # Auto-corregir formato con ruff
+./dev.sh health                        # Verificar endpoint /health
+```
+
+---
+
+## Migraciones
+
+El proyecto usa [Alembic](https://alembic.sqlalchemy.org/) para migraciones de schema.
+
+```bash
+# Aplicar todas las migraciones pendientes
 ./dev.sh migrate
 
-# Create a new migration (auto-generate from model changes)
-./dev.sh migration "describe your change"
+# Crear una nueva migración (auto-detecta cambios en los modelos)
+./dev.sh migration "descripción del cambio"
 
-# Check current revision / downgrade (raw commands)
-uv run alembic current
-uv run alembic downgrade -1
+# Comandos directos de Alembic
+uv run alembic current          # Ver revisión actual
+uv run alembic history          # Ver historial de migraciones
+uv run alembic downgrade -1     # Revertir una migración
 ```
 
 ---
 
-## Database Backups
+## Backups de configuración
 
-Configuration tables (`institutions`, `service_types`, `doc_types`, `folder_statuses`, `prefix_corrections`, `admins`, `contracts`, `services`, `service_type_documents`) can take significant time to rebuild. The `backup` / `restore` commands let you snapshot and restore them without touching operational data (`audit_periods`, `invoices`, `missing_files`).
+Las tablas de configuración (`institutions`, `service_types`, `doc_types`, `folder_statuses`, `prefix_corrections`, `admins`, `contracts`, `services`, `service_type_documents`) pueden llevar tiempo en reconstruirse. Los comandos `backup`/`restore` permiten hacer snapshots sin tocar datos operacionales (`audit_periods`, `invoices`, `missing_files`).
 
 ```bash
-# Create a snapshot (label defaults to "seeds")
-./dev.sh backup seeds_base
-# → backups/seeds_base_20260314_120000.sql
+# Crear snapshot
+./dev.sh backup configuracion_base
+# → backups/configuracion_base_20260322_120000.sql
 
-# List snapshots
+# Listar snapshots
 ls -lh backups/
 
-# Restore from a snapshot
-./dev.sh restore backups/seeds_base_20260314_120000.sql
+# Restaurar snapshot
+./dev.sh restore backups/configuracion_base_20260322_120000.sql
 ```
 
-Snapshot files (`backups/*.sql`) are excluded from git by default. Commit individual snapshots manually if you want to version them.
+Los archivos `backups/*.sql` están excluidos de git por defecto.
 
 ---
 
 ## API Reference
 
-All API endpoints are prefixed with `/api`. Swagger UI is available at `/docs` when `DOCS_ENABLED=true`.
+Todos los endpoints tienen el prefijo `/api`. Swagger UI disponible en `/docs` cuando `DOCS_ENABLED=true`.
 
-### Institutions — `/api/institutions`
+### Instituciones — `/api/institutions`
 
-Manages hospitals and clinics, including their mappings (admins, contracts, services) and logos stored in the database.
-
-| Method | Path | Description |
+| Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/institutions` | List all institutions |
-| `POST` | `/api/institutions` | Create institution |
-| `GET` | `/api/institutions/{id}` | Get institution by ID |
-| `PUT` | `/api/institutions/{id}` | Update institution |
-| `DELETE` | `/api/institutions/{id}` | Delete institution |
-| `GET` | `/api/institutions/{id}/logo` | Serve institution logo (from DB) |
-| `POST` | `/api/institutions/{id}/logo` | Upload institution logo (PNG/JPEG/WebP/AVIF/GIF) |
-| `GET` | `/api/institutions/{id}/admins` | List admins (`?pending_only=true` for unmapped) |
-| `POST` | `/api/institutions/{id}/admins` | Create admin mapping |
-| `PATCH` | `/api/institutions/admins/{admin_id}` | Set canonical admin and type |
-| `DELETE` | `/api/institutions/admins/{admin_id}` | Delete admin mapping |
-| `GET` | `/api/institutions/{id}/contracts` | List contracts (`?pending_only=true` for unmapped) |
-| `POST` | `/api/institutions/{id}/contracts` | Create contract mapping |
-| `PATCH` | `/api/institutions/contracts/{contract_id}` | Set canonical contract |
-| `DELETE` | `/api/institutions/contracts/{contract_id}` | Delete contract mapping |
-| `GET` | `/api/institutions/{id}/services` | List service mappings |
-| `POST` | `/api/institutions/{id}/services` | Create service mapping |
-| `PATCH` | `/api/institutions/services/{service_id}` | Set service type |
-| `DELETE` | `/api/institutions/services/{service_id}` | Delete service mapping |
-| `GET` | `/api/institutions/{id}/service-type-documents` | List required docs per service type |
-| `POST` | `/api/institutions/{id}/service-type-documents` | Add required doc to service type |
-| `DELETE` | `/api/institutions/{id}/service-type-documents/{st_id}/{dt_id}` | Remove required doc |
+| `GET` | `/api/institutions` | Listar todas las instituciones |
+| `POST` | `/api/institutions` | Crear institución |
+| `GET` | `/api/institutions/{id}` | Obtener institución por ID |
+| `PATCH` | `/api/institutions/{id}` | Actualizar institución |
+| `DELETE` | `/api/institutions/{id}` | Eliminar institución |
+| `GET` | `/api/institutions/{id}/logo` | Servir logo (desde DB) |
+| `POST` | `/api/institutions/{id}/logo` | Subir logo (PNG/JPEG/WebP/AVIF/GIF) |
+| `POST` | `/api/institutions/{id}/drive-credentials` | Subir cuenta de servicio Google Drive (JSON) |
+| `POST` | `/api/institutions/{id}/sihos-password` | Guardar contraseña SIHOS (cifrada en DB) |
+| `GET` | `/api/institutions/{id}/admins` | Listar admins (`?pending_only=true` para sin mapear) |
+| `POST` | `/api/institutions/{id}/admins` | Crear mapeo de admin |
+| `PATCH` | `/api/institutions/admins/{admin_id}` | Actualizar mapeo de admin |
+| `DELETE` | `/api/institutions/admins/{admin_id}` | Eliminar mapeo de admin |
+| `GET` | `/api/institutions/{id}/contracts` | Listar contratos |
+| `POST` | `/api/institutions/{id}/contracts` | Crear mapeo de contrato |
+| `PATCH` | `/api/institutions/contracts/{contract_id}` | Actualizar mapeo de contrato |
+| `DELETE` | `/api/institutions/contracts/{contract_id}` | Eliminar mapeo de contrato |
+| `GET` | `/api/institutions/{id}/services` | Listar mapeos de servicio |
+| `POST` | `/api/institutions/{id}/services` | Crear mapeo de servicio |
+| `PATCH` | `/api/institutions/services/{service_id}` | Actualizar mapeo de servicio |
+| `DELETE` | `/api/institutions/services/{service_id}` | Eliminar mapeo de servicio |
+| `GET` | `/api/institutions/{id}/service-type-documents` | Listar documentos requeridos por tipo de servicio |
+| `POST` | `/api/institutions/{id}/service-type-documents` | Agregar documento requerido a tipo de servicio |
+| `DELETE` | `/api/institutions/{id}/service-type-documents/{st_id}/{dt_id}` | Quitar documento requerido |
 
-### Audit Periods — `/api/periods`
+### Periodos de auditoría — `/api/institutions/{id}/periods`
 
-| Method | Path | Description |
+| Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/periods` | List all periods |
-| `POST` | `/api/periods` | Create period |
-| `GET` | `/api/periods/{id}` | Get period by ID |
-| `PUT` | `/api/periods/{id}` | Update period |
-| `DELETE` | `/api/periods/{id}` | Delete period |
+| `GET` | `/api/institutions/{id}/periods` | Listar periodos de la institución |
+| `POST` | `/api/institutions/{id}/periods` | Crear periodo |
+| `DELETE` | `/api/periods/{id}` | Eliminar periodo |
 
-### Invoices — `/api/invoices`
+### Facturas — `/api/invoices`
 
-| Method | Path | Description |
+| Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/invoices` | List invoices (filterable by period, status, admin, contract, service, search) |
-| `GET` | `/api/invoices/ids` | Get invoice IDs matching current filters |
-| `GET` | `/api/invoices/stats` | Invoice counts by status and total findings |
-| `GET` | `/api/invoices/findings-summary` | Unresolved finding counts per document type |
-| `GET` | `/api/invoices/export` | Export all invoices for a period to Excel (`.xlsx`) |
-| `PATCH` | `/api/invoices/{id}/status` | Update single invoice status |
-| `POST` | `/api/invoices/batch-status` | Batch update statuses |
-| `DELETE` | `/api/invoices/{id}` | Delete invoice |
-| `POST` | `/api/invoices/ingest` | Ingest SIHOS Excel file (multipart) |
-| `POST` | `/api/invoices/{id}/rename-surplus` | Rename a surplus file to the correct doc-type prefix and resolve its finding |
-| `POST` | `/api/invoices/{id}/delete-surplus` | Delete a surplus file from disk |
+| `GET` | `/api/invoices` | Listar facturas (filtros: periodo, estado, admin, contrato, servicio, búsqueda) |
+| `GET` | `/api/invoices/ids` | IDs de facturas que coinciden con los filtros actuales |
+| `GET` | `/api/invoices/stats` | Conteos por estado y total de hallazgos |
+| `GET` | `/api/invoices/findings-summary` | Conteo de hallazgos sin resolver por tipo de documento |
+| `GET` | `/api/invoices/export` | Exportar facturas del periodo a Excel (.xlsx) |
+| `GET` | `/api/invoices/{id}` | Detalle de una factura |
+| `POST` | `/api/invoices` | Crear factura |
+| `PATCH` | `/api/invoices/{id}` | Actualizar factura (estado, tipo de servicio) |
+| `POST` | `/api/invoices/ingest` | Ingestar Excel SIHOS (multipart) |
+| `POST` | `/api/invoices/batch-status` | Actualización masiva de estados |
+| `DELETE` | `/api/invoices/{id}` | Eliminar factura |
+| `POST` | `/api/invoices/{id}/rename-surplus` | Renombrar archivo sobrante al prefijo correcto y resolver hallazgo |
+| `POST` | `/api/invoices/{id}/delete-surplus` | Eliminar archivo sobrante del disco |
 
-### Findings — `/api/missing-files`
+### Hallazgos — `/api/missing-files`
 
-Records of missing required documents per invoice.
+Registros de documentos requeridos faltantes por factura.
 
-| Method | Path | Description |
+| Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/missing-files/{invoice_id}` | Get findings for invoice |
-| `POST` | `/api/missing-files` | Record a finding |
-| `PATCH` | `/api/missing-files/{id}/resolve` | Mark finding as resolved |
-| `DELETE` | `/api/missing-files/{id}` | Delete finding |
+| `GET` | `/api/missing-files/{invoice_id}` | Obtener hallazgos de una factura |
+| `POST` | `/api/missing-files` | Registrar hallazgo |
+| `PATCH` | `/api/missing-files/{invoice_id}/{doc_type_id}/resolve` | Marcar hallazgo como resuelto |
+| `DELETE` | `/api/missing-files/{invoice_id}/{doc_type_id}` | Eliminar hallazgo |
+| `DELETE` | `/api/missing-files/{invoice_id}` | Eliminar todos los hallazgos de una factura |
+| `POST` | `/api/missing-files/batch-delete` | Eliminación masiva de hallazgos |
 
 ### Pipeline — `/api/pipeline`
 
-| Method | Path | Description |
+| Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/pipeline/run/{stage}` | Execute a pipeline stage; returns **Server-Sent Events** stream |
+| `GET` | `/api/pipeline/run/{stage}` | Ejecutar etapa; retorna stream **Server-Sent Events** |
+| `POST` | `/api/pipeline/run/{stage}` | Iniciar etapa en background (retorna `task_id`) |
+| `GET` | `/api/pipeline/task/{task_id}` | Consultar estado de tarea en background |
+| `GET` | `/api/pipeline/stream/{task_id}` | Stream de logs de tarea en background (SSE) |
 
-### Settings — `/api/settings`
+### Configuración — `/api/settings`
 
-Business rules configuration.
-
-| Method | Path | Description |
+| Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/settings/service-types` | List service types |
-| `POST` | `/api/settings/service-types` | Create service type |
-| `PATCH` | `/api/settings/service-types/{id}` | Update service type |
-| `DELETE` | `/api/settings/service-types/{id}` | Delete service type |
-| `GET` | `/api/settings/doc-types` | List document types |
-| `POST` | `/api/settings/doc-types` | Create document type |
-| `PATCH` | `/api/settings/doc-types/{id}` | Update document type |
-| `DELETE` | `/api/settings/doc-types/{id}` | Delete document type |
-| `GET` | `/api/settings/folder-statuses` | List folder statuses |
-| `POST` | `/api/settings/folder-statuses` | Create folder status |
-| `PATCH` | `/api/settings/folder-statuses/{id}` | Update folder status |
-| `DELETE` | `/api/settings/folder-statuses/{id}` | Delete folder status |
-| `GET` | `/api/settings/prefix-corrections` | List prefix correction rules |
-| `POST` | `/api/settings/prefix-corrections` | Create prefix correction rule |
-| `PATCH` | `/api/settings/prefix-corrections/{id}` | Update prefix correction rule |
-| `DELETE` | `/api/settings/prefix-corrections/{id}` | Delete prefix correction rule |
+| `GET/POST` | `/api/settings/service-types` | Listar / crear tipos de servicio |
+| `PATCH/DELETE` | `/api/settings/service-types/{id}` | Actualizar / eliminar tipo de servicio |
+| `GET/POST` | `/api/settings/doc-types` | Listar / crear tipos de documento |
+| `PATCH/DELETE` | `/api/settings/doc-types/{id}` | Actualizar / eliminar tipo de documento |
+| `GET/POST` | `/api/settings/folder-statuses` | Listar / crear estados de carpeta |
+| `PATCH/DELETE` | `/api/settings/folder-statuses/{id}` | Actualizar / eliminar estado de carpeta |
+| `GET/POST` | `/api/settings/prefix-corrections` | Listar / crear reglas de corrección de prefijos |
+| `PATCH/DELETE` | `/api/settings/prefix-corrections/{id}` | Actualizar / eliminar regla |
+| `GET` | `/api/settings/system` | Obtener configuración global del sistema |
+| `PATCH` | `/api/settings/system` | Actualizar ruta base de auditoría y otras opciones globales |
 
-> The audit folder path is no longer a database setting — it is configured via `AUDIT_HOST_PATH` in `.env` and mounted at `/audit_data` inside the container.
+### Explorador de archivos — `/api/explorer`
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/explorer/list` | Listar archivos y carpetas en el sandbox |
+| `POST` | `/api/explorer/mkdir` | Crear carpeta |
+| `POST` | `/api/explorer/upload` | Subir archivo |
+| `POST` | `/api/explorer/delete` | Eliminar archivo o carpeta |
+| `POST` | `/api/explorer/rename` | Renombrar archivo o carpeta |
+| `POST` | `/api/explorer/move` | Mover a otra carpeta |
+| `POST` | `/api/explorer/copy` | Copiar archivo o carpeta |
+| `POST` | `/api/explorer/merge` | Fusionar carpetas de factura |
+| `POST` | `/api/explorer/split` | Dividir carpeta de factura |
+| `POST` | `/api/explorer/reorder` | Reordenar archivos dentro de una carpeta |
+| `POST` | `/api/explorer/batch-delete` | Eliminar múltiples ítems |
+| `GET` | `/api/explorer/download` | Descargar archivos/carpetas como ZIP |
 
 ---
 
-## Audit Pipeline
+## Pipeline de auditoría
 
-The pipeline is composed of 20 sequential stages. Each stage is triggered individually via `GET /api/pipeline/run/{STAGE_NAME}` and streams log lines as Server-Sent Events (`[INFO]`, `[WARN]`, `[ERROR]`).
+El pipeline está compuesto por etapas secuenciales. Cada etapa se activa individualmente vía `GET /api/pipeline/run/{NOMBRE_ETAPA}` y retorna líneas de log como Server-Sent Events (`[INFO]`, `[WARN]`, `[ERROR]`).
 
-| # | Stage Name | Description |
+| # | Nombre de etapa | Descripción |
 |---|---|---|
-| 1 | `LOAD_AND_PROCESS` | Ingest SIHOS Excel export → upsert invoices into the database. When multiple rows exist for the same invoice with different services, the service type with the **highest configured priority** is used. |
-| 2 | `RUN_STAGING` | Move leaf folders (folders that directly contain files) from the BASE directory to STAGE. |
-| 3 | `CHECK_NESTED_FOLDERS` | Scan STAGE and list invoice folders that contain nested subdirectories — these require manual flattening before the remaining stages can process their files correctly. |
-| 4 | `REMOVE_NON_PDF` | Delete non-PDF files and corrupt PDFs from STAGE. |
-| 5 | `NORMALIZE_FILES` | Apply PrefixCorrection rules + filename standardization. |
-| 6 | `LIST_UNREADABLE_PDFS` | Report invoice PDFs without a text layer (OCR candidates). |
-| 7 | `DELETE_UNREADABLE_PDFS` | Remove invoice PDFs that cannot be read even after OCR. |
-| 8 | `DOWNLOAD_INVOICES_FROM_SIHOS` | Download specific invoices from SIHOS via Playwright automation. |
-| 9 | `CHECK_INVOICES` | Apply OCR (`ocrmypdf`, batch size 8) to scanned PDFs. |
-| 10 | `VERIFY_INVOICE_CODE` | Confirm each invoice PDF contains its own invoice number in extracted text. |
-| 11 | `CHECK_INVOICE_NUMBER_ON_FILES` | Verify files inside each folder match the folder's invoice number. |
-| 12 | `CHECK_FOLDERS_WITH_EXTRA_TEXT` | Detect folders with extraneous text appended to the canonical name. |
-| 13 | `NORMALIZE_DIR_NAMES` | Rename malformed folder names to canonical invoice IDs. |
-| 14 | `CHECK_DIRS` | Reconcile DB invoices vs. disk folders; mark missing folders as `FALTANTE`. |
-| 15 | `CHECK_REQUIRED_DOCS` | Validate required documents per service type; record findings; mark `PENDIENTE`. |
-| 16 | `REVISAR_SOBRANTES` | Identify files whose names don't match any required prefix. For each surplus file, suggests the most likely missing document type (1:1 → high confidence; N:M via `difflib` similarity → low confidence). The pipeline UI presents an interactive panel where the auditor can confirm or correct the suggestion to rename the file on disk and resolve the finding, or delete the file entirely. |
-| 17 | `VERIFY_CUFE` | Verify the Colombian e-invoice code (CUFE) in PDFs; flag folders with missing CUFE. |
-| 18 | `ORGANIZE` | Move eligible invoices (`PRESENTE`, no findings) to the audit destination; mark `AUDITADA`. |
-| 19 | `DOWNLOAD_DRIVE` | Download `FALTANTE` folders from Google Drive; update status to `PRESENTE`. |
-| 20 | `DOWNLOAD_MISSING_DOCS` | Download specific missing documents from Drive for invoices with open findings. |
+| 1 | `LOAD_AND_PROCESS` | Ingestar Excel SIHOS → upsert de facturas en DB. Para facturas con múltiples servicios, se aplica el tipo de servicio con **mayor prioridad configurada**. |
+| 2 | `RECATEGORIZE_SERVICES` | Re-aplicar los mapeos de servicio actuales sin re-importar el Excel. |
+| 3 | `RUN_STAGING` | Copiar carpetas hoja (que contienen archivos directamente) desde DRIVE a STAGE. |
+| 4 | `CHECK_NESTED_FOLDERS` | Detectar carpetas en STAGE que contienen subcarpetas anidadas — requieren aplanamiento manual. |
+| 5 | `REMOVE_NON_PDF` | Eliminar archivos no-PDF y PDFs corruptos de STAGE. |
+| 6 | `NORMALIZE_FILES` | Aplicar reglas de `PrefixCorrection` + estandarización genérica de nombres de archivo. |
+| 7 | `LIST_UNREADABLE_PDFS` | Identificar PDFs de factura sin capa de texto (candidatos a OCR). |
+| 8 | `DELETE_UNREADABLE_PDFS` | Eliminar PDFs de factura que no se pueden leer ni siquiera con OCR. |
+| 9 | `DOWNLOAD_INVOICES_FROM_SIHOS` | Descargar facturas faltantes desde SIHOS vía automatización Playwright. |
+| 10 | `DOWNLOAD_MEDICATION_SHEETS` | Descargar hojas de medicamentos/servicios específicos desde SIHOS. |
+| 11 | `CHECK_INVOICES` | Aplicar OCR (`ocrmypdf`, batch size 8) a PDFs escaneados. |
+| 12 | `VERIFY_INVOICE_CODE` | Confirmar que cada PDF de factura contiene su propio número de factura en el texto extraído. |
+| 13 | `CHECK_INVOICE_NUMBER_ON_FILES` | Verificar que los archivos dentro de cada carpeta corresponden al número de factura de esa carpeta. |
+| 14 | `CHECK_FOLDERS_WITH_EXTRA_TEXT` | Detectar carpetas con texto adicional pegado al nombre canónico. |
+| 15 | `NORMALIZE_DIR_NAMES` | Renombrar carpetas malformadas al ID canónico de factura. |
+| 16 | `CHECK_DIRS` | Reconciliar facturas en DB vs. carpetas en disco; marcar faltantes como `FALTANTE`. |
+| 17 | `MARK_UNKNOWN_DIRS` | Validar documentos requeridos por tipo de servicio; registrar hallazgos; marcar `PENDIENTE`. |
+| 18 | `REVISAR_SOBRANTES` | Revisar archivos cuyos nombres no coinciden con ningún prefijo requerido. Para cada sobrante, sugiere el tipo de documento faltante más probable (1:1 → alta confianza; N:M vía similitud `difflib` → baja confianza). El panel interactivo permite confirmar o corregir la sugerencia para renombrar el archivo en disco y resolver el hallazgo, o eliminar el archivo. |
+| 19 | `VERIFY_CUFE` | Verificar el código CUFE (64+ caracteres) de factura electrónica colombiana en los PDFs. |
+| 20 | `ORGANIZE` | Mover facturas elegibles (`PRESENTE`, sin hallazgos) al destino de auditoría; marcar `AUDITADA`. |
+| 21 | `DOWNLOAD_DRIVE` | Sincronizar carpetas `FALTANTE` desde Google Drive; actualizar estado a `PRESENTE`. |
+| 22 | `DOWNLOAD_MISSING_DOCS` | Descargar documentos faltantes específicos desde Drive para facturas con hallazgos abiertos. |
+| 23 | `COMPRESS_AUDIT` | Comprimir el directorio de auditoría en un archivo ZIP. |
 
 ---
 
-## Domain Model
+## Modelo de dominio
 
-### Invoice Folder Statuses
+### Estados de carpeta de factura
 
-| Status | Meaning |
+| Estado | Significado |
 |---|---|
-| `PRESENTE` | Folder exists on disk |
-| `FALTANTE` | Folder not found on disk or Drive |
-| `AUDITADA` | Fully validated and moved to audit destination |
-| `PENDIENTE` | Present but has open document findings |
-| `REVISAR` | Flagged for manual review |
-| `ANULAR` | Marked for cancellation |
+| `PRESENTE` | La carpeta existe en disco |
+| `FALTANTE` | Carpeta no encontrada en disco ni en Drive |
+| `AUDITADA` | Completamente validada y movida al destino de auditoría |
+| `PENDIENTE` | Presente pero con hallazgos de documentos abiertos |
+| `REVISAR` | Marcada para revisión manual |
+| `ANULAR` | Marcada para anulación |
 
-### Key Entities
+### Entidades principales
 
-- **Institution** — Hospital or clinic; stores NIT, invoice prefix, SIHOS credentials (AES-encrypted), Drive credentials (AES-encrypted), local base path, and logo image (`logo_bytes` BYTEA + `logo_content_type`).
-- **AuditPeriod** — Billing period (month/year label) scoping a set of invoices.
-- **Invoice** — Patient billing record imported from SIHOS; linked to an Admin, Contract, and ServiceType.
-- **Admin** — Maps a raw administrator string from SIHOS to a canonical administrator name and type per institution.
-- **Contract** — Maps a raw contract string from SIHOS to a canonical contract name per institution.
-- **Service** — Maps a raw service string from SIHOS to a ServiceType per institution.
-- **ServiceType** — Medical service category (e.g., hospitalization, outpatient); defines which document types are required via `ServiceTypeDocument`.
-- **DocType** — A required document type with a canonical filename prefix.
-- **ServiceTypeDocument** — Join entity linking a ServiceType to a required DocType for a specific institution.
-- **Finding (MissingFile)** — Records a specific missing required document for an invoice.
-- **PrefixCorrection** — Maps known incorrect filename prefixes to their correct canonical form (used in the `NORMALIZE_FILES` pipeline stage).
-
-> **Audit folder path** — The base folder where institution subfolders live is set via `AUDIT_HOST_PATH` in `.env` (mounted at `/audit_data` inside the container). It is not stored in the database.
-
----
-
-## Security
-
-- **`.env` is never committed** — it is listed in `.gitignore`. Use `.env.example` as a template.
-- **Required variables are enforced** — `docker-compose.yml` uses `:?` syntax for all credential variables (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`). If any are missing, Docker Compose aborts with an explicit error instead of silently falling back to weak defaults.
-- **Secrets are encrypted at rest** — SIHOS passwords and Google Drive credentials are stored in the database using AES encryption via `app/crypto.py`. The encryption key is derived from `SECRET_KEY`.
-- **Logos stored in DB** — Institution logos are stored as `BYTEA` in PostgreSQL and served via the API, eliminating any shared volume with sensitive data leakage risk.
-- **Non-root container** — The Docker image runs as `appuser`, not `root`.
-- **No direct database exposure** — PostgreSQL is only accessible within the Docker network.
-- **Swagger disabled by default** — `DOCS_ENABLED=false` in production prevents API documentation exposure.
-- **Rate limiting** — nginx limits API requests to 30 req/s per IP (burst of 20).
-- **Git history is clean** — no credentials or secrets have ever been committed to the repository.
+| Entidad | Descripción |
+|---|---|
+| **Institution** | Hospital/clínica con NIT, credenciales SIHOS (cifradas), credenciales Drive (cifradas), logo (`BYTEA`) |
+| **AuditPeriod** | Periodo de facturación que agrupa un conjunto de facturas por institución |
+| **Invoice** | Registro de factura importado desde SIHOS; vinculado a Admin, Contrato, ServiceType y FolderStatus |
+| **Administrator** | Mapeo de string raw de SIHOS → nombre canónico de administrador por institución |
+| **Contract** | Mapeo de string raw de SIHOS → nombre canónico de contrato por institución |
+| **Agreement** | Vincula un par (Administrador, Contrato) a una institución |
+| **Service** | Mapeo de servicio raw de SIHOS → ServiceType por institución |
+| **ServiceType** | Categoría de servicio médico (hospitalización, ambulatorio, etc.); define qué documentos son requeridos vía `ServiceTypeDocument` |
+| **DocType** | Tipo de documento requerido con prefijo canónico de nombre de archivo |
+| **ServiceTypeDocument** | Entidad de unión que vincula un ServiceType con un DocType requerido por institución |
+| **MissingFile** | Hallazgo: documento requerido faltante para una factura específica |
+| **PrefixCorrection** | Mapeo de prefijo incorrecto → forma canónica correcta (ej. `OPD_` → `OPF_`) |
+| **SystemSettings** | Configuración global del sistema (ruta raíz de auditoría, etc.) |
 
 ---
 
-## Development
+## Testing
 
-### Developer script
+### Framework
 
-`dev.sh` wraps the most common commands:
+pytest + pytest-asyncio con cobertura mínima de 60% en `core/` y `app/`.
 
-```bash
-./dev.sh help                          # list all commands
+### Markers
 
-# Database (Docker)
-./dev.sh db                            # start PostgreSQL container
-./dev.sh db-down                       # stop PostgreSQL container
-./dev.sh psql                          # connect to PostgreSQL via psql
-./dev.sh backup [nombre]               # snapshot config tables → backups/<nombre>_TIMESTAMP.sql
-./dev.sh restore <archivo.sql>         # restore config tables from snapshot
-./dev.sh nuke                          # destroy all volumes (asks confirmation)
-
-# Backend (native)
-./dev.sh serve                         # start uvicorn with hot-reload on 0.0.0.0:8000
-./dev.sh migrate                       # apply pending Alembic migrations
-./dev.sh migration "describe change"   # generate new migration
-./dev.sh seed                          # run database seed script
-./dev.sh test                          # run pytest
-./dev.sh lint                          # ruff check + format check
-./dev.sh format                        # auto-fix formatting
-./dev.sh health                        # check /health endpoint (localhost:8000)
+```python
+@pytest.mark.db       # Requiere PostgreSQL activo (lento, puede modificar DB)
+@pytest.mark.slow     # Tests de larga duración (OCR, archivos grandes)
+@pytest.mark.pdf      # Requiere fixtures PDF reales
 ```
 
-### Running tests
+### Comandos
 
 ```bash
-./dev.sh test
-# or with extra pytest args:
-./dev.sh test -k test_invoice -v
-# or directly:
-uv run pytest
+./dev.sh test                                    # Todos los tests
+./dev.sh test tests/core/test_scanner.py         # Archivo específico
+./dev.sh test -k "test_validate"                 # Tests que coincidan con el patrón
+./dev.sh test -m "not db and not slow"           # Solo tests unitarios rápidos
+./dev.sh test --cov=core,app --cov-report=html   # Con reporte de cobertura HTML
+
+# Type checking (sin wrapper en dev.sh)
+uv run mypy app/
 ```
 
-### Linting and formatting
+---
+
+## Seguridad
+
+- **`.env` nunca se commitea** — está en `.gitignore`. Usar `.env.example` como plantilla.
+- **Variables requeridas son obligatorias** — `docker-compose.yml` usa sintaxis `:?` para `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`. Si alguna falta, Docker Compose aborta con error explícito.
+- **Secretos cifrados en reposo** — contraseñas SIHOS y credenciales de Google Drive se almacenan en DB con cifrado AES-256-GCM vía `app/crypto.py`. La clave proviene de `SECRET_KEY`.
+- **Logos almacenados en DB** — los logos de instituciones se guardan como `BYTEA` en PostgreSQL y se sirven vía API, sin volúmenes compartidos.
+- **Contenedor sin root** — la imagen Docker corre como `appuser`, no como `root`.
+- **Sin exposición directa de la DB** — PostgreSQL solo es accesible dentro de la red Docker.
+- **Swagger deshabilitado por defecto** — `DOCS_ENABLED=false` en producción evita exponer la documentación de la API.
+- **Rate limiting** — Nginx limita las peticiones API a 30 req/s por IP (burst de 20).
+- **Historial git limpio** — ninguna credencial ni secreto ha sido commiteado al repositorio.
+
+---
+
+## Monitoreo
+
+### Logs estructurados (structlog)
+
+Todos los logs incluyen campos de contexto (`method`, `path`, `status`, `latency_ms`). Nivel configurable vía `LOG_LEVEL`. Las rutas `/health`, `/health/db`, `/metrics` y `/static` están excluidas del logging de requests.
+
+### Métricas Prometheus
+
+Disponibles en `/metrics`. Incluyen duración de requests HTTP, distribución de códigos de estado y conteo de requests. El endpoint es excluido del schema OpenAPI.
+
+### Health checks
+
+| Endpoint | Descripción |
+|---|---|
+| `GET /health` | Health básico (siempre 200 si el proceso está corriendo) |
+| `GET /health/db` | Health con verificación de conexión a DB (503 si la DB no está disponible) |
+
+### Dashboards de desarrollo
 
 ```bash
-./dev.sh lint      # check only (CI-safe)
-./dev.sh format    # auto-fix formatting
-uv run mypy app/   # type checking (no dev.sh wrapper)
+# Levantar stack de monitoreo (dev only)
+docker compose up -d  # incluye Prometheus y Grafana vía docker-compose.override.yml
 ```
 
-### Validating Docker Compose config
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000` (usuario: `admin`, clave: `admin`)
 
-```bash
-# With override (dev)
-docker compose config
-
-# Production only (no override)
-docker compose -f docker-compose.yml config
-```
-
-### Confirming settings are loaded correctly
-
-```bash
-uv run python -c "from app.config import settings; print(settings.model_dump())"
-```
+> Para el despliegue a producción, ver **[docs/DEPLOY.md](docs/DEPLOY.md)**.
