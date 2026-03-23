@@ -289,6 +289,23 @@
       </button>
     </div>
 
+    <!-- Export download button — appears after EXPORTAR_AUDITADOS completes -->
+    <div x-show="exportFile" x-transition
+         class="shrink-0 px-3 pb-3" style="border-top:1px solid var(--border);padding-top:10px">
+      <p class="text-[9px] font-semibold uppercase tracking-widest mb-1.5" style="color:var(--text-3)">
+        <i class="fa-solid fa-file-export mr-1" style="color:#059669"></i>Exportación lista
+      </p>
+      <a :href="`/api/pipeline/download-export?institution_id=${$store.ctx.institutionId}&period_id=${$store.ctx.periodId}&filename=${encodeURIComponent(exportFile)}`"
+         download
+         class="flex items-center justify-center gap-2 w-full py-2 rounded-lg font-semibold text-[11px] transition-all"
+         style="background:var(--emerald-soft);color:#059669;border:1px solid var(--emerald-border)"
+         onmouseover="this.style.background='#059669';this.style.color='#fff'"
+         onmouseout="this.style.background='var(--emerald-soft)';this.style.color='#059669'">
+        <i class="fa-solid fa-cloud-arrow-down text-[10px]"></i>
+        <span x-text="exportFile" class="truncate max-w-[160px]"></span>
+      </a>
+    </div>
+
       </div><!-- /expanded flex col -->
     </template><!-- /x-if flowOpen -->
 
@@ -908,6 +925,7 @@ function pipeline() {
     surplusData: null,
     annulData: null,
     nonPdfData: null,
+    exportFile: null,
     previewFile: null,
     stageStatuses: {},
     stageResults: {},
@@ -954,7 +972,8 @@ function pipeline() {
       // ── 5. CIERRE ────────────────────────────────────────────────────────
       { type:'phase', label:'Cierre', color:'#059669', icon:'fa-solid fa-box-archive' },
       { type:'stage', id:'ORGANIZE',       label:'Organizar en AUDIT',   icon:'fa-solid fa-boxes-stacked', phaseColor:'#059669' },
-      { type:'stage', id:'COMPRESS_AUDIT', label:'Comprimir documentos', icon:'fa-solid fa-file-zipper',  phaseColor:'#059669', heavy:true },
+      { type:'stage', id:'COMPRESS_AUDIT',       label:'Comprimir documentos',      icon:'fa-solid fa-file-zipper',   phaseColor:'#059669', heavy:true },
+      { type:'stage', id:'EXPORTAR_AUDITADOS',   label:'Exportar documentos auditados', icon:'fa-solid fa-file-export', phaseColor:'#059669', heavy:true },
 
       // ── 6. DESCARGAS — SIHOS ────────────────────────────────────────────
       { type:'phase', label:'Descargas · SIHOS', color:'#0369a1', icon:'fa-solid fa-hospital' },
@@ -991,6 +1010,7 @@ function pipeline() {
       { id:'VERIFY_CUFE',             label:'Verificar CUFE',                     description:'Valida que cada PDF de factura contenga un código CUFE válido. Las carpetas sin CUFE se renombran añadiendo el sufijo _SINCUFE para identificación visual.' },
       { id:'ORGANIZE',                label:'Organizar en AUDIT',                 description:'Mueve de STAGE a AUDIT las carpetas de facturas PRESENTE sin hallazgos pendientes, organizándolas en subcarpetas por administradora y contrato. Actualiza su estado a AUDITADA en la base de datos.' },
       { id:'COMPRESS_AUDIT',          label:'Comprimir documentos',               description:'Comprime con Ghostscript (calidad ebook, 150 dpi) todos los PDFs en AUDIT. Reduce el tamaño de archivo sin pérdida visual significativa. Reporta ahorro total en MB. Los archivos que no puedan comprimirse se registran como advertencia y se omiten.' },
+      { id:'EXPORTAR_AUDITADOS',      label:'Exportar documentos auditados',      description:'Empaqueta toda la carpeta AUDIT en un archivo ZIP descargable. El ZIP queda guardado en la carpeta de exportaciones del período y puede descargarse desde el botón que aparece al finalizar la etapa.' },
       { id:'DOWNLOAD_INVOICES_FROM_SIHOS', label:'Descargar facturas desde SIHOS', description:'Requiere sesión en SIHOS. Descarga el PDF de factura de cada factura PENDIENTE con hallazgo sin resolver del tipo de documento seleccionado. Solo descarga la factura en sí; no otros documentos del expediente.' },
       { id:'DOWNLOAD_MEDICATION_SHEETS',   label:'Descargar hojas de medicamentos', description:'Requiere sesión en SIHOS. Descarga las hojas de medicamentos de facturas PENDIENTE con hallazgo sin resolver del tipo seleccionado y número de admisión registrado.' },
       { id:'DOWNLOAD_DRIVE',          label:'Descargar carpetas (Drive)',          description:'Busca en Google Drive las carpetas de facturas marcadas como FALTANTE y las descarga a STAGE. Su estado se actualiza automáticamente a PRESENTE.' },
@@ -1063,6 +1083,7 @@ function pipeline() {
       this.currentStageLabel = '';
       this.stageStatuses = {};
       this.stageResults = {};
+      this.exportFile = null;
       ['pipeline_logLines','pipeline_currentStageLabel','pipeline_stageStatuses','pipeline_stageResults'].forEach(k => sessionStorage.removeItem(k));
     },
 
@@ -1122,6 +1143,13 @@ function pipeline() {
         }
 
         this.$store.pipeline.update('running', cursor);
+
+        // Handle [DATA] signals — do not push to log
+        if (line.startsWith('[DATA] export_file:')) {
+          this.exportFile = line.slice('[DATA] export_file:'.length).trim();
+          return;
+        }
+
         this._markLine(stageId, line);
         this._updateStageResult(stageId, line);
         this.logLines.push(line);

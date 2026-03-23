@@ -315,6 +315,49 @@ async def process_non_pdf_decisions(
     return {"ok": True, "deleted": deleted, "converted": converted, "errors": errors}
 
 
+@router.get("/download-export")
+async def download_export(
+    institution_id: int,
+    period_id: int,
+    filename: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Descarga el ZIP generado por la etapa EXPORTAR_AUDITADOS.
+
+    El parámetro ``filename`` es el nombre del archivo tal como lo emitió
+    el pipeline en la línea ``[DATA] export_file:<filename>``.
+    """
+    institution = await InstitutionRepo(db).get_by_id(institution_id)
+    if not institution:
+        raise HTTPException(404, "Institución no encontrada")
+    period = await InvoiceRepo(db).get_period_by_id(period_id)
+    if not period:
+        raise HTTPException(404, "Período no encontrado")
+
+    sys_settings = await RulesRepo(db).get_system_settings()
+    if not sys_settings or not sys_settings.audit_data_root:
+        raise HTTPException(500, "audit_data_root no configurado")
+
+    base = to_container_path(sys_settings.audit_data_root) / institution.name / period.period_label
+    exports_dir = (base / "exports").resolve()
+
+    # Prevención de path traversal: el archivo debe estar dentro de exports_dir
+    try:
+        zip_path = (exports_dir / filename).resolve()
+        zip_path.relative_to(exports_dir)
+    except ValueError:
+        raise HTTPException(400, "Nombre de archivo inválido")
+
+    if not zip_path.exists() or not zip_path.is_file():
+        raise HTTPException(404, "Archivo de exportación no encontrado")
+
+    return FileResponse(
+        str(zip_path),
+        media_type="application/zip",
+        filename=zip_path.name,
+    )
+
+
 _PREVIEW_MIME: dict[str, str] = {
     "jpg": "image/jpeg",
     "jpeg": "image/jpeg",
