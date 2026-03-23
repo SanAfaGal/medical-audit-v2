@@ -106,16 +106,24 @@ def upgrade():
     """)
 
     # 9. Update invoices.institution_contract_id
+    # Note: PostgreSQL does not allow referencing the UPDATE target table inside
+    # FROM-clause JOINs. All conditions that touch "invoices" columns must live
+    # in the WHERE clause. Use comma-separated FROM tables instead of JOINs.
     op.execute("""
         UPDATE invoices
         SET institution_contract_id = ic.id
-        FROM institution_contracts ic
-        JOIN audit_periods p ON p.id = invoices.audit_period_id
-        JOIN admins old_adm ON old_adm.id = invoices.admin_id
-        JOIN administrators adm ON adm.raw_name = old_adm.raw_admin
-        JOIN contracts old_c ON old_c.id = invoices.contract_id
-        JOIN contracts_global cg ON cg.raw_name = old_c.raw_contract
-        WHERE ic.institution_id = p.institution_id
+        FROM institution_contracts ic,
+             audit_periods p,
+             admins old_adm,
+             administrators adm,
+             contracts old_c,
+             contracts_global cg
+        WHERE p.id = invoices.audit_period_id
+          AND old_adm.id = invoices.admin_id
+          AND adm.raw_name = old_adm.raw_admin
+          AND old_c.id = invoices.contract_id
+          AND cg.raw_name = old_c.raw_contract
+          AND ic.institution_id = p.institution_id
           AND ic.administrator_id = adm.id
           AND ic.contract_id = cg.id
           AND invoices.admin_id IS NOT NULL
@@ -185,18 +193,26 @@ def downgrade():
     op.execute("ALTER TABLE invoices ADD COLUMN contract_id INTEGER REFERENCES contracts(id)")
 
     # 7. Restore invoice admin_id and contract_id from institution_contracts
+    # Same PostgreSQL restriction: invoices columns must be in WHERE, not FROM JOINs.
     op.execute("""
         UPDATE invoices
         SET
             admin_id = a.id,
             contract_id = c.id
-        FROM institution_contracts ic
-        JOIN audit_periods p ON p.id = invoices.audit_period_id
-        JOIN administrators adm ON adm.id = ic.administrator_id
-        JOIN admins a ON a.institution_id = p.institution_id AND a.raw_admin = adm.raw_name
-        JOIN contracts_global cg ON cg.id = ic.contract_id
-        JOIN contracts c ON c.institution_id = p.institution_id AND c.raw_contract = cg.raw_name
+        FROM institution_contracts ic,
+             audit_periods p,
+             administrators adm,
+             admins a,
+             contracts_global cg,
+             contracts c
         WHERE invoices.institution_contract_id = ic.id
+          AND p.id = invoices.audit_period_id
+          AND adm.id = ic.administrator_id
+          AND a.institution_id = p.institution_id
+          AND a.raw_admin = adm.raw_name
+          AND cg.id = ic.contract_id
+          AND c.institution_id = p.institution_id
+          AND c.raw_contract = cg.raw_name
     """)
 
     # 8. Drop institution_contract_id from invoices
