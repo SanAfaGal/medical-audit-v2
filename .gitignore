@@ -19,6 +19,8 @@ env/
 .env
 .env.local
 .env.*.local
+.env.dev
+.env.prod
 
 # Alembic (keep versions, ignore runtime artifacts)
 alembic/__pycache__/
