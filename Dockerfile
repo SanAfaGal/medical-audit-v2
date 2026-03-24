@@ -84,8 +84,8 @@ COPY alembic.ini ./
 RUN /app/.venv/bin/python -m playwright install chromium --with-deps \
     && rm -rf /root/.cache/ms-playwright/.links
 
-# Non-root user with fixed UID 1000
-RUN useradd --uid 1000 --no-create-home --shell /bin/false appuser \
+# Non-root user — UID 10001 evita colisión con ubuntu/node que ocupan UID 1000
+RUN useradd --uid 10001 --no-create-home --shell /bin/false appuser \
     && chown -R appuser:appuser /app
 
 COPY scripts/docker-entrypoint.sh /usr/local/bin/entrypoint.sh
