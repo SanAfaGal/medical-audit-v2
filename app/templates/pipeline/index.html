@@ -846,6 +846,81 @@
 
   </div><!-- /RIGHT PANEL -->
 
+<!-- ── Modal de confirmación: eliminar archivo sobrante ───────────────────── -->
+<template x-if="deleteConfirmPending">
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4"
+       style="background:rgba(0,0,0,0.55);backdrop-filter:blur(3px)"
+       @click.self="deleteConfirmPending = null"
+       @keydown.escape.window="deleteConfirmPending = null">
+    <div class="flex flex-col gap-4 rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+         style="background:var(--bg-surface);border:1px solid var(--border)">
+      <!-- Icono + título -->
+      <div class="flex items-start gap-3">
+        <div class="shrink-0 w-9 h-9 rounded-full flex items-center justify-center"
+             style="background:rgba(239,68,68,0.1)">
+          <i class="fa-solid fa-trash text-red-500 text-sm"></i>
+        </div>
+        <div>
+          <div class="text-sm font-semibold mb-1" style="color:var(--text-1)">Eliminar archivo</div>
+          <div class="text-xs leading-relaxed" style="color:var(--text-2)">
+            ¿Eliminar del disco
+            <span class="font-mono font-semibold px-1 py-0.5 rounded text-xs"
+                  style="background:var(--bg-subtle);color:var(--text-1)"
+                  x-text="deleteConfirmPending.sob.filename"></span>?
+            Esta acción no se puede deshacer.
+          </div>
+        </div>
+      </div>
+      <!-- Acciones -->
+      <div class="flex gap-2 justify-end">
+        <button @click="deleteConfirmPending = null"
+                class="px-4 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                style="background:var(--bg-subtle);color:var(--text-2);border:1px solid var(--border)">
+          Cancelar
+        </button>
+        <button @click="executeDeleteSurplus()"
+                class="px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition-colors bg-red-500 hover:bg-red-600">
+          <i class="fa-solid fa-trash mr-1.5"></i>
+          Sí, eliminar
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ── Toast stack ────────────────────────────────────────────────────────── -->
+<div class="fixed bottom-5 right-5 z-50 flex flex-col-reverse gap-2 items-end max-w-xs pointer-events-none">
+  <template x-for="t in toasts" :key="t.id">
+    <div class="pointer-events-auto w-full"
+         x-show="true"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0 translate-y-2"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 translate-y-2">
+      <div :class="{
+             'border-emerald-200 text-emerald-800 shadow-emerald-100': t.type === 'ok',
+             'border-amber-200  text-amber-800  shadow-amber-100':  t.type === 'warn',
+             'border-red-200    text-red-800    shadow-red-100':    t.type === 'err'
+           }"
+           class="bg-white px-4 py-3 rounded-xl border text-xs flex items-center gap-2.5 shadow-lg">
+        <i :class="{
+             'fa-solid fa-circle-check text-emerald-500':       t.type === 'ok',
+             'fa-solid fa-triangle-exclamation text-amber-500': t.type === 'warn',
+             'fa-solid fa-circle-xmark text-red-500':           t.type === 'err'
+           }"
+           class="shrink-0"></i>
+        <span x-text="t.message" class="flex-1"></span>
+        <button @click="toasts = toasts.filter(x => x.id !== t.id)"
+                class="opacity-40 hover:opacity-80 transition-opacity ml-1">
+          <i class="fa-solid fa-xmark text-[10px]"></i>
+        </button>
+      </div>
+    </div>
+  </template>
+</div>
+
 <!-- Image preview modal -->
 <template x-if="previewFile">
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -930,6 +1005,9 @@ function pipeline() {
     nonPdfData: null,
     exportReady: false,
     previewFile: null,
+    toasts: [],
+    _toastId: 0,
+    deleteConfirmPending: null,
     stageStatuses: {},
     stageResults: {},
     hoveredStage: null,
@@ -1503,24 +1581,12 @@ function pipeline() {
         this.annulData = null;
       } else {
         const err = await res.json().catch(() => ({detail: 'Error desconocido'}));
-        alert('Error al aplicar decisiones: ' + (err.detail || JSON.stringify(err)));
+        this.showToast(false, 'Error al aplicar decisiones: ' + (err.detail || JSON.stringify(err)));
       }
     },
 
     async applyDelete(inv, sob) {
-      if (!confirm(`¿Eliminar "${sob.filename}" del disco?`)) return;
-      const res = await fetch(`/api/invoices/${inv.invoice_id}/delete-surplus`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ folder_path: inv.folder_path, filename: sob.filename })
-      });
-      if (res.ok) {
-        sob._deleted = true;
-        sob._done = true;
-      } else {
-        const err = await res.json().catch(() => ({detail: 'Error desconocido'}));
-        alert('Error: ' + (err.detail || JSON.stringify(err)));
-      }
+      this.confirmDeleteSurplus(inv, sob);
     },
 
     async applyRename(inv, sob) {
@@ -1541,7 +1607,7 @@ function pipeline() {
         sob._done = true;
       } else {
         const err = await res.json().catch(() => ({detail: 'Error desconocido'}));
-        alert('Error: ' + (err.detail || JSON.stringify(err)));
+        this.showToast(false, err.detail || JSON.stringify(err));
       }
     },
 
@@ -1582,6 +1648,34 @@ function pipeline() {
     scrollLog() {
       const el = this.$refs.logContainer;
       if (el) el.scrollTop = el.scrollHeight;
+    },
+
+    showToast(ok, message) {
+      const type = ok === 'warn' ? 'warn' : ok ? 'ok' : 'err';
+      const id = ++this._toastId;
+      this.toasts.push({ id, type, message });
+      setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 4500);
+    },
+
+    confirmDeleteSurplus(inv, sob) {
+      this.deleteConfirmPending = { inv, sob };
+    },
+
+    async executeDeleteSurplus() {
+      const { inv, sob } = this.deleteConfirmPending;
+      this.deleteConfirmPending = null;
+      const res = await fetch(`/api/invoices/${inv.invoice_id}/delete-surplus`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ folder_path: inv.folder_path, filename: sob.filename })
+      });
+      if (res.ok) {
+        sob._deleted = true;
+        sob._done = true;
+      } else {
+        const err = await res.json().catch(() => ({detail: 'Error desconocido'}));
+        this.showToast(false, err.detail || JSON.stringify(err));
+      }
     },
   };
 }
