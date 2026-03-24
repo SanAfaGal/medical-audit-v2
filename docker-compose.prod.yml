@@ -9,9 +9,6 @@ name: medical-audit-prod
 #
 # Variables requeridas en .env:
 #   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, SECRET_KEY
-#
-# Después del primer arranque, configurar la ruta base de auditoría en:
-#   Configuración → Sistema → audit_data_root = /audit_data
 services:
 
   # ── PostgreSQL ─────────────────────────────────────────────────────────────

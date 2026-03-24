@@ -15,14 +15,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ── Stage 2: api — sin OCR ni Playwright (~350 MB) ────────────────────────────
 FROM python:3.11-slim AS api
 
-# BuildKit cache mount: apt no se re-descarga entre rebuilds cuando solo cambia el código
+# gosu: drops root to appuser safely in the entrypoint (same pattern as postgres/redis images)
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-        libgl1 \
+        libgl1 gosu \
     && rm -rf /var/lib/apt/lists/*
 
-# Non-root user for security
-RUN useradd --no-create-home --shell /bin/false appuser
+# Non-root user with fixed UID 1000
+RUN useradd --uid 1000 --no-create-home --shell /bin/false appuser
 
 WORKDIR /app
 
@@ -31,10 +31,11 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 
 # Copy application source
-COPY app     ./app
-COPY core    ./core
-COPY alembic ./alembic
-COPY alembic.ini ./
+COPY app             ./app
+COPY core            ./core
+COPY alembic         ./alembic
+COPY alembic.ini     ./
+COPY scripts/docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 
 # Activate venv
 ENV PATH="/app/.venv/bin:$PATH"
@@ -43,8 +44,8 @@ ENV PYTHONUNBUFFERED=1
 # Prevents writing .pyc files into the container layer
 ENV PYTHONDONTWRITEBYTECODE=1
 
-RUN chown -R appuser:appuser /app
-USER appuser
+RUN chown -R appuser:appuser /app \
+    && chmod +x /usr/local/bin/entrypoint.sh
 
 EXPOSE 8000
 
@@ -52,6 +53,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
+# Starts as root → entrypoint fixes /audit_data ownership → drops to appuser
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
 
 # ── Stage 3: full — jbarlow83/ocrmypdf (Ghostscript + Tesseract ya incluidos) ──
@@ -81,10 +84,12 @@ COPY alembic.ini ./
 RUN /app/.venv/bin/python -m playwright install chromium --with-deps \
     && rm -rf /root/.cache/ms-playwright/.links
 
-# Non-root user for security
-RUN useradd --no-create-home --shell /bin/false appuser \
+# Non-root user with fixed UID 1000
+RUN useradd --uid 1000 --no-create-home --shell /bin/false appuser \
     && chown -R appuser:appuser /app
-USER appuser
+
+COPY scripts/docker-entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
@@ -95,7 +100,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
-# jbarlow83/ocrmypdf define ENTRYPOINT ["ocrmypdf"] — lo reseteamos para que
-# CMD ejecute uvicorn y no se pase como argumento a ocrmypdf
-ENTRYPOINT []
+# Starts as root → entrypoint fixes /audit_data ownership → drops to appuser
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
