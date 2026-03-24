@@ -62,6 +62,11 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--worker
 # Incluye: ghostscript, tesseract-ocr, tesseract-ocr-spa, libgl1 — sin apt manual.
 FROM jbarlow83/ocrmypdf AS full
 
+# gosu: drops root to appuser safely in the entrypoint (same pattern as api stage)
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends gosu \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
