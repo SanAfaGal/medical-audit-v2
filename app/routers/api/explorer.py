@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import json
 import shutil
+import zipfile
 from pathlib import Path
 
 import aiofiles
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -124,6 +126,7 @@ async def list_directory(
                         name=item.name,
                         path=str(item.relative_to(sandbox)).replace("\\", "/"),
                         is_dir=True,
+                        file_count=sum(1 for f in item.rglob("*") if f.is_file()),
                     )
                 )
             elif item.suffix.lower() == ".pdf":
@@ -652,6 +655,72 @@ async def upload_files(
             skipped.append(f"{filename}: {e}")
 
     return UploadResult(uploaded=uploaded, skipped=skipped, non_pdf_count=non_pdf_count)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Descarga de archivos individuales y ZIP
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/download-file")
+async def download_file(
+    institution_id: int = Query(...),
+    period_id: int = Query(...),
+    rel_path: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Descarga un archivo individual como attachment."""
+    sandbox = await _resolve_sandbox(institution_id, period_id, db)
+    abs_path = _safe_resolve(sandbox, rel_path)
+
+    if not abs_path.is_file():
+        raise HTTPException(404, "Archivo no encontrado")
+
+    async def _iter():
+        async with aiofiles.open(abs_path, "rb") as f:
+            while chunk := await f.read(65536):
+                yield chunk
+
+    return StreamingResponse(
+        _iter(),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{abs_path.name}"'},
+    )
+
+
+@router.get("/download-zip")
+async def download_zip(
+    institution_id: int = Query(...),
+    period_id: int = Query(...),
+    rel_paths: list[str] = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Empaqueta una lista de rutas (archivos y/o carpetas) en un ZIP en memoria."""
+    sandbox = await _resolve_sandbox(institution_id, period_id, db)
+
+    def _build() -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+            for rel in rel_paths:
+                abs_p = _safe_resolve(sandbox, rel)
+                if abs_p.is_file():
+                    zf.write(abs_p, abs_p.name)
+                elif abs_p.is_dir():
+                    for f in abs_p.rglob("*"):
+                        if f.is_file():
+                            zf.write(f, f.relative_to(abs_p.parent))
+        return buf.getvalue()
+
+    loop = asyncio.get_running_loop()
+    zip_bytes = await loop.run_in_executor(None, _build)
+
+    zip_name = (Path(rel_paths[0]).name + ".zip") if len(rel_paths) == 1 else "seleccion.zip"
+
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_name}"'},
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

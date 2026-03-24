@@ -794,6 +794,20 @@
           if (data.ok) this.load();
         },
 
+        // ── Descarga ZIP ──────────────────────────────────────────────────
+
+        downloadZip(paths) {
+          const params = new URLSearchParams({
+            institution_id: this.institutionId,
+            period_id: this.periodId,
+          });
+          paths.forEach(p => params.append('rel_paths', p));
+          const a = document.createElement('a');
+          a.href = `/api/explorer/download-zip?${params}`;
+          a.download = '';
+          a.click();
+        },
+
         // Abrir explorador — siempre arranca en STAGE
         open() {
           this.explorerOpen = true;

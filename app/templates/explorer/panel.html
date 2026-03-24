@@ -288,11 +288,38 @@
                           x-text="entry.name"
                           :title="entry.name"></span>
 
+                    <!-- Badge conteo de archivos (solo carpetas, modo normal) -->
+                    <template x-if="!isSearchActive() && entry.is_dir && entry.file_count !== null && confirmingDelete !== entry.path">
+                      <span class="text-[9px] px-1.5 py-0.5 rounded font-semibold shrink-0 group-hover:hidden"
+                            :style="entry.file_count === 0
+                              ? 'background:rgba(239,68,68,0.1);color:#ef4444'
+                              : 'background:rgba(0,0,0,0.05);color:var(--text-3,#94a3b8)'"
+                            x-text="entry.file_count === 0 ? 'vacía' : entry.file_count + ' arch.'"></span>
+                    </template>
+
                     <!-- Botones de acción flotantes (solo en modo normal, sin selección) -->
                     <div x-show="!isSearchActive() && pdfMode === 'none' && confirmingDelete !== entry.path"
                          class="absolute right-1 top-1/2 -translate-y-1/2
                                 hidden group-hover:flex items-center gap-0.5
                                 bg-white/95 border border-slate-100 rounded-md shadow-sm px-0.5">
+                      <!-- Descargar archivo (solo archivos) -->
+                      <template x-if="!entry.is_dir">
+                        <a :href="`/api/explorer/download-file?institution_id=${institutionId}&period_id=${periodId}&rel_path=${encodeURIComponent(entry.path)}`"
+                           download
+                           class="p-1 rounded hover:bg-sky-50 text-slate-400 hover:text-sky-500 flex items-center"
+                           title="Descargar archivo"
+                           @click.stop>
+                          <i class="fa-solid fa-download text-[9px]"></i>
+                        </a>
+                      </template>
+                      <!-- Descargar ZIP (solo carpetas) -->
+                      <template x-if="entry.is_dir">
+                        <button @click.stop="downloadZip([entry.path])"
+                                class="p-1 rounded hover:bg-sky-50 text-slate-400 hover:text-sky-500"
+                                title="Descargar carpeta como ZIP">
+                          <i class="fa-solid fa-file-zipper text-[9px]"></i>
+                        </button>
+                      </template>
                       <button @click.stop="startMove(entry)"
                               class="p-1 rounded hover:bg-indigo-50 text-slate-400 hover:text-indigo-600"
                               title="Mover">
@@ -365,6 +392,16 @@
                         class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
                   <i class="fa-solid fa-trash text-[10px]"></i>
                   <span>Eliminar</span>
+                  <span x-show="selectedEntries.length" class="font-semibold"
+                        x-text="`(${selectedEntries.length})`"></span>
+                </button>
+
+                <!-- Descargar selección como ZIP -->
+                <button @click="downloadZip(selectedEntries)"
+                        :disabled="!selectedEntries.length"
+                        class="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-sky-500 text-white hover:bg-sky-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+                  <i class="fa-solid fa-file-zipper text-[10px]"></i>
+                  <span>Descargar</span>
                   <span x-show="selectedEntries.length" class="font-semibold"
                         x-text="`(${selectedEntries.length})`"></span>
                 </button>
