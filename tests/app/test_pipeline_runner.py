@@ -19,14 +19,14 @@ from app.services.pipeline_runner import _build_context, _STAGE_HANDLERS, execut
 class TestBuildContext:
     def test_all_keys_present(self, minimal_institution, minimal_period):
         db = AsyncMock()
-        ctx = _build_context(minimal_institution, minimal_period, db, {}, "/data")
+        ctx = _build_context(minimal_institution, minimal_period, db, {})
         for key in ("institution", "period", "db", "base_path", "drive_path", "stage_path", "audit_path"):
             assert key in ctx
 
     def test_paths_derived_from_base(self, minimal_institution, minimal_period):
         db = AsyncMock()
-        ctx = _build_context(minimal_institution, minimal_period, db, {}, "/data")
-        base = Path("/data") / minimal_institution.name / minimal_period.period_label
+        ctx = _build_context(minimal_institution, minimal_period, db, {})
+        base = ctx["base_path"]
         assert ctx["base_path"] == base
         assert ctx["drive_path"] == base / "DRIVE"
         assert ctx["stage_path"] == base / "STAGE"
@@ -34,7 +34,7 @@ class TestBuildContext:
 
     def test_extra_keys_merged(self, minimal_institution, minimal_period):
         db = AsyncMock()
-        ctx = _build_context(minimal_institution, minimal_period, db, {"invoice_numbers": ["X"]}, "/data")
+        ctx = _build_context(minimal_institution, minimal_period, db, {"invoice_numbers": ["X"]})
         assert ctx["invoice_numbers"] == ["X"]
 
 
@@ -70,6 +70,7 @@ class TestStageRegistry:
             "COMPRESS_AUDIT",
             "DOWNLOAD_DRIVE",
             "DOWNLOAD_MISSING_DOCS",
+            "EXPORTAR_AUDITADOS",
         }
         assert expected == set(_STAGE_HANDLERS.keys())
 
@@ -96,9 +97,7 @@ class TestExecute:
         stage_dir.mkdir(parents=True)
 
         db = AsyncMock()
-        fake_settings = SimpleNamespace(audit_data_root=str(tmp_path))
-        with patch("app.services.pipeline_runner.RulesRepo") as mock_repo:
-            mock_repo.return_value.get_system_settings = AsyncMock(return_value=fake_settings)
+        with patch("app.services.pipeline_runner.audit_data_root", tmp_path):
             lines = [line async for line in execute("REMOVE_NON_PDF", inst, period, db)]
 
         assert any("[INFO]" in line for line in lines)
@@ -156,9 +155,9 @@ class TestStageGuards:
         from app.services.pipeline_runner import _build_context
 
         # audit_data_root points to tmp_path; STAGE subdir is never created → path absent
-        ctx = _build_context(inst, period, db, {}, str(tmp_path))
-
-        lines = [line async for line in handler(ctx)]
+        with patch("app.services.pipeline_runner.audit_data_root", tmp_path):
+            ctx = _build_context(inst, period, db, {})
+            lines = [line async for line in handler(ctx)]
         assert any("[WARN]" in line or "[ERROR]" in line for line in lines), (
             f"Stage {stage_name!r} should warn or error when STAGE dir is absent"
         )
@@ -185,11 +184,12 @@ class TestRemoveNonPdfStage:
         (stage_dir / "valid.pdf").write_bytes(b"%PDF-1.4 test")  # minimal valid header
 
         db = AsyncMock()
-        ctx = _build_context(inst, period, db, {}, str(tmp_path))
-        handler = _STAGE_HANDLERS["REMOVE_NON_PDF"]
-        lines = [line async for line in handler(ctx)]
+        with patch("app.services.pipeline_runner.audit_data_root", tmp_path):
+            ctx = _build_context(inst, period, db, {})
+            handler = _STAGE_HANDLERS["REMOVE_NON_PDF"]
+            lines = [line async for line in handler(ctx)]
 
-        # Stage is scan-only: files are NOT deleted, [DATA] is emitted for UI review
-        assert any("1" in line and "no-pdf" in line.lower() for line in lines)
+        # Stage is scan-only: files are NOT deleted, [INFO] lines show counts
+        assert any("Archivos no-PDF encontrados: 1" in line for line in lines), f"Lines: {lines}"
         assert (stage_dir / "notes.txt").exists()  # scan only — no deletion
         assert (stage_dir / "valid.pdf").exists()
