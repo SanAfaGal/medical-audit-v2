@@ -148,7 +148,8 @@
         thumbnails: [],
         pageOrder: [],
         reorderDragIdx: null,
-        toast: null,
+        toasts: [],
+        _toastId: 0,
         confirmingDelete: null,
         movingEntries: [],
         moveBrowserPath: '',
@@ -642,13 +643,21 @@
         },
 
         showToast(ok, message) {
-          // ok === 'loading': toast persistente con spinner (sin auto-dismiss)
-          if (ok === 'loading') {
-            this.toast = { type: 'loading', message };
-            return;
+          // Quitar cualquier toast de carga previo (se reemplaza con el resultado)
+          this.toasts = this.toasts.filter(t => t.type !== 'loading');
+
+          const type = ok === 'loading' ? 'loading'
+                     : ok === 'warn'    ? 'warn'
+                     : ok              ? 'ok'
+                     :                   'err';
+          const id = ++this._toastId;
+          this.toasts.push({ id, type, message });
+
+          if (type !== 'loading') {
+            setTimeout(() => {
+              this.toasts = this.toasts.filter(t => t.id !== id);
+            }, 4500);
           }
-          this.toast = { type: ok ? 'ok' : 'err', message };
-          setTimeout(() => { this.toast = null; }, 4000);
         },
 
         // ── Selección en lote ──────────────────────────────────────────────
@@ -742,11 +751,11 @@
             const nonPdf = data.non_pdf_count ?? 0;
             const errSkipped = (data.skipped?.length ?? 0) - nonPdf;
 
-            let msg = n > 0 ? `${n} PDF(s) subido(s) correctamente` : 'No se subió ningún archivo';
-            if (nonPdf > 0) msg += ` · ${nonPdf} archivo(s) no son PDF y fueron omitidos`;
-            if (errSkipped > 0) msg += ` · ${errSkipped} error(es) al escribir`;
+            if (n > 0)         this.showToast(true,   `${n} PDF(s) subido(s) correctamente`);
+            else               this.showToast(false,  'No se subió ningún archivo');
+            if (nonPdf > 0)    this.showToast('warn', `${nonPdf} omitido(s): no son PDF`);
+            if (errSkipped > 0) this.showToast(false, `${errSkipped} error(es) al escribir`);
 
-            this.showToast(n > 0, msg);
             if (n > 0) this.load();
           } else {
             this.showToast(false, data.message || 'Error al subir archivos');
