@@ -1483,67 +1483,6 @@
       </div>
     </div>
 
-    <!-- ══════════════════════════════════════════════════════
-         TAB: SISTEMA
-    ══════════════════════════════════════════════════════════ -->
-    <div x-show="tab === 'sistema'" class="space-y-4">
-
-      <div class="cfg-card p-5">
-        <!-- Status header -->
-        <div class="flex items-start gap-4 mb-5">
-          <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-               :style="systemSettings.audit_data_root ? 'background:var(--emerald-soft)' : 'background:var(--amber-soft)'">
-            <i class="fa-solid fa-folder-open text-lg"
-               :style="systemSettings.audit_data_root ? 'color:var(--emerald)' : 'color:var(--amber)'"></i>
-          </div>
-          <div>
-            <h2 class="text-sm font-semibold mb-0.5" style="color:var(--text-1)">Carpeta principal de auditorías</h2>
-            <p class="text-xs leading-relaxed"
-               :style="systemSettings.audit_data_root ? 'color:var(--emerald)' : 'color:var(--amber)'">
-              <template x-if="systemSettings.audit_data_root">
-                <span><i class="fa-solid fa-circle-check mr-1"></i>Configurada correctamente.</span>
-              </template>
-              <template x-if="!systemSettings.audit_data_root">
-                <span><i class="fa-solid fa-triangle-exclamation mr-1"></i>No configurada — el pipeline no podrá acceder a los archivos.</span>
-              </template>
-            </p>
-          </div>
-        </div>
-
-        <!-- Folder structure diagram -->
-        <div class="rounded-xl p-4 mb-5 font-mono text-xs leading-6"
-             style="background:var(--bg-subtle);border:1px solid var(--border)">
-          <p class="font-sans text-xs font-semibold mb-2" style="color:var(--text-2)">¿Cómo deben estar organizadas las carpetas?</p>
-          <div style="color:var(--text-1)"><i class="fa-solid fa-folder mr-1" style="color:var(--amber)"></i><strong>Carpeta principal</strong> <span style="color:var(--text-3)">← esta es la que configuras aquí</span></div>
-          <div class="ml-4" style="color:var(--text-1)"><i class="fa-solid fa-folder mr-1" style="color:var(--amber)"></i>HOSPITAL #1 <span style="color:var(--text-3)">← nombre de la institución</span></div>
-          <div class="ml-8" style="color:var(--text-1)"><i class="fa-solid fa-folder mr-1" style="color:var(--amber)"></i>DD-DD-MMMM <span style="color:var(--text-3)">← período</span></div>
-          <div class="ml-12" style="color:var(--sky)"><i class="fa-solid fa-folder mr-1"></i>DRIVE</div>
-          <div class="ml-12" style="color:var(--sky)"><i class="fa-solid fa-folder mr-1"></i>STAGE</div>
-          <div class="ml-12" style="color:var(--sky)"><i class="fa-solid fa-folder mr-1"></i>AUDIT</div>
-          <div class="ml-4" style="color:var(--text-1)"><i class="fa-solid fa-folder mr-1" style="color:var(--amber)"></i>HOSPITAL #2</div>
-          <div class="ml-8" style="color:var(--text-3)">…</div>
-        </div>
-
-        <!-- Input -->
-        <div class="max-w-xl">
-          <label class="block text-xs font-semibold mb-1" style="color:var(--text-2)">
-            Ubicación de la carpeta principal
-          </label>
-          <p class="text-xs mb-2.5 leading-relaxed" style="color:var(--text-3)">
-            Copia y pega aquí la ruta tal como aparece en el Explorador de archivos de Windows.
-          </p>
-          <div class="flex gap-2">
-            <input type="text" x-model="systemSettings.audit_data_root"
-                   placeholder="C:\Users\tu_usuario\Desktop\Carpeta compartida"
-                   class="cfg-input flex-1" />
-            <button @click="saveSystemSettings()" :disabled="savingSystem" class="cfg-btn-primary whitespace-nowrap">
-              <span x-show="!savingSystem"><i class="fa-solid fa-floppy-disk"></i>Guardar</span>
-              <span x-show="savingSystem"><i class="fa-solid fa-spinner fa-spin"></i>Guardando…</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
 
   </div><!-- /content -->
 </div><!-- /wrapper -->
@@ -1644,7 +1583,7 @@ function settingsApp() {
       { id: 'instituciones', icon: 'fa-hospital',          label: 'Instituciones', scope: 'global'      },
       { id: 'normalizacion', icon: 'fa-shuffle',           label: 'Normalización', scope: 'global'      },
       { id: 'reglas',        icon: 'fa-sliders',            label: 'Reglas',        scope: 'global'      },
-      { id: 'sistema',       icon: 'fa-gear',               label: 'Sistema',       scope: 'global'      },
+
       { id: 'mapeos',        icon: 'fa-arrows-left-right',  label: 'Mapeos',        scope: 'institution' },
       { id: 'periodos',      icon: 'fa-calendar-days',      label: 'Períodos',      scope: 'institution' },
     ],
@@ -1681,10 +1620,6 @@ function settingsApp() {
     confirmDeletePeriodId: null,
     newPeriod: { period_label:'', date_from:'', date_to:'' },
 
-    // Sistema
-    systemSettings: { audit_data_root: '' },
-    savingSystem: false,
-
     // Reglas
     serviceTypes: [], docTypes: [], folderStatuses: [],
     confirmDeleteSTId: null, confirmDeleteDTId: null, confirmDeleteFSId: null,
@@ -1702,21 +1637,18 @@ function settingsApp() {
     newPC: { wrong_prefix:'', correct_prefix:'', notes:'' },
 
     async init() {
-      const [instRes, stRes, dtRes, fsRes, pcRes, sysRes] = await Promise.all([
+      const [instRes, stRes, dtRes, fsRes, pcRes] = await Promise.all([
         fetch('/api/institutions'),
         fetch('/api/settings/service-types'),
         fetch('/api/settings/doc-types'),
         fetch('/api/settings/folder-statuses'),
         fetch('/api/settings/prefix-corrections'),
-        fetch('/api/settings/system'),
       ]);
       this.institutions       = await instRes.json();
       this.serviceTypes       = await stRes.json();
       this.docTypes           = await dtRes.json();
       this.folderStatuses     = await fsRes.json();
       this.prefixCorrections  = await pcRes.json();
-      const sys = await sysRes.json();
-      this.systemSettings = { audit_data_root: sys.audit_data_root || '' };
 
       // Auto-load sidebar institution when entering this page
       if (this.tab === 'instituciones') this._autoLoadCtxInstitution();
@@ -2151,21 +2083,6 @@ function settingsApp() {
       } else { this.confirmDeletePCId = null; this.showToast('No se pudo eliminar.','error'); }
     },
 
-    // ---- SISTEMA ----
-    async saveSystemSettings() {
-      this.savingSystem = true;
-      const res = await fetch('/api/settings/system', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audit_data_root: this.systemSettings.audit_data_root || null }),
-      });
-      this.savingSystem = false;
-      if (res.ok) {
-        this.showToast('Configuración guardada.');
-      } else {
-        this.showToast('Error al guardar.', 'error');
-      }
-    },
   };
 }
 </script>

@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     port: int = 8000
     # Disable Swagger UI and ReDoc in production (set DOCS_ENABLED=false)
     docs_enabled: bool = True
+    # Root directory where audit data is stored.
+    # Dev (Windows native): absolute path to the shared folder, e.g. C:\Users\...\Carpeta compartida
+    # Prod (Docker): /audit_data  (volume mount — set in docker-compose.prod.yml)
+    audit_data_root: str = "/audit_data"
 
 
 settings = Settings()  # type: ignore[call-arg]

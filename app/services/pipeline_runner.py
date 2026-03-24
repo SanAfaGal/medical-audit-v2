@@ -13,8 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.institution import Institution
 from app.models.period import AuditPeriod
-from app.paths import to_container_path
-from app.repositories.rules_repo import RulesRepo
+from app.paths import audit_data_root, to_container_path
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +58,9 @@ _StageHandler = Callable[..., AsyncGenerator[str, None]]
 
 
 def _build_context(
-    institution: Institution, period: AuditPeriod, db: AsyncSession, extra: dict, audit_data_root: str
+    institution: Institution, period: AuditPeriod, db: AsyncSession, extra: dict
 ) -> dict:
-    base = to_container_path(audit_data_root) / institution.name / period.period_label
+    base = audit_data_root / institution.name / period.period_label
     return {
         "institution": institution,
         "period": period,
@@ -160,12 +159,7 @@ async def execute(
     extra: dict | None = None,
 ) -> AsyncGenerator[str, None]:
     """Yield log lines as a pipeline stage executes."""
-    sys_settings = await RulesRepo(db).get_system_settings()
-    audit_data_root = sys_settings.audit_data_root if sys_settings and sys_settings.audit_data_root else ""
-    if not audit_data_root:
-        yield "[ERROR] audit_data_root no está configurado. Ve a Configuración → Sistema y define la ruta base."
-        return
-    ctx = _build_context(institution, period, db, extra or {}, audit_data_root)
+    ctx = _build_context(institution, period, db, extra or {})
     handler_fn = _STAGE_HANDLERS.get(stage)
 
     if handler_fn is None:

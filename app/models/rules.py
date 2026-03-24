@@ -50,10 +50,3 @@ class PrefixCorrection(Base):
     notes: Mapped[str | None] = mapped_column(String(200))
 
 
-class SystemSettings(Base):
-    """Single-row global configuration (id is always 1)."""
-
-    __tablename__ = "system_settings"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
-    audit_data_root: Mapped[str | None] = mapped_column(String(500))

@@ -11,13 +11,12 @@ from pathlib import Path
 import aiofiles
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.institution import Institution
 from app.models.period import AuditPeriod
-from app.models.rules import SystemSettings
+from app.paths import audit_data_root
 from app.schemas.explorer import (
     BatchDeleteResult,
     CopyRequest,
@@ -45,23 +44,15 @@ router = APIRouter(prefix="/explorer", tags=["explorer"])
 
 async def _resolve_sandbox(institution_id: int, period_id: int, db: AsyncSession) -> Path:
     """Devuelve la ruta sandbox: audit_data_root / institution.name / period.period_label."""
-    # Obtener audit_data_root
-    result = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
-    settings = result.scalar_one_or_none()
-    if not settings or not settings.audit_data_root:
-        raise HTTPException(400, "La ruta raíz de datos de auditoría no está configurada")
-
-    # Obtener institución
     institution = await db.get(Institution, institution_id)
     if not institution:
         raise HTTPException(404, "Institución no encontrada")
 
-    # Obtener período
     period = await db.get(AuditPeriod, period_id)
     if not period or period.institution_id != institution_id:
         raise HTTPException(404, "Período no encontrado")
 
-    sandbox = (Path(settings.audit_data_root) / institution.name / period.period_label).resolve()
+    sandbox = (audit_data_root / institution.name / period.period_label).resolve()
     return sandbox
 
 

@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.institution import ServiceTypeDocument
-from app.models.rules import DocType, FolderStatus, PrefixCorrection, ServiceType, SystemSettings
+from app.models.rules import DocType, FolderStatus, PrefixCorrection, ServiceType
 
 
 class RulesRepo:
@@ -206,19 +206,3 @@ class RulesRepo:
         await self.db.flush()
         return True
 
-    # ------------------------------------------------------------------
-    # System settings (single row, id=1)
-    # ------------------------------------------------------------------
-
-    async def get_system_settings(self) -> SystemSettings | None:
-        return await self.db.get(SystemSettings, 1)
-
-    async def save_system_settings(self, data: dict) -> SystemSettings:
-        stmt = (
-            pg_insert(SystemSettings)
-            .values(id=1, **data)
-            .on_conflict_do_update(index_elements=["id"], set_=data)
-            .returning(SystemSettings)
-        )
-        result = await self.db.execute(stmt)
-        return result.scalar_one()

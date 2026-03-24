@@ -16,10 +16,10 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.paths import to_container_path
+from app.paths import audit_data_root
 from app.repositories.institution_repo import InstitutionRepo
 from app.repositories.invoice_repo import InvoiceRepo
-from app.repositories.rules_repo import RulesRepo
+
 from app.services import pipeline_runner
 from app.services.task_manager import PipelineTaskManager
 
@@ -179,13 +179,8 @@ async def load_drive_zip(
     if not period:
         raise HTTPException(404, "Período no encontrado")
 
-    rules_repo = RulesRepo(db)
-    sys_settings = await rules_repo.get_system_settings()
-    if not sys_settings or not sys_settings.audit_data_root:
-        raise HTTPException(500, "audit_data_root no configurado")
-
     drive_path: Path = (
-        to_container_path(sys_settings.audit_data_root) / institution.name / period.period_label / "DRIVE"
+        audit_data_root / institution.name / period.period_label / "DRIVE"
     )
     drive_path.mkdir(parents=True, exist_ok=True)
 
@@ -267,12 +262,7 @@ async def process_non_pdf_decisions(
     if not period:
         raise HTTPException(404, "Período no encontrado")
 
-    rules_repo = RulesRepo(db)
-    sys_settings = await rules_repo.get_system_settings()
-    if not sys_settings or not sys_settings.audit_data_root:
-        raise HTTPException(500, "audit_data_root no configurado")
-
-    stage_path = to_container_path(sys_settings.audit_data_root) / institution.name / period.period_label / "STAGE"
+    stage_path = audit_data_root / institution.name / period.period_label / "STAGE"
     if not stage_path.is_dir():
         raise HTTPException(400, "Directorio STAGE no existe")
 
@@ -332,11 +322,7 @@ async def stream_audit_zip(
     period = await InvoiceRepo(db).get_period_by_id(period_id)
     if not period:
         raise HTTPException(404, "Período no encontrado")
-    sys_settings = await RulesRepo(db).get_system_settings()
-    if not sys_settings or not sys_settings.audit_data_root:
-        raise HTTPException(500, "audit_data_root no configurado")
-
-    base = to_container_path(sys_settings.audit_data_root) / institution.name / period.period_label
+    base = audit_data_root / institution.name / period.period_label
     audit_path = base / "AUDIT"
 
     if not audit_path.is_dir():
@@ -394,12 +380,7 @@ async def file_preview(
     if not period:
         raise HTTPException(404, "Período no encontrado")
 
-    rules_repo = RulesRepo(db)
-    sys_settings = await rules_repo.get_system_settings()
-    if not sys_settings or not sys_settings.audit_data_root:
-        raise HTTPException(500, "audit_data_root no configurado")
-
-    stage_path = to_container_path(sys_settings.audit_data_root) / institution.name / period.period_label / "STAGE"
+    stage_path = audit_data_root / institution.name / period.period_label / "STAGE"
 
     try:
         abs_path = (stage_path / rel_path).resolve()

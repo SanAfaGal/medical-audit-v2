@@ -2,13 +2,17 @@
 
 from pathlib import Path
 
+from app.config import settings
+
 
 def to_container_path(path_str: str) -> Path:
-    """Return the filesystem Path for the given audit data root.
+    """Return the filesystem Path for the given string.
 
-    The backend runs natively on the host, so Windows paths are used as-is.
-    Raises ValueError if path_str is empty (audit_data_root not configured).
+    Kept for backward-compatibility with call sites that still pass a string.
+    Prefer using `audit_data_root` directly.
     """
-    if not path_str:
-        raise ValueError("audit_data_root no está configurado")
     return Path(path_str)
+
+
+# Convenience: resolved Path for the configured audit data root.
+audit_data_root: Path = Path(settings.audit_data_root)

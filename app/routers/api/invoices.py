@@ -285,7 +285,7 @@ async def rename_surplus_file(
     """Rename a surplus file to match the required doc-type prefix and resolve the finding."""
     import os
 
-    from app.paths import to_container_path
+    from app.paths import audit_data_root
     from app.repositories.rules_repo import RulesRepo
 
     repo = InvoiceRepo(db)
@@ -294,13 +294,9 @@ async def rename_surplus_file(
         raise HTTPException(404, "Factura no encontrada")
 
     rules_repo = RulesRepo(db)
-    sys_settings = await rules_repo.get_system_settings()
-    if not sys_settings or not sys_settings.audit_data_root:
-        raise HTTPException(500, "audit_data_root no configurado")
-    audit_root = to_container_path(sys_settings.audit_data_root)
     folder = Path(data.folder_path)
     try:
-        folder.relative_to(audit_root)
+        folder.relative_to(audit_data_root)
     except ValueError:
         raise HTTPException(400, "Ruta fuera del directorio de auditoría")
 
@@ -342,22 +338,16 @@ async def delete_surplus_file(
     """Delete a surplus file from disk."""
     import os
 
-    from app.paths import to_container_path
-    from app.repositories.rules_repo import RulesRepo
+    from app.paths import audit_data_root
 
     repo = InvoiceRepo(db)
     invoice = await repo.get_by_id(invoice_id)
     if not invoice:
         raise HTTPException(404, "Factura no encontrada")
 
-    rules_repo = RulesRepo(db)
-    sys_settings = await rules_repo.get_system_settings()
-    if not sys_settings or not sys_settings.audit_data_root:
-        raise HTTPException(500, "audit_data_root no configurado")
-    audit_root = to_container_path(sys_settings.audit_data_root)
     folder = Path(data.folder_path)
     try:
-        folder.relative_to(audit_root)
+        folder.relative_to(audit_data_root)
     except ValueError:
         raise HTTPException(400, "Ruta fuera del directorio de auditoría")
 
@@ -400,14 +390,9 @@ async def annul_folders(data: BulkAnnulRequest, db: AsyncSession = Depends(get_d
 
     from app.models.invoice import Invoice
     from app.models.rules import FolderStatus
-    from app.paths import to_container_path
-    from app.repositories.rules_repo import RulesRepo
+    from app.paths import audit_data_root
 
-    rules_repo = RulesRepo(db)
-    sys_settings = await rules_repo.get_system_settings()
-    if not sys_settings or not sys_settings.audit_data_root:
-        raise HTTPException(500, "audit_data_root no configurado")
-    audit_root = to_container_path(sys_settings.audit_data_root)
+    audit_root = audit_data_root
 
     # Get-or-create ANULAR folder status
     anular_status = (await db.execute(select(FolderStatus).where(FolderStatus.status == "ANULAR"))).scalar_one_or_none()
