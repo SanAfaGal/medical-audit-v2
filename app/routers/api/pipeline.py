@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -315,46 +315,55 @@ async def process_non_pdf_decisions(
     return {"ok": True, "deleted": deleted, "converted": converted, "errors": errors}
 
 
-@router.get("/download-export")
-async def download_export(
+@router.get("/stream-audit-zip")
+async def stream_audit_zip(
     institution_id: int,
     period_id: int,
-    filename: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """Descarga el ZIP generado por la etapa EXPORTAR_AUDITADOS.
-
-    El parámetro ``filename`` es el nombre del archivo tal como lo emitió
-    el pipeline en la línea ``[DATA] export_file:<filename>``.
+    """Empaqueta la carpeta AUDIT en memoria y la devuelve como ZIP descargable.
+    No escribe nada en disco — el ZIP se genera al vuelo en cada descarga.
     """
+    import re
+
     institution = await InstitutionRepo(db).get_by_id(institution_id)
     if not institution:
         raise HTTPException(404, "Institución no encontrada")
     period = await InvoiceRepo(db).get_period_by_id(period_id)
     if not period:
         raise HTTPException(404, "Período no encontrado")
-
     sys_settings = await RulesRepo(db).get_system_settings()
     if not sys_settings or not sys_settings.audit_data_root:
         raise HTTPException(500, "audit_data_root no configurado")
 
     base = to_container_path(sys_settings.audit_data_root) / institution.name / period.period_label
-    exports_dir = (base / "exports").resolve()
+    audit_path = base / "AUDIT"
 
-    # Prevención de path traversal: el archivo debe estar dentro de exports_dir
-    try:
-        zip_path = (exports_dir / filename).resolve()
-        zip_path.relative_to(exports_dir)
-    except ValueError:
-        raise HTTPException(400, "Nombre de archivo inválido")
+    if not audit_path.is_dir():
+        raise HTTPException(404, "Directorio AUDIT no encontrado")
 
-    if not zip_path.exists() or not zip_path.is_file():
-        raise HTTPException(404, "Archivo de exportación no encontrado")
+    all_files = [f for f in audit_path.rglob("*") if f.is_file()]
+    if not all_files:
+        raise HTTPException(404, "No hay archivos en AUDIT")
 
-    return FileResponse(
-        str(zip_path),
+    def _build_zip_bytes() -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+            for f in all_files:
+                zf.write(f, f.relative_to(audit_path))
+        return buf.getvalue()
+
+    loop = asyncio.get_running_loop()
+    zip_bytes = await loop.run_in_executor(None, _build_zip_bytes)
+
+    safe_inst = re.sub(r"[^\w]", "_", institution.name)
+    safe_period = re.sub(r"[^\w]", "_", period.period_label)
+    filename = f"{safe_inst}_{safe_period}.zip"
+
+    return Response(
+        content=zip_bytes,
         media_type="application/zip",
-        filename=zip_path.name,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

@@ -16,11 +16,7 @@ venv/
 env/
 
 # Environment variables
-.env
-.env.local
-.env.*.local
-.env.dev
-.env.prod
+.env*
 
 # Alembic (keep versions, ignore runtime artifacts)
 alembic/__pycache__/

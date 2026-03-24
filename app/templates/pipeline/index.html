@@ -289,23 +289,6 @@
       </button>
     </div>
 
-    <!-- Export download button — appears after EXPORTAR_AUDITADOS completes -->
-    <div x-show="exportFile" x-transition
-         class="shrink-0 px-3 pb-3" style="border-top:1px solid var(--border);padding-top:10px">
-      <p class="text-[9px] font-semibold uppercase tracking-widest mb-1.5" style="color:var(--text-3)">
-        <i class="fa-solid fa-file-export mr-1" style="color:#059669"></i>Exportación lista
-      </p>
-      <a :href="`/api/pipeline/download-export?institution_id=${$store.ctx.institutionId}&period_id=${$store.ctx.periodId}&filename=${encodeURIComponent(exportFile)}`"
-         download
-         class="flex items-center justify-center gap-2 w-full py-2 rounded-lg font-semibold text-[11px] transition-all"
-         style="background:var(--emerald-soft);color:#059669;border:1px solid var(--emerald-border)"
-         onmouseover="this.style.background='#059669';this.style.color='#fff'"
-         onmouseout="this.style.background='var(--emerald-soft)';this.style.color='#059669'">
-        <i class="fa-solid fa-cloud-arrow-down text-[10px]"></i>
-        <span x-text="exportFile" class="truncate max-w-[160px]"></span>
-      </a>
-    </div>
-
       </div><!-- /expanded flex col -->
     </template><!-- /x-if flowOpen -->
 
@@ -841,6 +824,26 @@
       </div>
     </template>
 
+    <!-- Export download banner — aparece tras EXPORTAR_AUDITADOS -->
+    <div x-show="exportReady" x-transition
+         class="shrink-0 flex items-center gap-4 px-5 py-4 rounded-xl"
+         style="background:linear-gradient(135deg,#064e3b,#065f46);border:2px solid #059669;box-shadow:0 4px 20px rgba(5,150,105,0.3)">
+      <i class="fa-solid fa-circle-check text-2xl shrink-0" style="color:#34d399"></i>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-bold mb-0.5" style="color:#6ee7b7">Exportación lista</p>
+        <p class="text-[11px]" style="color:#a7f3d0">Haz click para descargar todos los documentos auditados.</p>
+      </div>
+      <a :href="`/api/pipeline/stream-audit-zip?institution_id=${$store.ctx.institutionId}&period_id=${$store.ctx.periodId}`"
+         download
+         class="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all"
+         style="background:#059669;color:#fff;border:1px solid #34d399"
+         onmouseover="this.style.background='#047857'"
+         onmouseout="this.style.background='#059669'">
+        <i class="fa-solid fa-cloud-arrow-down"></i>
+        Descargar ZIP
+      </a>
+    </div>
+
   </div><!-- /RIGHT PANEL -->
 
 <!-- Image preview modal -->
@@ -925,7 +928,7 @@ function pipeline() {
     surplusData: null,
     annulData: null,
     nonPdfData: null,
-    exportFile: null,
+    exportReady: false,
     previewFile: null,
     stageStatuses: {},
     stageResults: {},
@@ -1083,7 +1086,7 @@ function pipeline() {
       this.currentStageLabel = '';
       this.stageStatuses = {};
       this.stageResults = {};
-      this.exportFile = null;
+      this.exportReady = false;
       ['pipeline_logLines','pipeline_currentStageLabel','pipeline_stageStatuses','pipeline_stageResults'].forEach(k => sessionStorage.removeItem(k));
     },
 
@@ -1145,8 +1148,8 @@ function pipeline() {
         this.$store.pipeline.update('running', cursor);
 
         // Handle [DATA] signals — do not push to log
-        if (line.startsWith('[DATA] export_file:')) {
-          this.exportFile = line.slice('[DATA] export_file:'.length).trim();
+        if (line.startsWith('[DATA] export_ready:')) {
+          this.exportReady = true;
           return;
         }
 

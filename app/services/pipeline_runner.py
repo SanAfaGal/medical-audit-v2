@@ -1708,44 +1708,19 @@ async def _compress_audit(ctx: dict) -> AsyncGenerator[str, None]:
 
 @_stage("EXPORTAR_AUDITADOS")
 async def _exportar_auditados(ctx: dict) -> AsyncGenerator[str, None]:
-    """Empaqueta la carpeta AUDIT en un ZIP descargable vía /api/pipeline/download-export."""
-    import zipfile
-    from datetime import datetime
-
-    loop = asyncio.get_running_loop()
+    """Prepara la exportación de AUDIT: valida y cuenta archivos.
+    El ZIP se genera al vuelo en el endpoint /api/pipeline/stream-audit-zip."""
     audit_path: Path = ctx["audit_path"]
-    base: Path = ctx["base_path"]
-    institution: Institution = ctx["institution"]
-    period: AuditPeriod = ctx["period"]
 
     if not audit_path.is_dir():
         yield plog("WARN", "Directorio AUDIT no existe — no hay nada que exportar.")
         return
-
-    exports_dir = base / "exports"
-    exports_dir.mkdir(parents=True, exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    safe_inst = re.sub(r"[^\w]", "_", institution.name)
-    safe_period = re.sub(r"[^\w]", "_", period.period_label)
-    zip_name = f"{safe_inst}_{safe_period}_{timestamp}.zip"
-    zip_path = exports_dir / zip_name
 
     all_files = [f for f in audit_path.rglob("*") if f.is_file()]
     if not all_files:
         yield plog("INFO", "No hay archivos en AUDIT para exportar.")
         return
 
-    yield plog("INFO", f"Archivos a empaquetar: {len(all_files)}")
-
-    def _build_zip() -> int:
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
-            for f in all_files:
-                zf.write(f, f.relative_to(audit_path))
-        return zip_path.stat().st_size
-
-    size_bytes = await loop.run_in_executor(None, _build_zip)
-    size_mb = size_bytes / (1024 * 1024)
-    yield plog("INFO", f"Exportación completada — {zip_name} ({size_mb:.1f} MB)")
-    # El token DATA permite al frontend mostrar un botón de descarga directa
-    yield plog("DATA", f"export_file:{zip_name}")
+    total_mb = sum(f.stat().st_size for f in all_files) / (1024 * 1024)
+    yield plog("INFO", f"{len(all_files)} archivos listos para descargar ({total_mb:.1f} MB)")
+    yield plog("DATA", f"export_ready:{len(all_files)}")
