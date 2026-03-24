@@ -642,6 +642,11 @@
         },
 
         showToast(ok, message) {
+          // ok === 'loading': toast persistente con spinner (sin auto-dismiss)
+          if (ok === 'loading') {
+            this.toast = { type: 'loading', message };
+            return;
+          }
           this.toast = { type: ok ? 'ok' : 'err', message };
           setTimeout(() => { this.toast = null; }, 4000);
         },
@@ -796,16 +801,39 @@
 
         // ── Descarga ZIP ──────────────────────────────────────────────────
 
-        downloadZip(paths) {
+        async downloadZip(paths) {
           const params = new URLSearchParams({
             institution_id: this.institutionId,
             period_id: this.periodId,
           });
           paths.forEach(p => params.append('rel_paths', p));
-          const a = document.createElement('a');
-          a.href = `/api/explorer/download-zip?${params}`;
-          a.download = '';
-          a.click();
+
+          const label = paths.length === 1
+            ? paths[0].split('/').pop()
+            : `${paths.length} elementos`;
+          this.showToast('loading', `Preparando ZIP: ${label}…`);
+
+          try {
+            const response = await fetch(`/api/explorer/download-zip?${params}`);
+            if (!response.ok) {
+              const err = await response.json().catch(() => ({}));
+              this.showToast(false, err.detail || 'Error al generar el ZIP');
+              return;
+            }
+            const blob = await response.blob();
+            const filename = (response.headers.get('Content-Disposition') || '')
+              .match(/filename="([^"]+)"/)?.[1] ?? 'descarga.zip';
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            const mb = (blob.size / (1024 * 1024)).toFixed(1);
+            this.showToast(true, `ZIP listo — ${mb} MB`);
+          } catch {
+            this.showToast(false, 'Error de red al descargar');
+          }
         },
 
         // Abrir explorador — siempre arranca en STAGE
