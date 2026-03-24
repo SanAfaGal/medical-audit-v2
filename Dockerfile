@@ -44,8 +44,9 @@ ENV PYTHONUNBUFFERED=1
 # Prevents writing .pyc files into the container layer
 ENV PYTHONDONTWRITEBYTECODE=1
 
-RUN chown -R appuser:appuser /app \
-    && chmod +x /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
+    && chmod +x /usr/local/bin/entrypoint.sh \
+    && chown -R appuser:appuser /app
 
 EXPOSE 8000
 
@@ -94,7 +95,8 @@ RUN useradd --uid 10001 --no-create-home --shell /bin/false appuser \
     && chown -R appuser:appuser /app
 
 COPY scripts/docker-entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
+    && chmod +x /usr/local/bin/entrypoint.sh
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
