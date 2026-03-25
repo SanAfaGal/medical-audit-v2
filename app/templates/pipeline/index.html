@@ -1335,10 +1335,18 @@ function pipeline() {
             fd.append('institution_id', institutionId);
             fd.append('period_id', periodId);
             fd.append('file', this.zipFile);
-            const res = await fetch('/api/pipeline/load-drive-zip', { method:'POST', body:fd });
+            let res;
+            try {
+              res = await fetch('/api/pipeline/load-drive-zip', { method:'POST', body:fd });
+            } catch (netErr) {
+              const msg = `[ERROR] No se pudo subir el archivo. Verifica la conexión o que el servidor esté disponible.`;
+              this.logLines.push(msg); this._markLine(stageId, msg); this.scrollLog(); continue;
+            }
             if (!res.ok) {
-              const err = await res.json().catch(()=>({detail:'Error desconocido'}));
-              const msg = `[ERROR] ${err.detail || 'Error desconocido'}`;
+              const errMsg = res.status === 413
+                ? 'El archivo excede el límite de tamaño permitido por el servidor'
+                : (await res.json().catch(() => ({ detail: 'Error desconocido' }))).detail || 'Error desconocido';
+              const msg = `[ERROR] ${errMsg}`;
               this.logLines.push(msg); this._markLine(stageId, msg); this.scrollLog(); continue;
             }
             const data = await res.json();
