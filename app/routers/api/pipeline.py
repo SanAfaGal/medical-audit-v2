@@ -193,37 +193,80 @@ async def load_drive_zip(
     if ext == ".zip":
         with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
             members = [m for m in zf.infolist() if not m.filename.endswith("/")]
+            # Solo eliminar el directorio raíz si TODOS los archivos comparten
+            # exactamente un directorio de nivel superior (es decir, el ZIP tiene
+            # una carpeta envolvente). Si hay múltiples carpetas de nivel superior
+            # (estructura real de facturas), preservar la ruta completa.
+            top_levels = {Path(m.filename).parts[0] for m in members if Path(m.filename).parts}
+            has_single_wrapper = len(top_levels) == 1
             for member in members:
-                # Strip top-level directory if the archive has one
                 parts = Path(member.filename).parts
-                rel = Path(*parts[1:]) if len(parts) > 1 else Path(parts[0])
+                if has_single_wrapper and len(parts) > 1:
+                    rel = Path(*parts[1:])
+                else:
+                    rel = Path(*parts)
                 dest = drive_path / rel
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(zf.read(member.filename))
                 extracted.append(str(rel))
 
     elif ext == ".7z":
+        import tempfile
+        import shutil
+
         try:
             import py7zr
         except ImportError:
             raise HTTPException(500, "py7zr no está instalado (soporte .7z no disponible)")
-        with py7zr.SevenZipFile(io.BytesIO(file_bytes), mode="r") as szf:
-            szf.extractall(path=str(drive_path))
-            extracted = [str(p) for p in drive_path.rglob("*") if p.is_file()]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with py7zr.SevenZipFile(io.BytesIO(file_bytes), mode="r") as szf:
+                all_names = szf.getnames()
+                top_levels = {Path(n).parts[0] for n in all_names if Path(n).parts}
+                szf.extractall(path=tmpdir)
+            src_root = Path(tmpdir)
+            # Si hay un único directorio wrapper, bajar un nivel
+            if len(top_levels) == 1:
+                wrapper = Path(tmpdir) / top_levels.pop()
+                if wrapper.is_dir():
+                    src_root = wrapper
+            for item in src_root.iterdir():
+                dest = drive_path / item.name
+                if item.is_dir():
+                    shutil.copytree(str(item), str(dest), dirs_exist_ok=True)
+                else:
+                    shutil.copy2(str(item), str(dest))
+        extracted = [str(p) for p in drive_path.rglob("*") if p.is_file()]
 
     elif ext == ".rar":
         import tempfile
+        import shutil
 
         try:
             import rarfile
         except ImportError:
             raise HTTPException(500, "rarfile no está instalado (soporte .rar no disponible)")
-        with tempfile.NamedTemporaryFile(suffix=".rar", delete=False) as tmp:
-            tmp.write(file_bytes)
-            tmp_path = tmp.name
-        with rarfile.RarFile(tmp_path) as rf:
-            rf.extractall(path=str(drive_path))
-        Path(tmp_path).unlink(missing_ok=True)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with tempfile.NamedTemporaryFile(suffix=".rar", delete=False) as tmp:
+                tmp.write(file_bytes)
+                tmp_path = tmp.name
+            try:
+                with rarfile.RarFile(tmp_path) as rf:
+                    all_names = rf.namelist()
+                    top_levels = {Path(n).parts[0] for n in all_names if Path(n).parts}
+                    rf.extractall(path=tmpdir)
+            finally:
+                Path(tmp_path).unlink(missing_ok=True)
+            src_root = Path(tmpdir)
+            if len(top_levels) == 1:
+                wrapper = Path(tmpdir) / top_levels.pop()
+                if wrapper.is_dir():
+                    src_root = wrapper
+            for item in src_root.iterdir():
+                dest = drive_path / item.name
+                if item.is_dir():
+                    shutil.copytree(str(item), str(dest), dirs_exist_ok=True)
+                else:
+                    shutil.copy2(str(item), str(dest))
         extracted = [str(p) for p in drive_path.rglob("*") if p.is_file()]
 
     else:
