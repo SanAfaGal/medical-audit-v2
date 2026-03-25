@@ -50,32 +50,26 @@ DEFAULT_FOLDER_STATUSES = [
 
 async def seed() -> None:
     async with AsyncSessionLocal() as db:
-        # Service types
-        existing = (await db.execute(select(ServiceType))).scalars().first()
-        if existing is None:
-            for st in DEFAULT_SERVICE_TYPES:
-                db.add(ServiceType(**st))
-            print(f"Seeded {len(DEFAULT_SERVICE_TYPES)} service types.")
-        else:
-            print("Service types already seeded — skipped.")
+        # Service types — upsert por code
+        existing_codes = set((await db.execute(select(ServiceType.code))).scalars().all())
+        added = [st for st in DEFAULT_SERVICE_TYPES if st["code"] not in existing_codes]
+        for st in added:
+            db.add(ServiceType(**st))
+        print(f"ServiceTypes: +{len(added)} nuevos, {len(existing_codes)} ya existían.")
 
-        # Doc types
-        existing = (await db.execute(select(DocType))).scalars().first()
-        if existing is None:
-            for dt in DEFAULT_DOC_TYPES:
-                db.add(DocType(**dt))
-            print(f"Seeded {len(DEFAULT_DOC_TYPES)} doc types.")
-        else:
-            print("Doc types already seeded — skipped.")
+        # Doc types — upsert por code
+        existing_codes = set((await db.execute(select(DocType.code))).scalars().all())
+        added = [dt for dt in DEFAULT_DOC_TYPES if dt["code"] not in existing_codes]
+        for dt in added:
+            db.add(DocType(**dt))
+        print(f"DocTypes:     +{len(added)} nuevos, {len(existing_codes)} ya existían.")
 
-        # Folder statuses
-        existing = (await db.execute(select(FolderStatus))).scalars().first()
-        if existing is None:
-            for fs in DEFAULT_FOLDER_STATUSES:
-                db.add(FolderStatus(**fs))
-            print(f"Seeded {len(DEFAULT_FOLDER_STATUSES)} folder statuses.")
-        else:
-            print("Folder statuses already seeded — skipped.")
+        # Folder statuses — upsert por status
+        existing_statuses = set((await db.execute(select(FolderStatus.status))).scalars().all())
+        added = [fs for fs in DEFAULT_FOLDER_STATUSES if fs["status"] not in existing_statuses]
+        for fs in added:
+            db.add(FolderStatus(**fs))
+        print(f"FolderStatus: +{len(added)} nuevos, {len(existing_statuses)} ya existían.")
 
         await db.commit()
         print("Seed complete.")

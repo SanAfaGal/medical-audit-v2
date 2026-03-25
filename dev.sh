@@ -12,6 +12,15 @@ fi
 CMD="${1:-help}"
 shift || true  # remaining args available as "$@"
 
+# ── Helpers internos ─────────────────────────────────────────────────────────
+_prod_migrate_seed() {
+  echo -e "${CYAN}Aplicando migraciones en producción...${NC}"
+  docker compose -f docker-compose.prod.yml exec -T backend uv run alembic upgrade head
+  echo -e "${CYAN}Ejecutando seed en producción...${NC}"
+  docker compose -f docker-compose.prod.yml exec -T backend uv run python seeds/seed_data.py
+  echo -e "${GREEN}Deploy completo.${NC}"
+}
+
 case "$CMD" in
   db)
     echo -e "${GREEN}Starting database...${NC}"
@@ -117,6 +126,28 @@ case "$CMD" in
     echo -e "${GREEN}Restauración completa.${NC}"
     ;;
 
+  deploy)
+    echo -e "${GREEN}Desplegando producción (con cache)...${NC}"
+    docker compose -f docker-compose.prod.yml up --build -d
+    _prod_migrate_seed
+    ;;
+
+  deploy-clean)
+    echo -e "${GREEN}Desplegando producción (SIN cache)...${NC}"
+    docker compose -f docker-compose.prod.yml build --no-cache
+    docker compose -f docker-compose.prod.yml up -d
+    _prod_migrate_seed
+    ;;
+
+  prod-down)
+    echo -e "${YELLOW}Deteniendo stack de producción...${NC}"
+    docker compose -f docker-compose.prod.yml down
+    ;;
+
+  prod-logs)
+    docker compose -f docker-compose.prod.yml logs -f "$@"
+    ;;
+
   nuke)
     echo -e "${RED}${BOLD}WARNING: This will destroy ALL volumes including the database.${NC}"
     read -rp "Type 'yes' to confirm: " confirm
@@ -138,6 +169,12 @@ case "$CMD" in
     echo -e "  ${GREEN}backup${NC} [nombre]      Snapshot de tablas base → backups/<nombre>_TIMESTAMP.sql"
     echo -e "  ${GREEN}restore${NC} <archivo>    Restaurar tablas desde un snapshot SQL"
     echo -e "  ${RED}nuke${NC}                 Destroy all volumes (asks confirmation)"
+    echo ""
+    echo -e "${BOLD}Producción (Docker):${NC}"
+    echo -e "  ${GREEN}deploy${NC}               Build con cache + up + migrate + seed"
+    echo -e "  ${GREEN}deploy-clean${NC}         Build SIN cache + up + migrate + seed"
+    echo -e "  ${GREEN}prod-down${NC}            Detener stack de producción"
+    echo -e "  ${GREEN}prod-logs${NC} [svc]      Ver logs de producción en tiempo real"
     echo ""
     echo -e "${BOLD}Backend (native):${NC}"
     echo -e "  ${GREEN}start${NC}                Start database + backend (todo en uno)
