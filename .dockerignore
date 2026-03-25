@@ -45,5 +45,17 @@ tests/
 
 # Docker artifacts (not needed inside the image)
 Dockerfile
-docker-compose.yml
+docker-compose*.yml
 nginx/
+
+# Development data — can be large, never needed in the image
+backups/
+seeds/
+tasks/
+monitoring/
+
+# Development scripts and docs
+dev.sh
+*.md
+CLAUDE.md
+.github/
