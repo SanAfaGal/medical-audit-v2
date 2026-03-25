@@ -85,12 +85,17 @@ COPY core    ./core
 COPY alembic ./alembic
 COPY alembic.ini ./
 
+# Instalar Chromium bajo /app/.playwright para que appuser pueda acceder al runtime.
+# Sin esto, playwright instala en /root/.cache/ms-playwright/ y el proceso no-root falla.
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
+
 # Solo Chromium — Firefox y WebKit no son necesarios (~280 MB menos que playwright install)
 # --with-deps instala las librerías OS que Chromium necesita en Debian/Ubuntu
 RUN /app/.venv/bin/python -m playwright install chromium --with-deps \
-    && rm -rf /root/.cache/ms-playwright/.links
+    && rm -rf /app/.playwright/.links
 
 # Non-root user — UID 10001 evita colisión con ubuntu/node que ocupan UID 1000
+# chown -R incluye /app/.playwright → appuser puede leer Chromium en runtime
 RUN useradd --uid 10001 --no-create-home --shell /bin/false appuser \
     && chown -R appuser:appuser /app
 
