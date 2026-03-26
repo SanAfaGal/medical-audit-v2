@@ -1082,35 +1082,107 @@
 
         <div>
           <template x-for="p in periods" :key="p.id">
-            <div class="flex items-center justify-between px-5 py-3"
-                 style="border-bottom:1px solid var(--border-soft)">
-              <div>
-                <div class="text-sm font-semibold" style="color:var(--text-1)" x-text="p.period_label"></div>
-                <div class="text-xs mt-0.5" style="color:var(--text-3)">
-                  <span x-text="p.date_from"></span> → <span x-text="p.date_to"></span>
+            <div style="border-bottom:1px solid var(--border-soft)">
+
+              <!-- Fila principal -->
+              <div class="flex items-center justify-between px-5 py-3">
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-semibold" style="color:var(--text-1)" x-text="p.period_label"></div>
+                  <div class="text-xs mt-0.5" style="color:var(--text-3)">
+                    <span x-text="p.date_from"></span> → <span x-text="p.date_to"></span>
+                  </div>
                 </div>
-              </div>
-              <div class="flex items-center gap-1">
+
+                <!-- Tamaño en disco -->
+                <div class="flex items-center gap-2 mx-4">
+                  <template x-if="!diskUsage[p.id]">
+                    <button @click="loadDiskUsage(p.id)"
+                            class="text-[10px] px-2 py-0.5 rounded transition-colors"
+                            style="color:var(--text-3);border:1px solid var(--border);background:var(--bg-subtle)"
+                            title="Ver uso de disco">
+                      <i class="fa-solid fa-hard-drive mr-1 text-[9px]"></i>Ver disco
+                    </button>
+                  </template>
+                  <template x-if="diskUsage[p.id]?.loading">
+                    <span class="text-[10px]" style="color:var(--text-3)">
+                      <i class="fa-solid fa-spinner fa-spin text-[9px] mr-1"></i>Calculando…
+                    </span>
+                  </template>
+                  <template x-if="diskUsage[p.id] && !diskUsage[p.id].loading && !diskUsage[p.id].error">
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-[11px] font-semibold tabular-nums" style="color:var(--text-2)"
+                            x-text="formatBytes(diskUsage[p.id].total_bytes)"></span>
+                      <button @click="purgeDisk(p.id)"
+                              :disabled="purgingPeriodId === p.id || !diskUsage[p.id]?.exists"
+                              class="text-[10px] px-2 py-0.5 rounded transition-colors disabled:opacity-40"
+                              style="color:var(--amber);border:1px solid var(--amber-border);background:var(--amber-soft)"
+                              title="Eliminar archivos del disco (mantiene registros en BD)">
+                        <i class="fa-solid fa-broom text-[9px] mr-1"
+                           :class="purgingPeriodId === p.id ? 'fa-spinner fa-spin' : ''"></i>Limpiar
+                      </button>
+                    </div>
+                  </template>
+                </div>
+
+                <!-- Eliminar período completo -->
                 <template x-if="confirmDeletePeriodId !== p.id">
-                  <button @click="confirmDeletePeriodId = p.id" class="cfg-btn-sm cfg-btn-red">
+                  <button @click="confirmDeletePeriod(p.id)" class="cfg-btn-sm cfg-btn-red" title="Eliminar período">
                     <i class="fa-solid fa-trash text-xs"></i>
                   </button>
                 </template>
                 <template x-if="confirmDeletePeriodId === p.id">
-                  <div class="flex flex-col gap-2 items-end">
-                    <div class="text-[11px] leading-relaxed rounded-lg px-3 py-2 max-w-xs text-right"
-                         style="background:var(--red-soft);border:1px solid var(--red-border);color:var(--red)">
-                      <i class="fa-solid fa-triangle-exclamation mr-1"></i>
-                      <strong>¿Eliminar "<span x-text="p.period_label"></span>"?</strong><br>
-                      Se borrarán todas las <strong>facturas</strong>, <strong>hallazgos</strong> y <strong>archivos faltantes</strong> asociados. No se puede deshacer.
+                  <button @click="confirmDeletePeriodId = null" class="cfg-btn-sm" title="Cancelar">
+                    <i class="fa-solid fa-xmark text-xs"></i>
+                  </button>
+                </template>
+              </div>
+
+              <!-- Panel de confirmación de eliminación -->
+              <template x-if="confirmDeletePeriodId === p.id">
+                <div class="px-5 pb-4">
+                  <div class="rounded-lg px-4 py-3" style="background:var(--red-soft);border:1px solid var(--red-border)">
+                    <div class="flex items-start gap-2 mb-2.5">
+                      <i class="fa-solid fa-triangle-exclamation mt-0.5 shrink-0" style="color:var(--red)"></i>
+                      <div>
+                        <div class="text-[12px] font-semibold mb-0.5" style="color:var(--red)">
+                          ¿Eliminar período "<span x-text="p.period_label"></span>"?
+                        </div>
+                        <div class="text-[11px] leading-relaxed" style="color:var(--red)">
+                          Se borrarán permanentemente todos los registros de BD (facturas, hallazgos) y las carpetas en disco. <strong>No se puede deshacer.</strong>
+                        </div>
+                      </div>
                     </div>
-                    <div class="flex gap-1">
-                      <button @click="deletePeriod(p.id)" class="cfg-btn-sm cfg-btn-confirm">Sí, eliminar</button>
+
+                    <!-- Desglose de disco -->
+                    <template x-if="diskUsage[p.id] && !diskUsage[p.id].loading && !diskUsage[p.id].error">
+                      <div class="flex items-center gap-3 mb-3 text-[10px] tabular-nums"
+                           style="color:var(--red);opacity:0.85">
+                        <i class="fa-solid fa-hard-drive text-[9px]"></i>
+                        <span>DRIVE <strong x-text="formatBytes(diskUsage[p.id].drive_bytes)"></strong></span>
+                        <span>·</span>
+                        <span>STAGE <strong x-text="formatBytes(diskUsage[p.id].stage_bytes)"></strong></span>
+                        <span>·</span>
+                        <span>AUDIT <strong x-text="formatBytes(diskUsage[p.id].audit_bytes)"></strong></span>
+                        <span>·</span>
+                        <span class="font-bold">Total <span x-text="formatBytes(diskUsage[p.id].total_bytes)"></span></span>
+                      </div>
+                    </template>
+                    <template x-if="diskUsage[p.id]?.loading">
+                      <div class="mb-3 text-[10px]" style="color:var(--red);opacity:0.7">
+                        <i class="fa-solid fa-spinner fa-spin mr-1"></i>Calculando uso de disco…
+                      </div>
+                    </template>
+
+                    <div class="flex gap-2">
+                      <button @click="deletePeriod(p.id)" class="cfg-btn-sm cfg-btn-confirm">
+                        <i class="fa-solid fa-trash text-[10px] mr-1"></i>Sí, eliminar todo
+                      </button>
                       <button @click="confirmDeletePeriodId = null" class="cfg-btn-sm">Cancelar</button>
                     </div>
                   </div>
-                </template>
-              </div>
+                </div>
+              </template>
+
             </div>
           </template>
           <template x-if="periods.length === 0">
@@ -1618,6 +1690,8 @@ function settingsApp() {
     // Períodos
     periods: [],
     confirmDeletePeriodId: null,
+    diskUsage: {},          // { [period_id]: { total_bytes, drive_bytes, stage_bytes, audit_bytes, exists, loading } }
+    purgingPeriodId: null,
     newPeriod: { period_label:'', date_from:'', date_to:'' },
 
     // Reglas
@@ -1972,10 +2046,42 @@ function settingsApp() {
       if (res.ok) { this.newPeriod = {period_label:'',date_from:'',date_to:''}; await this.loadPeriods(); this.showToast('Período creado.'); }
       else this.showToast('Error al crear período.', 'error');
     },
+    async loadDiskUsage(periodId) {
+      if (this.diskUsage[periodId]) return;
+      this.diskUsage[periodId] = { loading: true };
+      try {
+        const data = await fetch(`/api/institutions/periods/${periodId}/disk-usage`).then(r => r.json());
+        this.diskUsage[periodId] = { ...data, loading: false };
+      } catch { this.diskUsage[periodId] = { loading: false, error: true }; }
+    },
+    formatBytes(bytes) {
+      if (!bytes) return '0 B';
+      const units = ['B','KB','MB','GB'];
+      let i = 0, v = bytes;
+      while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+      return `${v.toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
+    },
+    async confirmDeletePeriod(id) {
+      this.confirmDeletePeriodId = id;
+      await this.loadDiskUsage(id);
+    },
     async deletePeriod(id) {
       const res = await fetch(`/api/institutions/periods/${id}`, { method:'DELETE' });
-      if (res.ok || res.status === 204) { this.confirmDeletePeriodId = null; await this.loadPeriods(); this.showToast('Período eliminado.'); }
-      else this.showToast('No se pudo eliminar.', 'error');
+      if (res.ok || res.status === 204) {
+        this.confirmDeletePeriodId = null;
+        delete this.diskUsage[id];
+        await this.loadPeriods();
+        this.showToast('Período y archivos eliminados.');
+      } else this.showToast('No se pudo eliminar.', 'error');
+    },
+    async purgeDisk(id) {
+      this.purgingPeriodId = id;
+      const res = await fetch(`/api/institutions/periods/${id}/purge-disk`, { method:'POST' });
+      this.purgingPeriodId = null;
+      if (res.ok) {
+        delete this.diskUsage[id];
+        this.showToast('Archivos del período eliminados del disco.');
+      } else this.showToast('Error al limpiar archivos.', 'error');
     },
 
     // ---- REGLAS ----
