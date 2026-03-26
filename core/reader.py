@@ -37,13 +37,16 @@ class DocumentReader:
 
     @staticmethod
     def _can_open(file_path: Path) -> bool:
-        """Return True if the PDF opens successfully and has at least one page."""
+        """Return True if the PDF opens successfully and its first page is accessible."""
         import fitz
 
         try:
             with fitz.open(file_path) as doc:
-                return bool(doc.page_count > 0)
-        except (fitz.FileDataError, OSError, RuntimeError):
+                if doc.page_count == 0:
+                    return False
+                doc.load_page(0)  # fuerza lectura real; lanza si la página está corrupta
+                return True
+        except Exception:
             return False
 
     @staticmethod
