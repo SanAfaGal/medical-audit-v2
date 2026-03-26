@@ -37,14 +37,21 @@ class DocumentReader:
 
     @staticmethod
     def _can_open(file_path: Path) -> bool:
-        """Return True if the PDF opens successfully and its first page is accessible."""
+        """Return True only if the file is a valid, openable PDF.
+
+        Fitz soporta múltiples formatos (TIFF, JPEG, etc.) y los abre sin error
+        aunque tengan extensión .pdf. doc.is_pdf garantiza que sea un PDF real,
+        y doc.load_page(0) verifica que el contenido de la primera página sea accesible.
+        """
         import fitz
 
         try:
             with fitz.open(file_path) as doc:
+                if not doc.is_pdf:
+                    return False
                 if doc.page_count == 0:
                     return False
-                doc.load_page(0)  # fuerza lectura real; lanza si la página está corrupta
+                doc.load_page(0)
                 return True
         except Exception:
             return False
