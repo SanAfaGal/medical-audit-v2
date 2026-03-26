@@ -49,7 +49,7 @@ class MissingFileRepo:
                 MissingFile.invoice_id == invoice_id,
                 MissingFile.doc_type_id == doc_type_id,
             )
-            .values(resolved_at=datetime.datetime.now(datetime.UTC))
+            .values(resolved_at=datetime.datetime.utcnow())
         )
         await self.db.flush()
 
