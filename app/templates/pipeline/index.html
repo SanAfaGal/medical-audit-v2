@@ -113,11 +113,29 @@
             </div>
           </template>
 
-          <!-- Note -->
+          <!-- Note (advertencia amber) -->
           <template x-if="item.type === 'note'">
-            <div class="mx-1 my-1 px-2.5 py-1.5 rounded-lg"
+            <div class="mx-1 my-2 px-2.5 py-2 rounded-lg"
                  style="background:var(--amber-soft);border:1px solid var(--amber-border)">
+              <div class="flex items-center gap-1.5 mb-1">
+                <i class="fa-solid fa-triangle-exclamation text-[9px]" style="color:var(--amber)"></i>
+                <span class="text-[8.5px] font-extrabold uppercase tracking-wider" style="color:var(--amber)"
+                      x-text="item.label || 'Atención'"></span>
+              </div>
               <p class="text-[9px] leading-relaxed" style="color:var(--amber)" x-text="item.text"></p>
+            </div>
+          </template>
+
+          <!-- Info (informativo sky) -->
+          <template x-if="item.type === 'info'">
+            <div class="mx-1 my-2 px-2.5 py-2 rounded-lg"
+                 style="background:var(--sky-soft);border:1px solid var(--sky-border)">
+              <div class="flex items-center gap-1.5 mb-1">
+                <i class="fa-solid fa-circle-info text-[9px]" style="color:var(--sky)"></i>
+                <span class="text-[8.5px] font-extrabold uppercase tracking-wider" style="color:var(--sky)"
+                      x-text="item.label || 'Información'"></span>
+              </div>
+              <p class="text-[9px] leading-relaxed" style="color:var(--sky)" x-text="item.text"></p>
             </div>
           </template>
 
@@ -1045,6 +1063,7 @@ function pipeline() {
       { type:'stage', id:'VERIFY_INVOICE_CODE',           label:'Verificar número en PDF',         icon:'fa-solid fa-magnifying-glass',       phaseColor:'#b45309' },
       { type:'stage', id:'CHECK_INVOICE_NUMBER_ON_FILES', label:'Verificar nombres de archivos',   icon:'fa-solid fa-file-circle-check',      phaseColor:'#b45309' },
       { type:'stage', id:'CHECK_DIRS',                    label:'Detectar carpetas faltantes',     icon:'fa-solid fa-folder-minus',           phaseColor:'#b45309' },
+      { type:'info', label:'Revisión manual', text:'Las facturas de tipo SOAT deben ser auditadas manualmente por el auditor responsable. Actualiza su estado en Auditoría antes de ejecutar las siguientes etapas para excluirlas del procesamiento automático.' },
       { type:'stage', id:'MARK_UNKNOWN_DIRS',             label:'Marcar carpetas desconocidas',    icon:'fa-solid fa-circle-question',           phaseColor:'#b45309' },
       { type:'stage', id:'CHECK_REQUIRED_DOCS',           label:'Verificar documentos requeridos', icon:'fa-solid fa-file-circle-question',   phaseColor:'#b45309' },
       { type:'stage', id:'REVISAR_SOBRANTES',             label:'Revisar archivos sobrantes',      icon:'fa-solid fa-file-circle-exclamation',phaseColor:'#b45309' },
@@ -1063,7 +1082,7 @@ function pipeline() {
 
       // ── 7. DESCARGAS — DRIVE ────────────────────────────────────────────
       { type:'phase', label:'Descargas · Drive', color:'#166534', icon:'fa-brands fa-google-drive' },
-      { type:'note', text:'⚠ Los archivos descargados desde Drive no han sido procesados. Tras ejecutar estas etapas, vuelve a correr el ciclo desde Limpieza para normalizarlos, verificarlos y auditarlos.' },
+      { type:'note', label:'Requiere reprocesamiento', text:'Los archivos descargados desde Drive no han sido procesados. Tras ejecutar estas etapas, vuelve a correr el ciclo desde Limpieza para normalizarlos, verificarlos y auditarlos.' },
       { type:'stage', id:'DOWNLOAD_DRIVE',               label:'Descargar carpetas faltantes',     icon:'fa-brands fa-google-drive',     phaseColor:'#166534', heavy:true },
       { type:'stage', id:'DOWNLOAD_MISSING_DOCS',        label:'Descargar documentos faltantes',   icon:'fa-solid fa-file-arrow-down',   phaseColor:'#166534', heavy:true },
 
